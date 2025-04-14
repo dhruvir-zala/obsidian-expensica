@@ -1,10 +1,10 @@
 # Expensica
 
+![Expensica Dashboard](/assets/Expensica%20Dashboard.png)
+
 Expensica is a comprehensive personal finance tracker designed specifically for Obsidian users. It allows you to effortlessly manage your daily income and expenses with unparalleled speed and privacy. 
 
 By leveraging the power of Obsidian, Expensica ensures that all your financial data is stored locally in a simple JSON file, making it not only fast but also secure and easily portable.
-
----- Image: Expensica Logo ----
 
 ## The Problem
 
