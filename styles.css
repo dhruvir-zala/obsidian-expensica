@@ -1,0 +1,2743 @@
+/* Premium Expensica styling with Apple/Todoist-inspired design */
+
+:root {
+  /* Primary Colors */
+  --expensica-primary: var(--interactive-accent);
+  --expensica-primary-light: rgba(var(--interactive-accent-rgb), 0.1);
+  --expensica-primary-lighter: rgba(var(--interactive-accent-rgb), 0.05);
+  
+  /* Success & Error Colors */
+  --expensica-success: #10B981;
+  --expensica-success-light: rgba(16, 185, 129, 0.1);
+  --expensica-error: #EF4444;
+  --expensica-error-light: rgba(239, 68, 68, 0.1);
+  
+  /* Text Colors */
+  --expensica-text-primary: var(--text-normal);
+  --expensica-text-secondary: var(--text-muted);
+  --expensica-text-tertiary: rgba(var(--text-normal-rgb), 0.5);
+  
+  /* Background Colors */
+  --expensica-bg-primary: #FFFFFF;
+  --expensica-bg-secondary: #F5F7FA;
+  --expensica-bg-tertiary: #EDF2F7;
+  
+  /* Border Colors */
+  --expensica-border-primary: rgba(0, 0, 0, 0.2);
+  --expensica-border-secondary: rgba(0, 0, 0, 0.12);
+  
+  /* Shadows */
+  --expensica-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
+  --expensica-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --expensica-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+  
+  /* Transitions */
+  --expensica-transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --expensica-transition-slow: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  
+  /* Border Radius */
+  --expensica-radius-sm: 6px;
+  --expensica-radius: 12px;
+  --expensica-radius-lg: 16px;
+  --expensica-radius-xl: 24px;
+  
+  /* Spacing */
+  --expensica-spacing-xs: 4px;
+  --expensica-spacing-sm: 8px;
+  --expensica-spacing: 16px;
+  --expensica-spacing-lg: 24px;
+  --expensica-spacing-xl: 32px;
+  --expensica-spacing-2xl: 48px;
+  
+  /* Typography */
+  --expensica-font-size-xs: 12px;
+  --expensica-font-size-sm: 14px;
+  --expensica-font-size: 16px;
+  --expensica-font-size-lg: 18px;
+  --expensica-font-size-xl: 20px;
+  --expensica-font-size-2xl: 24px;
+  
+  /* Line Heights */
+  --expensica-line-height-tight: 1.25;
+  --expensica-line-height-normal: 1.5;
+  --expensica-line-height-relaxed: 1.75;
+  
+  /* Z-index */
+  --expensica-z-dropdown: 100;
+  --expensica-z-modal: 200;
+  --expensica-z-tooltip: 300;
+}
+
+/* Dashboard Layout */
+.expensica-dashboard {
+  padding: var(--expensica-spacing-xl);
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--expensica-spacing-xl);
+  background-color: #EDF2F7;
+}
+
+/* Header Section */
+.expensica-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--expensica-spacing-xl) var(--expensica-spacing-2xl);
+  background-color: var(--background-primary);
+  border-radius: var(--expensica-radius-lg);
+  border: 1px solid var(--expensica-border-primary);
+  margin-bottom: var(--expensica-spacing-xl);
+  position: relative;
+}
+
+.expensica-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(45deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 100%);
+  pointer-events: none;
+}
+
+.expensica-title {
+  margin: 0;
+  font-size: var(--expensica-font-size-2xl);
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: var(--text-normal);
+  line-height: var(--expensica-line-height-tight);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  position: relative;
+}
+
+.expensica-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  position: relative;
+}
+
+/* Month Navigation */
+.expensica-month-nav {
+  display: flex;
+  align-items: center;
+  background-color: var(--expensica-bg-secondary);
+  border-radius: var(--expensica-radius-xl);
+  padding: var(--expensica-spacing-xs);
+  margin-right: var(--expensica-spacing);
+  box-shadow: var(--expensica-shadow-sm);
+}
+
+.expensica-month-nav button {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--expensica-text-secondary);
+  transition: var(--expensica-transition);
+  background: transparent;
+  border: none;
+}
+
+.expensica-month-nav button:hover {
+  background-color: var(--expensica-bg-tertiary);
+  color: var(--expensica-text-primary);
+  transform: scale(1.05);
+}
+
+.expensica-month-display {
+  font-size: var(--expensica-font-size);
+  font-weight: 500;
+  padding: 0 var(--expensica-spacing);
+  min-width: 130px;
+  text-align: center;
+  color: var(--expensica-text-primary);
+}
+
+/* Buttons */
+
+.expensica-btn {
+  padding: 8px 16px;
+  border-radius: var(--expensica-radius);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: var(--expensica-transition);
+  box-shadow: var(--expensica-shadow);
+  border: 1px solid var(--background-modifier-border);
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+}
+
+.expensica-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.expensica-btn:hover {
+  background-color: var(--background-secondary);
+  transform: translateY(-1px);
+  box-shadow: var(--expensica-shadow-lg);
+  border-color: var(--interactive-accent);
+}
+
+.expensica-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.expensica-btn-primary {
+  background-color: var(--expensica-primary);
+  color: var(--text-on-accent);
+}
+
+.expensica-btn-secondary {
+  background-color: var(--background-secondary);
+  color: var(--text-normal);
+}
+
+.expensica-btn-success {
+  background-color: var(--expensica-success);
+  border-color: var(--expensica-success);
+  color: white;
+}
+
+.expensica-btn-danger {
+  background-color: var(--expensica-error);
+  border-color: var(--expensica-error);
+  color: white;
+}
+
+.expensica-action-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Quick add bar */
+
+.expensica-quick-add {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  align-items: center;
+  padding: 16px;
+  background-color: var(--background-secondary);
+  border-radius: var(--expensica-radius);
+  box-shadow: var(--expensica-shadow);
+}
+
+.expensica-quick-add-input {
+  flex: 1;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--background-modifier-border);
+  background-color: var(--background-primary);
+  font-size: 14px;
+  transition: var(--expensica-transition);
+}
+
+.expensica-quick-add-input:focus {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.2);
+  outline: none;
+}
+
+.expensica-quick-add-hint {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-left: 12px;
+}
+
+/* Summary Cards */
+.expensica-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--expensica-spacing-lg);
+  margin-bottom: var(--expensica-spacing-xl);
+}
+
+.expensica-card {
+  background-color: var(--expensica-bg-primary);
+  border-radius: var(--expensica-radius-lg);
+  padding: var(--expensica-spacing-xl);
+  border: 1px solid var(--expensica-border-primary);
+  position: relative;
+  overflow: hidden;
+}
+
+.expensica-card:hover {
+  transform: translateY(-2px);
+}
+
+.expensica-card-title {
+  font-size: var(--expensica-font-size-sm);
+  color: var(--expensica-text-secondary);
+  margin: 0 0 var(--expensica-spacing) 0;
+  display: flex;
+  align-items: center;
+  gap: var(--expensica-spacing-xs);
+  font-weight: 500;
+}
+
+.expensica-card-title svg,
+.expensica-card-title span.emoji {
+  width: 18px;
+  height: 18px;
+  opacity: 0.7;
+}
+
+.expensica-card-value {
+  font-size: 32px;
+  font-weight: 600;
+  margin: 0;
+  line-height: 1.2;
+  color: var(--expensica-text-primary);
+}
+
+.expensica-card-trend {
+  font-size: var(--expensica-font-size-sm);
+  margin-top: var(--expensica-spacing);
+  display: flex;
+  align-items: center;
+  gap: var(--expensica-spacing-xs);
+  color: var(--expensica-text-secondary);
+}
+
+.expensica-trend-up {
+  color: var(--expensica-success);
+}
+
+.expensica-trend-down {
+  color: var(--expensica-error);
+}
+
+.expensica-card-bg-icon {
+  position: absolute;
+  right: -10px;
+  bottom: -10px;
+  font-size: 64px;
+  opacity: 0.06;
+  transform: rotate(-5deg);
+}
+
+.expensica-income {
+  color: var(--expensica-success);
+}
+
+.expensica-expense {
+  color: var(--expensica-error);
+}
+
+.expensica-balance {
+  color: var(--expensica-primary);
+}
+
+/* Charts Section */
+.expensica-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: var(--expensica-spacing-xl);
+  margin-bottom: var(--expensica-spacing-xl);
+}
+
+.expensica-chart-container {
+  background-color: var(--expensica-bg-primary);
+  border-radius: var(--expensica-radius-lg);
+  padding: var(--expensica-spacing-xl);
+  border: 1px solid var(--expensica-border-primary);
+}
+
+.expensica-chart-container:hover {
+  transform: translateY(-2px);
+}
+
+.expensica-chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--expensica-spacing-lg);
+}
+
+.expensica-chart-title {
+  font-size: var(--expensica-font-size-lg);
+  font-weight: 600;
+  margin: 0;
+  color: var(--expensica-text-primary);
+}
+
+.expensica-chart-icon {
+  opacity: 0.7;
+}
+
+.expensica-chart-options {
+  display: flex;
+  gap: 8px;
+}
+
+.expensica-chart-option {
+  background: transparent;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.expensica-chart-option:hover {
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.expensica-chart-option.active {
+  background-color: var(--background-modifier-hover);
+  color: var(--interactive-accent);
+  font-weight: 500;
+}
+
+.expensica-canvas-container {
+  height: 240px;
+  position: relative;
+}
+
+.expensica-empty-charts {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  padding: 20px;
+  text-align: center;
+}
+
+.expensica-empty-icon {
+  font-size: 36px;
+  margin-bottom: 12px;
+  opacity: 0.3;
+}
+
+.expensica-empty-state-message {
+  color: var(--text-muted);
+  max-width: 300px;
+  line-height: 1.5;
+}
+
+/* Transactions Section */
+.expensica-transactions {
+  background-color: var(--expensica-bg-primary);
+  border-radius: var(--expensica-radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--expensica-border-primary);
+}
+
+.expensica-transaction {
+  background-color: var(--expensica-bg-primary);
+  padding: var(--expensica-spacing);
+  display: flex;
+  align-items: center;
+  gap: var(--expensica-spacing);
+  border-bottom: 1px solid var(--expensica-border-secondary);
+  transition: var(--expensica-transition);
+}
+
+.expensica-transaction:last-child {
+  border-bottom: none;
+}
+
+.expensica-transaction:hover {
+  background-color: var(--expensica-bg-secondary);
+}
+
+.expensica-transaction-icon {
+  margin-right: var(--expensica-spacing-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--expensica-radius);
+  background-color: var(--expensica-bg-secondary);
+  font-size: var(--expensica-font-size-xl);
+  transition: var(--expensica-transition);
+}
+
+.expensica-transaction:hover .expensica-transaction-icon {
+  transform: scale(1.05);
+}
+
+.expensica-income-icon {
+  background-color: rgba(76, 175, 80, 0.15);
+}
+
+.expensica-expense-icon {
+  background-color: rgba(244, 67, 54, 0.15);
+}
+
+.expensica-transaction-details {
+  flex: 1;
+}
+
+.expensica-transaction-title {
+  font-weight: 500;
+  margin: 0 0 var(--expensica-spacing-xs) 0;
+  font-size: var(--expensica-font-size);
+  color: var(--expensica-text-primary);
+}
+
+.expensica-transaction-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--expensica-spacing);
+}
+
+.expensica-transaction-date {
+  font-size: var(--expensica-font-size-sm);
+  color: var(--expensica-text-secondary);
+}
+
+.expensica-transaction-category {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--expensica-font-size-xs);
+  padding: var(--expensica-spacing-xs) var(--expensica-spacing);
+  border-radius: var(--expensica-radius);
+  background-color: var(--expensica-bg-tertiary);
+  color: var(--expensica-text-secondary);
+  transition: var(--expensica-transition);
+}
+
+.expensica-transaction:hover .expensica-transaction-category {
+  background-color: var(--expensica-primary-light);
+  color: var(--expensica-primary);
+}
+
+.expensica-transaction-amount {
+  font-weight: 600;
+  font-size: var(--expensica-font-size);
+  color: var(--expensica-text-primary);
+  transition: var(--expensica-transition);
+}
+
+.expensica-transaction:hover .expensica-transaction-amount {
+  transform: scale(1.05);
+}
+
+/* Action Buttons */
+.expensica-transaction-actions {
+  display: flex;
+  gap: var(--expensica-spacing);
+  opacity: 0;
+  transition: var(--expensica-transition);
+  margin-left: var(--expensica-spacing);
+}
+
+.expensica-transaction:hover .expensica-transaction-actions {
+  opacity: 1;
+}
+
+.expensica-action-btn {
+  background-color: var(--expensica-bg-tertiary);
+  border: none;
+  cursor: pointer;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--expensica-radius);
+  color: var(--expensica-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--expensica-transition);
+}
+
+.expensica-action-btn:hover {
+  background-color: var(--expensica-bg-tertiary);
+  color: var(--expensica-text-primary);
+  transform: translateY(-2px);
+  box-shadow: var(--expensica-shadow-sm);
+}
+
+.expensica-delete-btn:hover {
+  color: var(--expensica-error);
+  background-color: var(--expensica-error-light);
+}
+
+.expensica-edit-btn:hover {
+  color: var(--expensica-primary);
+  background-color: var(--expensica-primary-light);
+}
+
+/* Empty state */
+
+.expensica-empty-state {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.expensica-empty-state-icon {
+  font-size: 36px;
+  opacity: 0.3;
+}
+
+/* Modal styles */
+
+.expensica-modal {
+  padding: 24px;
+  max-width: 480px;
+  border-radius: var(--expensica-radius-lg);
+  background-color: var(--background-primary);
+}
+
+.expensica-modal-title {
+  margin: 0 0 24px 0;
+  font-size: 20px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.expensica-modal-title-icon {
+  opacity: 0.7;
+}
+
+.expensica-form-group {
+  margin-bottom: 18px;
+}
+
+.expensica-form-label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.expensica-form-input,
+.expensica-form-select,
+.expensica-form-textarea,
+.expensica-import-input,
+.emoji-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--background-modifier-border);
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+  font-size: 14px;
+  transition: var(--expensica-transition);
+}
+
+/* Improve category select visibility */
+.expensica-form-select {
+  font-weight: 500;
+  color: var(--text-normal);
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C%2Fpolyline%3E%3C%2Fsvg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 16px;
+  padding-right: 30px;
+  border: 1px solid var(--background-modifier-border);
+  cursor: pointer;
+}
+
+.expensica-form-select:hover {
+  border-color: var(--interactive-accent);
+  background-color: var(--background-primary-alt);
+}
+
+.expensica-form-select option {
+  font-weight: 500;
+  padding: 12px 10px;
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+  font-size: 14px;
+}
+
+/* Custom Category Dropdown Styling */
+.expensica-custom-select-container {
+  position: relative;
+  width: 100%;
+}
+
+.hidden-select {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.expensica-select-display {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--background-modifier-border);
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+  font-weight: 500;
+  font-size: 15px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: var(--expensica-transition);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.expensica-select-display:hover {
+  border-color: var(--interactive-accent);
+  background-color: var(--background-primary-alt);
+}
+
+.expensica-select-display-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.expensica-category-emoji {
+  font-size: 18px;
+  display: inline-block;
+  margin-right: 4px;
+}
+
+.expensica-select-arrow {
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+}
+
+.expensica-select-options {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  margin-top: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--background-modifier-border);
+  background-color: var(--background-primary);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.expensica-select-hidden {
+  display: none;
+}
+
+.expensica-select-option {
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+}
+
+.expensica-select-option:hover {
+  background-color: var(--background-modifier-hover);
+}
+
+.expensica-option-selected {
+  background-color: rgba(var(--interactive-accent-rgb), 0.1);
+  font-weight: 600;
+}
+
+.expensica-option-selected:hover {
+  background-color: rgba(var(--interactive-accent-rgb), 0.15);
+}
+
+.expensica-form-input:focus,
+.expensica-form-select:focus,
+.expensica-form-textarea:focus,
+.expensica-import-input:focus,
+.emoji-input:focus {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.2);
+  outline: none;
+}
+
+.emoji-input {
+  font-size: 24px;
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.expensica-form-textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.expensica-form-footer,
+.expensica-import-buttons,
+.button-container {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+/* Settings styles */
+.expensica-settings-section {
+  margin-top: 24px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding-bottom: 8px;
+}
+
+/* Support section styles */
+.expensica-support-section {
+  background-color: var(--background-secondary);
+  border-radius: var(--expensica-radius-lg);
+  padding: 24px;
+  margin-bottom: 32px;
+  border-left: 4px solid var(--expensica-primary);
+  box-shadow: var(--expensica-shadow);
+}
+
+.expensica-support-text {
+  margin: 0 0 20px 0;
+  color: var(--text-normal);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.expensica-links-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.expensica-coffee-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background-color: #FFDD00;
+  color: #0D0C22;
+  border-radius: var(--expensica-radius);
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: none;
+  transition: var(--expensica-transition);
+  box-shadow: var(--expensica-shadow);
+}
+
+.expensica-coffee-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.12);
+  background-color: #FFE533;
+}
+
+.expensica-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+  border-radius: var(--expensica-radius);
+  font-weight: 500;
+  font-size: 14px;
+  text-decoration: none;
+  transition: var(--expensica-transition);
+  box-shadow: var(--expensica-shadow);
+  border: 1px solid var(--background-modifier-border);
+}
+
+.expensica-link:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.12);
+  color: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  background-color: var(--background-secondary);
+}
+
+/* Currency dropdown styling */
+.currency-dropdown-container {
+  width: 100%;
+  max-width: 300px;
+  position: relative;
+}
+
+.currency-symbol {
+  display: inline-block;
+  font-weight: 600;
+  margin-right: 6px;
+  min-width: 16px;
+  text-align: center;
+}
+
+.currency-dropdown-container .expensica-select-display {
+  padding: 12px 16px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background-color: var(--background-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all 0.2s ease;
+  box-shadow: var(--expensica-shadow);
+}
+
+.currency-dropdown-container .expensica-select-display:hover {
+  border-color: var(--interactive-accent);
+  background-color: var(--background-secondary);
+  transform: translateY(-1px);
+}
+
+.currency-dropdown-container .expensica-select-options {
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 100;
+  background-color: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  margin-top: 4px;
+  position: absolute;
+  width: 100%;
+}
+
+.currency-dropdown-container .expensica-select-option {
+  padding: 12px 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: all 0.2s ease;
+  font-size: 14px;
+}
+
+.currency-dropdown-container .expensica-select-option:hover {
+  background-color: var(--background-modifier-hover);
+  font-weight: 500;
+}
+
+.currency-dropdown-container .expensica-option-selected {
+  background-color: rgba(var(--interactive-accent-rgb), 0.1);
+  font-weight: 600;
+}
+
+.currency-search-container {
+  padding: 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  position: sticky;
+  top: 0;
+  background-color: var(--background-primary);
+}
+
+.currency-search-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background-color: var(--background-secondary);
+  color: var(--text-normal);
+  font-size: 14px;
+  transition: var(--expensica-transition);
+}
+
+.currency-search-input:focus {
+  outline: none;
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.1);
+  background-color: var(--background-primary);
+}
+
+.currency-dropdown-container .expensica-select-arrow {
+  transition: transform 0.2s ease;
+}
+
+.currency-dropdown-container .expensica-select-arrow.expensica-select-arrow-open {
+  transform: rotate(180deg);
+}
+
+/* Category sections */
+.categories-container {
+  margin-bottom: 24px;
+  background-color: var(--background-secondary);
+  border-radius: var(--expensica-radius-lg);
+  padding: 16px;
+  box-shadow: var(--expensica-shadow);
+}
+
+.expense-categories,
+.income-categories {
+  margin-bottom: 24px;
+}
+
+.category-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  background-color: var(--background-primary);
+  border-radius: 8px;
+  transition: var(--expensica-transition);
+  border: 1px solid var(--background-modifier-border);
+}
+
+.category-item:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--expensica-shadow);
+  border-color: var(--interactive-accent);
+}
+
+.category-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.category-edit-btn,
+.category-delete-btn {
+  border: none;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: var(--expensica-transition);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.category-edit-btn {
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.category-edit-btn:hover {
+  background-color: var(--interactive-accent-hover);
+  transform: translateY(-1px);
+}
+
+.category-delete-btn {
+  background-color: var(--expensica-error);
+  color: white;
+}
+
+.category-delete-btn:hover {
+  background-color: #d32f2f;
+  transform: translateY(-1px);
+}
+
+/* Settings headers */
+.expensica-settings-section h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+  color: var(--text-normal);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Settings descriptions */
+.setting-item-description {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+/* Settings controls */
+.setting-item-control {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Responsive adjustments */
+@media screen and (max-width: 768px) {
+  .expensica-links-container {
+    flex-direction: column;
+  }
+  
+  .expensica-coffee-btn,
+  .expensica-link {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .currency-dropdown-container {
+    max-width: 100%;
+  }
+  
+  .category-actions {
+    flex-direction: column;
+  }
+  
+  .category-edit-btn,
+  .category-delete-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Animations */
+
+@keyframes fadeIn {
+from { opacity: 0; transform: translateY(10px); }
+to { opacity: 1; transform: translateY(0); }
+}
+
+.expensica-animate {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+.expensica-animate-delay-1 {
+  animation-delay: 0.1s;
+}
+
+.expensica-animate-delay-2 {
+  animation-delay: 0.2s;
+}
+
+.expensica-animate-delay-3 {
+  animation-delay: 0.3s;
+}
+
+/* Responsive adjustments */
+
+@media screen and (max-width: 768px) {
+  .expensica-dashboard {
+    padding: var(--expensica-spacing);
+  }
+  
+  .expensica-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--expensica-spacing);
+  }
+  
+  .expensica-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  
+  .expensica-month-nav {
+    margin-right: 0;
+  }
+  
+  .expensica-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .expensica-transaction {
+    flex-wrap: wrap;
+  }
+  
+  .expensica-transaction-amount {
+    margin-left: auto;
+  }
+  
+  .expensica-transaction-actions {
+    width: 100%;
+    justify-content: flex-end;
+    margin-top: var(--expensica-spacing);
+    opacity: 1;
+  }
+}
+
+/* Calendar Heatmap Styles */
+
+.expensica-calendar-container {
+  background-color: var(--expensica-bg-primary);
+  border-radius: var(--expensica-radius-lg);
+  padding: var(--expensica-spacing-xl);
+  border: 1px solid var(--expensica-border-primary);
+  margin-bottom: var(--expensica-spacing-2xl);
+}
+
+.expensica-calendar-flex-container {
+  display: flex;
+  gap: var(--expensica-spacing-xl);
+  flex-wrap: wrap;
+  margin-bottom: var(--expensica-spacing-2xl);
+}
+
+.expensica-calendar-grid-container {
+  flex: 1;
+  min-width: 320px;
+}
+
+.expensica-calendar-details-container {
+  flex: 1;
+  min-width: 300px;
+  background-color: var(--background-primary);
+  border-radius: var(--expensica-radius);
+  padding: 20px;
+  border: 1px solid var(--expensica-border-primary);
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.expensica-calendar-tooltip {
+  display: none;
+}
+
+.expensica-calendar-tooltip .tooltip-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+  font-size: 15px;
+}
+
+.expensica-calendar-tooltip .tooltip-value {
+  font-weight: bold;
+  color: var(--text-normal);
+  font-size: 18px;
+  margin-bottom: 6px;
+}
+
+.expensica-calendar-tooltip .tooltip-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.expensica-calendar-tooltip .tooltip-comparison {
+  margin-top: 6px;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.tooltip-higher {
+  background-color: rgba(244, 67, 54, 0.1);
+  color: var(--expensica-error);
+}
+
+.tooltip-lower {
+  background-color: rgba(76, 175, 80, 0.1);
+  color: var(--expensica-success);
+}
+
+.expensica-calendar-details-title {
+  margin: 0 0 16px 0;
+  font-size: 18px;
+  font-weight: 600;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.expensica-calendar-summary {
+  background-color: var(--background-secondary);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.expensica-calendar-details-total {
+  font-size: 16px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.expensica-calendar-details-amount {
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.expensica-calendar-insight {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.expensica-calendar-comparison {
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.expensica-category-breakdown {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--background-modifier-border);
+}
+
+.expensica-breakdown-title {
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0 0 12px 0;
+  color: var(--text-muted);
+}
+
+.expensica-breakdown-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.expensica-category-bar {
+  position: relative;
+  height: 24px;
+  background-color: var(--background-modifier-border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.expensica-bar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  transition: width 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.expensica-bar-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  font-size: 12px;
+  z-index: 1;
+}
+
+.expensica-bar-category {
+  font-weight: 500;
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
+}
+
+.expensica-bar-amount {
+  font-weight: 600;
+  font-size: 11px;
+  background-color: rgba(255, 255, 255, 0.2);
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+.expensica-transactions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.expensica-transactions-title {
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.expensica-calendar-transaction-list {
+  margin-top: 16px;
+}
+
+.expensica-calendar-transaction-item {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  background-color: var(--background-secondary);
+  transition: var(--expensica-transition);
+  border: 1px solid transparent;
+}
+
+.expensica-transaction-animate {
+  animation: slideInRight 0.3s ease forwards;
+  opacity: 0;
+}
+
+@keyframes slideInRight {
+from {
+  opacity: 0;
+  transform: translateX(20px);
+}
+to {
+  opacity: 1;
+  transform: translateX(0);
+}
+}
+
+.expensica-calendar-transaction-item:hover {
+  background-color: var(--background-modifier-hover);
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: var(--expensica-shadow);
+  border-color: var(--background-modifier-border);
+}
+
+.expensica-calendar-transaction-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  margin-right: 12px;
+}
+
+.expensica-calendar-transaction-icon.expense-icon {
+  background-color: rgba(244, 67, 54, 0.15);
+}
+
+.expensica-calendar-transaction-icon.income-icon {
+  background-color: rgba(76, 175, 80, 0.15);
+}
+
+.expensica-calendar-transaction-details {
+  flex: 1;
+}
+
+.expensica-calendar-transaction-title {
+  font-weight: 500;
+  margin: 0 0 4px 0;
+  font-size: 14px;
+}
+
+.expensica-calendar-transaction-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.expensica-calendar-transaction-category {
+  background-color: var(--background-modifier-border);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.expensica-calendar-transaction-notes {
+  font-style: italic;
+}
+
+.expensica-calendar-transaction-amount {
+  margin-left: 10px;
+}
+
+.expensica-amount-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.expensica-percentage {
+  font-size: 11px;
+  color: var(--text-muted);
+  background-color: var(--background-modifier-hover);
+  padding: 1px 6px;
+  border-radius: 8px;
+  line-height: 1.5;
+}
+
+.expensica-calendar-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-top: 30px;
+  padding: 30px 20px;
+  background-color: var(--background-secondary);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.expensica-calendar-empty-icon {
+  font-size: 32px;
+  margin-bottom: 16px;
+}
+
+.expensica-calendar-empty-message {
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 0 0 10px 0;
+}
+
+/* Responsive adjustments for visualizations */
+
+@media screen and (max-width: 768px) {
+  .expensica-calendar-flex-container {
+      flex-direction: column;
+  }
+  
+  .expensica-calendar-details-container {
+      max-height: none;
+  }
+}
+
+/* Date Range Selector Styles */
+.expensica-date-range-container {
+  margin-right: 10px;
+}
+
+.expensica-date-range-selector {
+  position: relative;
+  min-width: 180px;
+}
+
+.expensica-date-range-current {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 24px;
+  padding: 8px 14px;
+  cursor: pointer;
+  box-shadow: var(--expensica-shadow);
+  transition: var(--expensica-transition);
+}
+
+.expensica-date-range-current:hover {
+  background-color: var(--background-modifier-hover);
+  border-color: var(--interactive-accent);
+}
+
+.expensica-date-range-text {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--text-normal);
+}
+
+.expensica-date-range-icon {
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+}
+
+.expensica-date-range-options {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 5px;
+  background-color: var(--background-primary);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+  overflow: hidden;
+  border: 1px solid var(--background-modifier-border);
+}
+
+.expensica-date-range-hidden {
+  display: none;
+}
+
+.expensica-date-range-option {
+  padding: 10px 16px;
+  font-size: 14px;
+  transition: background-color 0.15s ease;
+  cursor: pointer;
+}
+
+.expensica-date-range-option:hover {
+  background-color: var(--background-modifier-hover);
+}
+
+.expensica-date-range-option-active {
+  background-color: rgba(var(--interactive-accent-rgb), 0.1);
+  font-weight: 600;
+}
+
+/* Date Range Picker Modal Styles */
+.expensica-date-picker-group {
+  display: flex;
+  gap: 16px;
+}
+
+.expensica-date-picker-group .expensica-form-group {
+  flex: 1;
+}
+
+/* Responsive Styles for Date Range Selector */
+@media screen and (max-width: 768px) {
+  .expensica-header {
+      flex-direction: column;
+      align-items: flex-start;
+  }
+  
+  .expensica-actions {
+      flex-direction: column;
+      width: 100%;
+      gap: 10px;
+      margin-top: 16px;
+  }
+  
+  .expensica-date-range-container {
+      width: 100%;
+      margin-right: 0;
+      margin-bottom: 10px;
+  }
+  
+  .expensica-date-range-selector {
+      width: 100%;
+  }
+  
+  .expensica-date-range-current {
+      width: 100%;
+      justify-content: space-between;
+  }
+  
+  .expensica-btn {
+      width: 100%;
+      justify-content: center;
+  }
+}
+
+/* Calendar Navigation */
+.expensica-calendar-header-content {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.expensica-calendar-nav {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.expensica-calendar-nav-button {
+    background: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: var(--text-normal);
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2rem;
+    height: 2rem;
+}
+
+/* Special styling for the Today button */
+.expensica-calendar-nav-button:not(:first-child):not(:last-child) {
+    min-width: 4rem;
+    font-weight: 500;
+    background: var(--background-primary);
+    border-color: var(--interactive-accent);
+    color: var(--interactive-accent);
+}
+
+.expensica-calendar-nav-button:hover {
+    background: var(--background-modifier-hover);
+    border-color: var(--interactive-accent);
+    color: var(--interactive-accent);
+}
+
+.expensica-calendar-nav-button:active {
+    background: var(--background-modifier-active);
+    transform: scale(0.95);
+}
+
+/* Export Modal Styles */
+.expensica-export-modal {
+  max-width: 520px;
+}
+
+.expensica-export-modal .expensica-modal-title {
+  margin-bottom: 32px;
+}
+
+.expensica-export-modal .expensica-form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.expensica-export-modal .expensica-setting-group {
+  background-color: var(--background-secondary);
+  border-radius: var(--expensica-radius-lg);
+  padding: 20px;
+  box-shadow: var(--expensica-shadow);
+  border: 1px solid var(--background-modifier-border);
+}
+
+.expensica-export-modal .expensica-setting-group-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-normal);
+  margin: 0 0 16px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.expensica-export-modal .setting-item {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.expensica-export-modal .setting-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.expensica-export-modal .setting-item-name {
+  font-weight: 500;
+  color: var(--text-normal);
+  font-size: 14px;
+}
+
+.expensica-export-modal .setting-item-description {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+.expensica-export-modal .expensica-select-all {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.expensica-export-modal .expensica-select-all input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.expensica-export-modal .expensica-select-all label {
+  font-weight: 500;
+  color: var(--text-normal);
+  cursor: pointer;
+}
+
+.expensica-export-modal .expensica-category-checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.expensica-export-modal .expensica-category-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: var(--background-primary);
+  border-radius: 8px;
+  border: 1px solid var(--background-modifier-border);
+  transition: var(--expensica-transition);
+}
+
+.expensica-export-modal .expensica-category-checkbox:hover {
+  background-color: var(--background-modifier-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--expensica-shadow);
+}
+
+.expensica-export-modal .expensica-category-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.expensica-export-modal .expensica-category-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-normal);
+  cursor: pointer;
+}
+
+.expensica-export-modal .category-emoji {
+  font-size: 16px;
+}
+
+.expensica-export-modal .expensica-form-footer {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+/* Responsive adjustments for export modal */
+@media screen and (max-width: 768px) {
+  .expensica-export-modal {
+    max-width: 100%;
+    margin: 0 16px;
+  }
+  
+  .expensica-export-modal .expensica-category-checkbox-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .expensica-export-modal .expensica-form-footer {
+    flex-direction: column;
+  }
+  
+  .expensica-export-modal .expensica-btn {
+    width: 100%;
+  }
+}
+
+/* Responsive adjustments */
+@media screen and (max-width: 1024px) {
+  .expensica-summary {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+}
+
+/* Calendar Heatmap Container */
+.expensica-calendar-container {
+  background-color: var(--expensica-bg-primary);
+  border-radius: var(--expensica-radius-lg);
+  padding: var(--expensica-spacing-xl);
+  border: 1px solid var(--expensica-border-primary);
+  margin-bottom: var(--expensica-spacing-2xl);
+}
+
+/* Calendar Navigation */
+.expensica-calendar-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--expensica-spacing-lg);
+}
+
+.expensica-calendar-nav-buttons {
+  display: flex;
+  gap: var(--expensica-spacing-xs);
+}
+
+.expensica-calendar-nav button {
+  background: transparent;
+  border: 1px solid var(--expensica-border-primary);
+  border-radius: var(--expensica-radius);
+  padding: var(--expensica-spacing-xs) var(--expensica-spacing);
+  color: var(--expensica-text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--expensica-transition);
+  height: 36px;
+  min-width: 36px;
+}
+
+.expensica-calendar-nav button:hover {
+  background-color: var(--expensica-bg-secondary);
+  color: var(--expensica-text-primary);
+  border-color: var(--expensica-border-secondary);
+  transform: translateY(-1px);
+}
+
+.expensica-calendar-nav button.today {
+  background-color: var(--expensica-primary-light);
+  color: var(--expensica-primary);
+  border-color: transparent;
+  font-weight: 500;
+}
+
+.expensica-calendar-nav button.today:hover {
+  background-color: var(--expensica-primary-lighter);
+  transform: translateY(-1px);
+}
+
+/* Calendar Grid */
+.expensica-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: var(--expensica-spacing-sm);
+  margin-bottom: var(--expensica-spacing-lg);
+}
+
+/* Calendar Header */
+.expensica-calendar-header {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: var(--expensica-spacing-sm);
+  margin-bottom: var(--expensica-spacing);
+  padding-bottom: var(--expensica-spacing);
+  border-bottom: 1px solid var(--expensica-border-secondary);
+}
+
+.expensica-calendar-header span {
+  text-align: center;
+  font-size: var(--expensica-font-size);
+  color: var(--expensica-text-secondary);
+  font-weight: 500;
+  padding: var(--expensica-spacing-xs);
+}
+
+/* Calendar Days */
+.expensica-calendar-day {
+  aspect-ratio: 1;
+  border-radius: var(--expensica-radius);
+  background-color: var(--expensica-bg-secondary);
+  transition: var(--expensica-transition);
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
+}
+
+.expensica-calendar-day-number {
+  font-size: var(--expensica-font-size);
+  font-weight: 500;
+  color: var(--expensica-text-primary);
+  line-height: 1;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Add a clickable overlay that covers the entire cell */
+.expensica-calendar-day::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  cursor: pointer;
+}
+
+/* Ensure hover and active states work properly */
+.expensica-calendar-day:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--expensica-shadow-sm);
+  border-color: var(--expensica-border-primary);
+}
+
+.expensica-calendar-day:active {
+  transform: translateY(0);
+  background-color: var(--expensica-bg-tertiary);
+}
+
+.expensica-calendar-day.today {
+  border: 2px solid var(--expensica-primary);
+  background-color: var(--expensica-primary-light);
+}
+
+.expensica-calendar-day.selected {
+  border: 2px solid var(--expensica-primary);
+  background-color: var(--expensica-primary-lighter);
+}
+
+/* Heatmap Colors with better contrast */
+.expensica-calendar-day[data-intensity="0"] {
+  background-color: var(--expensica-bg-secondary);
+}
+
+.expensica-calendar-day[data-intensity="1"] {
+  background-color: rgba(244, 67, 54, 0.15);
+}
+
+.expensica-calendar-day[data-intensity="2"] {
+  background-color: rgba(244, 67, 54, 0.25);
+}
+
+.expensica-calendar-day[data-intensity="3"] {
+  background-color: rgba(244, 67, 54, 0.35);
+}
+
+.expensica-calendar-day[data-intensity="4"] {
+  background-color: rgba(244, 67, 54, 0.45);
+}
+
+.expensica-calendar-day[data-intensity="5"] {
+  background-color: rgba(244, 67, 54, 0.55);
+}
+
+/* Mobile Optimizations */
+@media screen and (max-width: 768px) {
+  .expensica-calendar-day {
+    min-width: 36px;
+    min-height: 36px;
+    padding: var(--expensica-spacing-xs);
+  }
+
+  .expensica-calendar-day-number {
+    font-size: var(--expensica-font-size-sm);
+  }
+}
+
+/* Day Details Panel */
+.expensica-calendar-details {
+  background-color: var(--expensica-bg-primary);
+  border-radius: var(--expensica-radius-lg);
+  padding: var(--expensica-spacing-lg);
+  margin-top: var(--expensica-spacing-lg);
+  border: 1px solid var(--expensica-border-primary);
+  box-shadow: var(--expensica-shadow-sm);
+}
+
+.expensica-calendar-details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--expensica-spacing);
+  padding-bottom: var(--expensica-spacing);
+  border-bottom: 1px solid var(--expensica-border-secondary);
+}
+
+.expensica-calendar-details-date {
+  font-size: var(--expensica-font-size-lg);
+  font-weight: 600;
+  color: var(--expensica-text-primary);
+}
+
+.expensica-calendar-details-amount {
+  font-size: var(--expensica-font-size-lg);
+  font-weight: 600;
+  color: var(--expensica-error);
+}
+
+.expensica-calendar-details-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--expensica-spacing-xl);
+  text-align: center;
+  color: var(--expensica-text-secondary);
+}
+
+.expensica-calendar-details-empty-icon {
+  font-size: 32px;
+  margin-bottom: var(--expensica-spacing);
+}
+
+.expensica-calendar-details-empty-text {
+  font-size: var(--expensica-font-size);
+  margin: 0;
+}
+
+/* Category Breakdown */
+.expensica-calendar-categories {
+  margin-top: var(--expensica-spacing-lg);
+}
+
+.expensica-calendar-category {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--expensica-spacing);
+  border-radius: var(--expensica-radius);
+  margin-bottom: var(--expensica-spacing-xs);
+  background-color: var(--expensica-bg-secondary);
+  transition: var(--expensica-transition);
+}
+
+.expensica-calendar-category:hover {
+  background-color: var(--expensica-bg-tertiary);
+  transform: translateX(4px);
+}
+
+.expensica-calendar-category-name {
+  display: flex;
+  align-items: center;
+  gap: var(--expensica-spacing-xs);
+  font-weight: 500;
+  color: var(--expensica-text-primary);
+}
+
+.expensica-calendar-category-amount {
+  color: var(--expensica-text-secondary);
+  font-weight: 500;
+}
+
+/* Legend */
+.expensica-calendar-legend {
+  display: flex;
+  align-items: center;
+  gap: var(--expensica-spacing);
+  margin-top: var(--expensica-spacing-lg);
+  padding-top: var(--expensica-spacing);
+  border-top: 1px solid var(--expensica-border-secondary);
+}
+
+.expensica-calendar-legend-item {
+  display: flex;
+  align-items: center;
+  gap: var(--expensica-spacing-xs);
+  font-size: var(--expensica-font-size-sm);
+  color: var(--expensica-text-secondary);
+}
+
+.expensica-calendar-legend-color {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--expensica-radius-sm);
+}
+
+/* View All Transactions button */
+.expensica-view-all-btn {
+    background: none;
+    border: none;
+    color: var(--interactive-accent);
+    cursor: pointer;
+    font-size: 0.85em;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+    margin-left: auto;
+}
+
+/* Section header styling */
+.expensica-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--expensica-spacing);
+}
+
+.expensica-view-all-btn:hover {
+    background-color: var(--interactive-accent-hover);
+    color: var(--text-on-accent);
+}
+
+/* Transactions View Styles */
+.expensica-container {
+    padding: 20px;
+    max-width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    height: auto;
+    overflow: visible;
+}
+
+.expensica-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 10px;
+}
+
+.expensica-title-section {
+    flex: 1;
+}
+
+.expensica-title {
+    margin: 0;
+    font-size: 1.8em;
+    font-weight: 600;
+}
+
+.expensica-stats-section {
+    display: flex;
+    gap: 16px;
+}
+
+.expensica-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background-color: var(--background-secondary);
+    padding: 8px 16px;
+    border-radius: 6px;
+}
+
+.expensica-stat-value {
+    font-size: 1.1em;
+    font-weight: 600;
+}
+
+.expensica-actions-section {
+    display: flex;
+    gap: 8px;
+}
+
+/* Filter Section */
+.expensica-filter-section {
+    background-color: var(--background-primary);
+    padding: 20px;
+    border-radius: var(--expensica-radius);
+    margin-bottom: 24px;
+    position: relative;
+    border: 1px solid var(--expensica-border-primary);
+    box-shadow: var(--expensica-shadow-sm);
+}
+
+.expensica-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--expensica-border-secondary);
+}
+
+.expensica-section-title-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.expensica-section-title-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--expensica-primary);
+}
+
+.expensica-section-title {
+    margin: 0;
+    font-size: var(--expensica-font-size-lg);
+    font-weight: 600;
+    color: var(--text-normal);
+}
+
+.expensica-clear-filters-btn {
+    padding: 6px 12px;
+    font-size: var(--expensica-font-size-xs);
+    border: 1px solid var(--expensica-border-primary);
+    background-color: var(--background-primary);
+    color: var(--text-normal);
+}
+
+.expensica-clear-filters-btn:hover {
+    background-color: var(--background-secondary);
+    color: var(--expensica-primary);
+}
+
+.expensica-filter-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+}
+
+.expensica-filter-row-container {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+}
+
+.expensica-filter-card {
+    background-color: var(--background-secondary);
+    border-radius: var(--expensica-radius);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    border: 1px solid var(--expensica-border-secondary);
+    transition: var(--expensica-transition);
+}
+
+.expensica-filter-card:hover {
+    box-shadow: var(--expensica-shadow);
+    border-color: var(--expensica-border-primary);
+}
+
+.expensica-filter-card-title {
+    margin: 0;
+    font-size: var(--expensica-font-size-sm);
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.expensica-filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.expensica-filter-row {
+    display: flex;
+    gap: 16px;
+}
+
+.expensica-filter-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.expensica-field-label {
+    font-size: var(--expensica-font-size-xs);
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.expensica-search-input-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.expensica-search-icon {
+    position: absolute;
+    left: 10px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.expensica-search-input {
+    padding: 8px 8px 8px 36px;
+    border-radius: var(--expensica-radius-sm);
+    border: 1px solid var(--expensica-border-primary);
+    background-color: var(--background-primary);
+    width: 100%;
+    font-size: var(--expensica-font-size-sm);
+    transition: var(--expensica-transition);
+}
+
+.expensica-search-input:focus {
+    border-color: var(--expensica-primary);
+    box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.2);
+    outline: none;
+}
+
+.expensica-date-input,
+.expensica-amount-input,
+.expensica-type-select {
+    padding: 8px 12px;
+    border-radius: var(--expensica-radius-sm);
+    border: 1px solid var(--expensica-border-primary);
+    background-color: var(--background-primary);
+    font-size: var(--expensica-font-size-sm);
+    transition: var(--expensica-transition);
+}
+
+.expensica-date-input:focus,
+.expensica-amount-input:focus,
+.expensica-type-select:focus {
+    border-color: var(--expensica-primary);
+    box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.2);
+    outline: none;
+}
+
+.expensica-categories-search-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.expensica-categories-search-input {
+    padding: 6px 6px 6px 30px;
+    border-radius: var(--expensica-radius-sm);
+    border: 1px solid var(--expensica-border-primary);
+    background-color: var(--background-primary);
+    width: 100%;
+    font-size: var(--expensica-font-size-xs);
+    transition: var(--expensica-transition);
+}
+
+.expensica-categories-search-input:focus {
+    border-color: var(--expensica-primary);
+    box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.2);
+    outline: none;
+}
+
+.expensica-category-checkboxes {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 8px;
+    background-color: var(--background-primary);
+    border-radius: var(--expensica-radius-sm);
+    border: 1px solid var(--expensica-border-primary);
+    scrollbar-width: thin;
+}
+
+.expensica-category-checkboxes::-webkit-scrollbar {
+    width: 6px;
+}
+
+.expensica-category-checkboxes::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.expensica-category-checkboxes::-webkit-scrollbar-thumb {
+    background-color: var(--expensica-border-primary);
+    border-radius: 6px;
+}
+
+.expensica-checkbox-container {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px;
+    border-radius: var(--expensica-radius-sm);
+    transition: var(--expensica-transition);
+}
+
+.expensica-checkbox-container:hover {
+    background-color: var(--background-secondary);
+}
+
+.expensica-checkbox-container input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border: 1px solid var(--expensica-border-primary);
+    border-radius: 4px;
+    outline: none;
+    cursor: pointer;
+    position: relative;
+    background-color: var(--background-primary);
+}
+
+.expensica-checkbox-container input[type="checkbox"]:checked {
+    background-color: var(--expensica-primary);
+    border-color: var(--expensica-primary);
+}
+
+.expensica-checkbox-container input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 2px;
+    width: 4px;
+    height: 8px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+.expensica-checkbox-container label {
+    font-size: var(--expensica-font-size-xs);
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+@media screen and (max-width: 768px) {
+    .expensica-filter-form,
+    .expensica-filter-row-container {
+        grid-template-columns: 1fr;
+    }
+    
+    .expensica-filter-row {
+        flex-direction: column;
+        gap: 12px;
+    }
+}
+
+/* Transactions Table */
+.expensica-transactions-section {
+    overflow: visible;
+    margin-bottom: 20px;
+}
+
+.expensica-transactions-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+}
+
+.expensica-transactions-table th {
+    text-align: left;
+    padding: 12px 16px;
+    background-color: var(--background-secondary);
+    color: var(--text-normal);
+    font-weight: 600;
+    font-size: 0.9em;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.expensica-transactions-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--background-modifier-border);
+    color: var(--text-normal);
+}
+
+.expensica-transactions-table tbody tr:hover {
+    background-color: var(--background-secondary);
+}
+
+.expensica-income-row {
+    border-left: 3px solid var(--color-green);
+}
+
+.expensica-expense-row {
+    border-left: 3px solid var(--color-red);
+}
+
+.expensica-date-col {
+    width: 120px;
+}
+
+.expensica-desc-col {
+    min-width: 200px;
+}
+
+.expensica-category-col {
+    width: 150px;
+}
+
+.expensica-amount-col {
+    width: 120px;
+}
+
+.expensica-actions-col {
+    width: 100px;
+}
+
+.expensica-amount-cell {
+    text-align: right;
+    font-weight: 500;
+}
+
+.expensica-actions-cell {
+    text-align: right;
+    white-space: nowrap;
+}
+
+/* Pagination */
+.expensica-pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 20px;
+    margin-bottom: 20px;
+    padding: 10px;
+    background-color: var(--background-secondary);
+    border-radius: 8px;
+}
+
+.expensica-pagination-btn {
+    background: none;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text-normal);
+    transition: background-color 0.2s;
+}
+
+.expensica-pagination-btn:hover:not(.disabled) {
+    background-color: var(--background-modifier-hover);
+}
+
+.expensica-pagination-btn.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.expensica-pagination-info {
+    font-size: 0.9em;
+    color: var(--text-muted);
+}
+
+.expensica-page-size-selector {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9em;
+    color: var(--text-muted);
+}
+
+.expensica-page-size-selector select {
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--background-modifier-border);
+    background-color: var(--background-primary);
+}
+
+/* Transactions View Styles */
+.expensica-transaction-count {
+    font-size: 14px;
+    color: var(--text-muted);
+    background-color: var(--background-secondary);
+    padding: 4px 10px;
+    border-radius: 12px;
+    margin-left: 12px;
+}
+
+/* Ensure the transactions container expands */
+.expensica-transactions {
+    overflow: visible;
+}
+
+/* The app's leaf container should handle scrolling */
+.workspace-leaf-content[data-type="expensica-transactions-view"] {
+    overflow-y: auto;
+}
+
+.expensica-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background-color: var(--background-secondary);
+  border-radius: var(--expensica-radius);
+  border-left: 4px solid var(--interactive-accent);
+  margin-top: 8px;
+  color: var(--text-normal);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.expensica-note svg {
+  flex-shrink: 0;
+}
+
+/* Confirmation Modal */
+.expensica-confirmation-modal {
+    padding: var(--expensica-spacing-xl);
+    max-width: 400px;
+    margin: 0 auto;
+}
+
+.expensica-confirmation-modal .expensica-modal-title {
+    font-size: var(--expensica-font-size-lg);
+    font-weight: 600;
+    color: var(--expensica-text-primary);
+    margin-bottom: var(--expensica-spacing);
+}
+
+.expensica-confirmation-modal .expensica-modal-message {
+    font-size: var(--expensica-font-size);
+    color: var(--expensica-text-secondary);
+    margin-bottom: var(--expensica-spacing-xl);
+    line-height: 1.5;
+}
+
+.expensica-confirmation-modal .expensica-modal-buttons {
+    display: flex;
+    gap: var(--expensica-spacing);
+    justify-content: flex-end;
+}
+
+.expensica-confirmation-modal .expensica-btn {
+    min-width: 80px;
+}
+
+.expensica-confirmation-modal .expensica-btn-danger {
+    background-color: var(--expensica-error);
+    color: white;
+}
+
+.expensica-confirmation-modal .expensica-btn-danger:hover {
+    background-color: #d32f2f;
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: var(--expensica-shadow-lg);
+}
+
+.expensica-calendar-title {
+    background: var(--background-secondary);
+    color: var(--text-normal);
+    padding: 16px 24px;
+    border-radius: var(--expensica-radius);
+    margin: 0;
+    font-size: 1.4em;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+    border: 1px solid var(--background-modifier-border);
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.expensica-calendar-title::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--expensica-primary);
+    border-radius: 2px 0 0 2px;
+}
+
+.expensica-transactions-title {
+    background: var(--background-secondary);
+    color: var(--text-normal);
+    padding: 16px 24px;
+    border-radius: var(--expensica-radius);
+    margin: 0;
+    font-size: 1.4em;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+    border: 1px solid var(--background-modifier-border);
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.expensica-transactions-title::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--expensica-primary);
+    border-radius: 2px 0 0 2px;
+}
+
+.expensica-section-header {
+    border-bottom: none;
+    margin-bottom: 20px;
+    padding: 0;
+}
