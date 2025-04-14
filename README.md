@@ -29,10 +29,7 @@ That's it. There's no account creation or complicated setup. You can immediately
 
 The most important feature is also the simplest: adding transactions quickly. You can record an expense or income in under 5 seconds.
 
-<video width="100%" height="auto" controls>
-  <source src="assets/Adding a transaction in Expensica.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
+![Adding a transaction in Expensica](assets/Adding%20a%20transaction%20in%20Expensica.gif)
 
 ### Beautiful Dashboard
 
@@ -48,12 +45,7 @@ Your financial data comes alive with a clean, information-rich dashboard.
 
 One of Expensica's unique features is its heatmap calendar that shows your spending patterns at a glance.
 
-<video width="100%" height="auto" controls>
-  <source src="assets/Spending heatmap calendar in Expensica.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
-
-![Adding a transaction in Expensica](assets/Adding%20a%20transaction%20in%20Expensica.gif)
+![Spending heatmap calendar in Expensica](assets/Spending%20heatmap%20calendar%20in%20Expensica.gif)
 
 - Daily spending visualization
 - Pattern recognition
