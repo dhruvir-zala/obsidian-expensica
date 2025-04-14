@@ -2,111 +2,167 @@
 
 ![Expensica Dashboard](/assets/Expensica%20Dashboard.png)
 
-Expensica is a comprehensive personal finance tracker designed specifically for Obsidian users. It allows you to effortlessly manage your daily income and expenses with unparalleled speed and privacy. 
-
-By leveraging the power of Obsidian, Expensica ensures that all your financial data is stored locally in a simple JSON file, making it not only fast but also secure and easily portable.
-
-## The Problem
-
-Most expense tracking tools are slow, complex, and invasive. They make you wait for pages to load, force you to connect your bank accounts, and store your financial data on their servers. They're built for accountants, not humans.
-
-## The Solution
-
-Expensica is different. It's built on Obsidian, which means it's lightning fast. Your data is stored locally in a simple JSON file. No cloud. No servers. No waiting. Just pure speed and privacy.
-
----- Image: Expensica Interface Demo ----
+Expensica is an Obsidian plugin that turns your vault into a powerful personal finance tracker. It's designed for people who want the control of a spreadsheet with none of the hassle.
 
 ## Why Expensica?
 
-### Speed
-- Instant loading (thanks to Obsidian)
-- No network requests
-- No waiting for pages to load
-- Everything happens in a blink
+- **Speed**: Add transactions in seconds without leaving Obsidian
+- **Privacy**: Your financial data stays local — no servers, no syncing to third parties
+- **Portability**: Everything stored in straightforward JSON files you can backup or migrate
+- **Simplicity**: Focused interface that does one job extremely well
+- **Offline**: Works without internet access — log expenses anywhere
 
-### Privacy
-- All data stored locally
-- No cloud storage
-- No third-party access
-- Your data stays on your device
+## Getting Started
 
-### Simplicity
-- Clean, minimal interface
-- No complex features you don't need
-- Focus on what matters: tracking expenses
-- Easy to understand at a glance
+Installing Expensica takes about 30 seconds:
 
-### Portability
-- Data stored in simple JSON format
-- Easy to backup
-- Easy to migrate
-- Easy to analyze
+1. Open Obsidian settings
+2. Go to "Community plugins" and disable "Safe mode"
+3. Click "Browse" and search for "Expensica"
+4. Install and enable the plugin
+
+That's it. There's no account creation or complicated setup. You can immediately start tracking your finances.
+
+## Core Features
+
+### Quick Expense/Income Tracking
+
+The most important feature is also the simplest: adding transactions quickly. You can record an expense or income in under 5 seconds.
+
+<video width="100%" height="auto" controls>
+  <source src="assets/Adding a transaction in Expensica.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+
+### Beautiful Dashboard
+
+Your financial data comes alive with a clean, information-rich dashboard.
+
+- Daily/Weekly/Monthly/Yearly or even a Custom Date income/expense summary
+- Balance tracking
+- Category breakdown
+- Spending trends (beautiful interactive heatmap calendar)
+- Transaction history
+
+### Calendar View
+
+One of Expensica's unique features is its heatmap calendar that shows your spending patterns at a glance.
+
+<video width="100%" height="auto" controls>
+  <source src="assets/Spending heatmap calendar in Expensica.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+
+- Daily spending visualization
+- Pattern recognition
+- Select any day to see detailed breakdown
+- Instantly spot high-spend days
+
+### Customizable Categories
+
+Organize transactions your way.
+
+----- Categories Screenshot -----
+
+- Create unlimited custom categories
+- Assign emojis for visual recognition
+- Get spending breakdowns by category
+
+### Data Control & Privacy
+
+Unlike cloud services, Expensica gives you complete ownership of your data.
+
+- All data stored locally in your vault (inside a folder named "expensica-data")
+- Simple JSON format anyone can read
+- No internet connection required
+- Back up your data however you prefer
+
+## Practical Usage
+
+Here's how I use Expensica daily:
+
+1. **Morning review**: I check yesterday's expenses and my month-to-date balance
+2. **Throughout the day**: Quick-add expenses with the hotkey as they happen
+3. **Weekly review**: I use the calendar view to spot expense patterns
+4. **Monthly planning**: I export last month's data and plan my budget
+
+The key is adding expenses immediately. The friction in most tracking systems is remembering to log expenses later. With Expensica right in Obsidian where you're already working, you remove that friction.
+
+## Limitations (Being Honest)
+
+Expensica isn't trying to be everything. It doesn't:
+
+- Connect to bank accounts or import transactions automatically
+- Handle investments or complex accounting
+- Support multiple currencies in a single transaction
+- Provide tax preparation features
+- Offer budget forecasting
+
+If you need these features, you might want a more complex financial system. Expensica is for people who want something simple, fast, and private.
 
 ## Technical Details
 
-Expensica stores all your financial data in a single JSON file located in your Obsidian vault. This makes it:
-- Easy to backup
-- Easy to version control
-- Easy to analyze with other tools
-- Easy to migrate if needed
+For the curious:
 
----- Image: Data Structure Diagram ----
+- Transactions are stored in `expensica-data/transactions.json`
+- Settings and categories in your regular Obsidian settings
+- Everything renders in real-time—no lag, no waiting
+- Uses standard web technologies (HTML, CSS, JavaScript)
+- Runs entirely within your Obsidian vault
 
-## What Expensica Can Do
+## Use Cases
 
-- Track income and expenses
-- Categorize transactions
-- Generate simple reports
-- Export data in JSON, CSV and PDF format
-- Work completely offline
-- Run at lightning speed
+### For Individual Finance Tracking
 
-## What Expensica Can't Do (Intentionally)
+The most common use case—track your personal expenses and income.
 
-- Connect to your bank accounts
-- Generate complex financial reports
-- Provide real-time stock market data
-- Replace a full accounting system
+### For Small Business Owners
 
-## Installation
+Many freelancers and small business owners use Expensica to keep track of business expenses separate from personal finances.
 
-1. Install the plugin from Obsidian's community plugins
-2. Restart Obsidian
-3. Start tracking your expenses
+### For Financial Planning
 
----- Video: Installation and Setup ----
+Combined with Obsidian's note-taking, Expensica becomes a powerful tool for financial planning.
 
-## Usage
+### For Travelers
 
-1. Open Expensica
-2. Add your transactions
-3. That's it
+Track expenses across a trip without needing internet access.
 
----- Image: Usage Example ----
+## FAQ
 
-## Future Roadmap
+**Q: Where is my data stored?**  
+A: All data lives in your Obsidian vault in the `expensica-data` folder.
 
-- More visualization options
-- Budget tracking
-- Export to other formats
-- Better Obsidian mobile support
-- And much more
+**Q: Can I export my data?**  
+A: Yes, you can export to JSON, CSV, or PDF formats.
 
-## Contributing
+**Q: Will this sync across devices?**  
+A: Expensica data syncs with your regular Obsidian sync methods (Obsidian Sync, iCloud, Dropbox, etc.)
 
-We welcome contributions! If you have an idea for making Expensica better, please open an issue or submit a pull request.
+**Q: Is there a mobile version?**  
+A: Expensica works on Obsidian mobile just like on desktop.
+
+## The Philosophy
+
+Most finance apps get it backward. They try to do too much and end up doing nothing well. Expensica started with a single goal: make tracking income and expenses as frictionless as possible while keeping your data completely private.
+
+Great tools don't try to be everything. They do one thing extremely well. A hammer doesn't try to be a screwdriver. Excel doesn't try to be Word.
+
+Expensica doesn't try to be your entire financial system. It's just the best way to track your daily finances inside Obsidian.
+
+## About the Developer
+
+Hi, I'm Dhruvir Zala. I built Expensica because I was tired of complex spreadsheets and privacy-invading finance apps. I wanted something that worked the way my brain works.
+
+If you find Expensica useful, consider [buying me a coffee](https://buymeacoffee.com/dhruvir).
+
+## Changelog
+
+See [CHANGELOG.md](https://github.com/dhruvir-zala/obsidian-expensica/blob/main/CHANGELOG.md) for the full history.
 
 ## License
 
-MIT License - because freedom matters.
-
-## Support
-
-Found a bug? Have a feature request? Open an issue on GitHub.
-
-## Final Thoughts
-
-Expensica isn't trying to be everything to everyone. It's trying to be one thing done exceptionally well: fast, private personal finance tracking. If that's what you need, you'll love it. If you need more, you won't.
+MIT © Dhruvir Zala
 
 ## About the Developer
 
