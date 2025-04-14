@@ -53,6 +53,8 @@ One of Expensica's unique features is its heatmap calendar that shows your spend
   Your browser does not support the video tag.
 </video>
 
+![Adding a transaction in Expensica](assets/Adding%20a%20transaction%20in%20Expensica.gif)
+
 - Daily spending visualization
 - Pattern recognition
 - Select any day to see detailed breakdown
