@@ -56,7 +56,7 @@ One of Expensica's unique features is its heatmap calendar that shows your spend
 
 Organize transactions your way.
 
------ Categories Screenshot -----
+![Category customization in Expensica](assets/Category%20customization%20in%20Expensica.png)
 
 - Create unlimited custom categories
 - Assign emojis for visual recognition
@@ -144,12 +144,6 @@ Great tools don't try to be everything. They do one thing extremely well. A hamm
 
 Expensica doesn't try to be your entire financial system. It's just the best way to track your daily finances inside Obsidian.
 
-## About the Developer
-
-Hi, I'm Dhruvir Zala. I built Expensica because I was tired of complex spreadsheets and privacy-invading finance apps. I wanted something that worked the way my brain works.
-
-If you find Expensica useful, consider [buying me a coffee](https://buymeacoffee.com/dhruvir).
-
 ## Changelog
 
 See [CHANGELOG.md](https://github.com/dhruvir-zala/obsidian-expensica/blob/main/CHANGELOG.md) for the full history.
@@ -159,6 +153,10 @@ See [CHANGELOG.md](https://github.com/dhruvir-zala/obsidian-expensica/blob/main/
 MIT © Dhruvir Zala
 
 ## About the Developer
+
+Hi, I'm Dhruvir Zala. I built Expensica because I was tired of complex spreadsheets and privacy-invading finance apps. I wanted something that worked the way my brain works.
+
+If you find Expensica useful, consider buying me a coffee.
 
 <a href="https://www.buymeacoffee.com/dhruvir" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
 
