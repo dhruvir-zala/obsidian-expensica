@@ -1966,6 +1966,14 @@ class BudgetModal extends Modal {
     periodSelect: HTMLSelectElement | null = null;
     rolloverToggle: HTMLElement | null = null;
     isRollover: boolean = false;
+    
+    // Add properties for custom dropdowns
+    selectedCategoryId: string = '';
+    selectedPeriod: BudgetPeriod = BudgetPeriod.MONTHLY;
+    categoryOptions: HTMLElement | null = null;
+    periodOptions: HTMLElement | null = null;
+    categoryDisplay: HTMLElement | null = null;
+    periodDisplay: HTMLElement | null = null;
 
     constructor(app: App, plugin: ExpensicaPlugin, dashboard: ExpensicaDashboardView, budget: Budget | null = null) {
         super(app);
@@ -1976,6 +1984,8 @@ class BudgetModal extends Modal {
         // If editing an existing budget, set the initial values
         if (budget) {
             this.isRollover = budget.rollover;
+            this.selectedCategoryId = budget.categoryId;
+            this.selectedPeriod = budget.period;
         }
     }
 
@@ -1984,12 +1994,12 @@ class BudgetModal extends Modal {
         contentEl.empty();
         contentEl.addClass('expensica-modal');
 
-        // Add title
-        contentEl.createEl('h2', { text: this.budget ? 'Edit Budget' : 'Add Budget' });
+        // Add title with icon
+        const modalTitle = contentEl.createEl('h2', { cls: 'expensica-modal-title' });
+        modalTitle.innerHTML = `<span class="expensica-modal-title-icon">📊</span> ${this.budget ? 'Edit Budget' : 'Add Budget'}`;
 
         // Create form
-        const form = contentEl.createEl('form');
-        form.addClass('expensica-form');
+        const form = contentEl.createEl('form', { cls: 'expensica-form' });
 
         // Category selection
         this.renderCategorySelect(form);
@@ -2003,25 +2013,28 @@ class BudgetModal extends Modal {
         // Rollover toggle
         this.renderRolloverToggle(form);
 
-        // Buttons
-        const buttonContainer = form.createDiv('expensica-form-buttons');
+        // Form footer with buttons
+        const formFooter = form.createDiv('expensica-form-footer');
         
         // Cancel button
-        const cancelButton = buttonContainer.createEl('button', {
+        const cancelBtn = formFooter.createEl('button', {
             text: 'Cancel',
             cls: 'expensica-btn expensica-btn-secondary',
-            type: 'button'
+            attr: { type: 'button' }
         });
         
         // Save button
-        const saveButton = buttonContainer.createEl('button', {
-            text: 'Save Budget',
+        const saveBtn = formFooter.createEl('button', {
+            text: this.budget ? 'Update' : 'Save Budget',
             cls: 'expensica-btn expensica-btn-primary',
-            type: 'submit'
+            attr: { type: 'submit' }
         });
 
+        // Event listeners to close dropdowns when clicking outside
+        document.addEventListener('click', this.handleOutsideClick);
+
         // Events
-        cancelButton.addEventListener('click', () => {
+        cancelBtn.addEventListener('click', () => {
             this.close();
         });
 
@@ -2032,50 +2045,150 @@ class BudgetModal extends Modal {
         });
     }
 
+    onClose() {
+        // Remove event listener
+        document.removeEventListener('click', this.handleOutsideClick);
+    }
+
+    // Handle clicks outside the dropdown to close it
+    handleOutsideClick = (e: MouseEvent) => {
+        if (this.categoryOptions && !this.categoryOptions.contains(e.target as Node) && 
+            this.categoryDisplay && !this.categoryDisplay.contains(e.target as Node)) {
+            this.categoryOptions.classList.add('expensica-select-hidden');
+        }
+        
+        if (this.periodOptions && !this.periodOptions.contains(e.target as Node) && 
+            this.periodDisplay && !this.periodDisplay.contains(e.target as Node)) {
+            this.periodOptions.classList.add('expensica-select-hidden');
+        }
+    }
+
     // Render category dropdown
     private renderCategorySelect(container: HTMLElement) {
         const formGroup = container.createDiv('expensica-form-group');
-        formGroup.createEl('label', { text: 'Category', attr: { for: 'budget-category' } });
-        
-        // Create select element
-        this.categorySelect = formGroup.createEl('select', { 
-            cls: 'expensica-select',
-            attr: { id: 'budget-category', name: 'category', required: 'true' }
+        formGroup.createEl('label', { 
+            text: 'Category', 
+            cls: 'expensica-form-label',
+            attr: { for: 'budget-category' } 
         });
-        
-        // Add placeholder option
-        const placeholderOption = this.categorySelect?.createEl('option', {
-            text: 'Select a category',
-            value: ''
-        });
-        
-        if (placeholderOption) {
-            placeholderOption.disabled = true;
-            placeholderOption.selected = !this.budget;
-        }
         
         // Get expense categories
         const categories = this.plugin.getCategories(CategoryType.EXPENSE);
         
-        // Create an option for each category
+        // Create custom select container
+        const customSelectContainer = formGroup.createDiv('expensica-custom-select-container');
+        
+        // Create hidden select for form submission
+        this.categorySelect = customSelectContainer.createEl('select', {
+            cls: 'hidden-select',
+            attr: { 
+                id: 'budget-category', 
+                name: 'category', 
+                required: 'true' 
+            }
+        });
+        
+        // Add placeholder option
+        this.categorySelect.createEl('option', {
+            text: 'Select a category',
+            value: '',
+            attr: { disabled: 'true' }
+        });
+        
+        // Create display element
+        this.categoryDisplay = customSelectContainer.createDiv('expensica-select-display');
+        
+        // Default text if no category selected
+        let displayText = 'Select a category';
+        let displayEmoji = '';
+        
+        // Create display text container
+        const displayTextEl = this.categoryDisplay.createDiv('expensica-select-display-text');
+        
+        // Create arrow icon
+        const arrowIcon = this.categoryDisplay.createDiv('expensica-select-arrow');
+        arrowIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+        
+        // Create options container
+        this.categoryOptions = customSelectContainer.createDiv('expensica-select-options expensica-select-hidden');
+        
+        // Add options for each category
         categories.forEach(category => {
-            if (!this.categorySelect) return;
-            
-            const option = this.categorySelect.createEl('option', {
-                text: `${category.emoji} ${category.name}`,
+            // Add option to hidden select
+            const option = this.categorySelect?.createEl('option', {
+                text: category.name,
                 value: category.id
             });
             
             // If editing a budget, select the correct category
             if (this.budget && this.budget.categoryId === category.id) {
-                option.selected = true;
+                if (option) option.selected = true;
+                displayText = category.name;
+                displayEmoji = category.emoji;
             }
             
-            // If category already has a budget, disable it unless it's the current budget
+            // Check if category already has a budget
             const existingBudget = this.plugin.getBudgetForCategory(category.id);
-            if (existingBudget && (!this.budget || existingBudget.id !== this.budget.id)) {
-                option.disabled = true;
-                option.textContent += ' (already budgeted)';
+            const isDisabled = existingBudget && (!this.budget || existingBudget.id !== this.budget.id);
+            
+            // Create visual option using a different approach
+            if (this.categoryOptions) {
+                const optionEl = document.createElement('div');
+                optionEl.className = 'expensica-select-option ' + 
+                    (this.selectedCategoryId === category.id ? 'expensica-option-selected ' : '') + 
+                    (isDisabled ? 'expensica-option-disabled' : '');
+                optionEl.innerHTML = `<span class="expensica-category-emoji">${category.emoji}</span> ${category.name} ${isDisabled ? '<span class="expensica-option-note">(already budgeted)</span>' : ''}`;
+                this.categoryOptions.appendChild(optionEl);
+                
+                // Skip event listener if disabled
+                if (isDisabled) return;
+                
+                // Add click event
+                optionEl.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.selectedCategoryId = category.id;
+                    
+                    // Update hidden select
+                    if (this.categorySelect) {
+                        Array.from(this.categorySelect.options).forEach(opt => {
+                            opt.selected = opt.value === category.id;
+                        });
+                    }
+                    
+                    // Update display text
+                    displayTextEl.innerHTML = `<span class="expensica-category-emoji">${category.emoji}</span> ${category.name}`;
+                    
+                    // Update selected class
+                    if (this.categoryOptions) {
+                        this.categoryOptions.querySelectorAll('.expensica-select-option').forEach(el => {
+                            el.classList.remove('expensica-option-selected');
+                        });
+                    }
+                    optionEl.classList.add('expensica-option-selected');
+                    
+                    // Hide options
+                    if (this.categoryOptions) {
+                        this.categoryOptions.classList.add('expensica-select-hidden');
+                    }
+                });
+            }
+        });
+        
+        // Set initial display text
+        if (displayEmoji) {
+            displayTextEl.innerHTML = `<span class="expensica-category-emoji">${displayEmoji}</span> ${displayText}`;
+        } else {
+            displayTextEl.setText(displayText);
+        }
+        
+        // Toggle options on display click
+        this.categoryDisplay.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (this.categoryOptions) {
+                this.categoryOptions.classList.toggle('expensica-select-hidden');
+            }
+            if (this.periodOptions) {
+                this.periodOptions.classList.add('expensica-select-hidden'); // Close other dropdown if open
             }
         });
     }
@@ -2083,7 +2196,11 @@ class BudgetModal extends Modal {
     // Render amount input
     private renderAmountInput(container: HTMLElement) {
         const formGroup = container.createDiv('expensica-form-group');
-        formGroup.createEl('label', { text: 'Budget Amount', attr: { for: 'budget-amount' } });
+        formGroup.createEl('label', { 
+            text: 'Budget Amount', 
+            cls: 'expensica-form-label',
+            attr: { for: 'budget-amount' } 
+        });
         
         // Currency symbol wrapper
         const inputWrapper = formGroup.createDiv('expensica-currency-input');
@@ -2100,7 +2217,7 @@ class BudgetModal extends Modal {
         // Amount input
         this.amountInput = inputWrapper.createEl('input', {
             type: 'number',
-            cls: 'expensica-input',
+            cls: 'expensica-form-input',
             attr: {
                 id: 'budget-amount',
                 name: 'amount',
@@ -2116,12 +2233,10 @@ class BudgetModal extends Modal {
     // Render period select
     private renderPeriodSelect(container: HTMLElement) {
         const formGroup = container.createDiv('expensica-form-group');
-        formGroup.createEl('label', { text: 'Budget Period', attr: { for: 'budget-period' } });
-        
-        // Create select element
-        this.periodSelect = formGroup.createEl('select', { 
-            cls: 'expensica-select',
-            attr: { id: 'budget-period', name: 'period', required: 'true' }
+        formGroup.createEl('label', { 
+            text: 'Budget Period', 
+            cls: 'expensica-form-label',
+            attr: { for: 'budget-period' } 
         });
         
         // Period options
@@ -2131,18 +2246,106 @@ class BudgetModal extends Modal {
             { value: BudgetPeriod.YEARLY, text: 'Yearly' }
         ];
         
-        // Create options
+        // Create custom select container
+        const customSelectContainer = formGroup.createDiv('expensica-custom-select-container');
+        
+        // Create hidden select for form submission
+        this.periodSelect = customSelectContainer.createEl('select', {
+            cls: 'hidden-select',
+            attr: { 
+                id: 'budget-period', 
+                name: 'period', 
+                required: 'true' 
+            }
+        });
+        
+        // Add options to hidden select
         periods.forEach(period => {
-            if (!this.periodSelect) return;
-            
-            const option = this.periodSelect.createEl('option', {
+            const option = this.periodSelect?.createEl('option', {
                 text: period.text,
                 value: period.value
             });
             
             // If editing a budget, select the correct period
             if (this.budget && this.budget.period === period.value) {
-                option.selected = true;
+                if (option) option.selected = true;
+            }
+        });
+        
+        // Create display element
+        this.periodDisplay = customSelectContainer.createDiv('expensica-select-display');
+        
+        // Default period if none selected
+        let displayText = 'Select a period';
+        
+        // If editing, set display text to current period
+        if (this.selectedPeriod) {
+            const periodObj = periods.find(p => p.value === this.selectedPeriod);
+            if (periodObj) {
+                displayText = periodObj.text;
+            }
+        }
+        
+        // Create display text container
+        const displayTextEl = this.periodDisplay.createDiv('expensica-select-display-text');
+        displayTextEl.setText(displayText);
+        
+        // Create arrow icon
+        const arrowIcon = this.periodDisplay.createDiv('expensica-select-arrow');
+        arrowIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+        
+        // Create options container
+        this.periodOptions = customSelectContainer.createDiv('expensica-select-options expensica-select-hidden');
+        
+        // Add options for each period
+        periods.forEach(period => {
+            // Create visual option using a different approach
+            if (this.periodOptions) {
+                const optionEl = document.createElement('div');
+                optionEl.className = 'expensica-select-option ' + 
+                    (this.selectedPeriod === period.value ? 'expensica-option-selected' : '');
+                optionEl.textContent = period.text;
+                this.periodOptions.appendChild(optionEl);
+                
+                // Add click event
+                optionEl.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.selectedPeriod = period.value as BudgetPeriod;
+                    
+                    // Update hidden select
+                    if (this.periodSelect) {
+                        Array.from(this.periodSelect.options).forEach(opt => {
+                            opt.selected = opt.value === period.value;
+                        });
+                    }
+                    
+                    // Update display text
+                    displayTextEl.setText(period.text);
+                    
+                    // Update selected class
+                    if (this.periodOptions) {
+                        this.periodOptions.querySelectorAll('.expensica-select-option').forEach(el => {
+                            el.classList.remove('expensica-option-selected');
+                        });
+                    }
+                    optionEl.classList.add('expensica-option-selected');
+                    
+                    // Hide options
+                    if (this.periodOptions) {
+                        this.periodOptions.classList.add('expensica-select-hidden');
+                    }
+                });
+            }
+        });
+        
+        // Toggle options on display click
+        this.periodDisplay.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (this.periodOptions) {
+                this.periodOptions.classList.toggle('expensica-select-hidden');
+            }
+            if (this.categoryOptions) {
+                this.categoryOptions.classList.add('expensica-select-hidden'); // Close other dropdown if open
             }
         });
     }
@@ -2151,10 +2354,10 @@ class BudgetModal extends Modal {
     private renderRolloverToggle(container: HTMLElement) {
         const formGroup = container.createDiv('expensica-form-group');
         
-        // Create toggle container
-        const toggleContainer = formGroup.createDiv('expensica-toggle-container');
+        // Create toggle container with improved styling
+        const toggleContainer = formGroup.createDiv('expensica-toggle-container expensica-form-control-container');
         
-        // Toggle switch
+        // Toggle switch with label
         this.rolloverToggle = toggleContainer.createDiv('expensica-toggle');
         if (this.isRollover && this.rolloverToggle) {
             this.rolloverToggle.addClass('active');
@@ -2165,10 +2368,10 @@ class BudgetModal extends Modal {
             const toggleSlider = this.rolloverToggle.createDiv('expensica-toggle-slider');
         }
         
-        // Toggle label
+        // Toggle label with improved appearance
         const toggleLabel = toggleContainer.createEl('label', { 
             text: 'Roll over unspent budget to next period',
-            cls: 'expensica-toggle-label'
+            cls: 'expensica-toggle-label expensica-form-label-inline'
         });
         
         // Add event listener
@@ -2224,10 +2427,5 @@ class BudgetModal extends Modal {
         
         // Refresh the dashboard
         this.dashboard.renderDashboard();
-    }
-
-    onClose() {
-        const { contentEl } = this;
-        contentEl.empty();
     }
 }
