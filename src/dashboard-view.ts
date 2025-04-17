@@ -358,15 +358,33 @@ export class ExpensicaDashboardView extends ItemView {
         const budgetContainer = container.createDiv('expensica-budget-container');
         
         // Budget summary section
-        const budgetSummary = budgetContainer.createDiv('expensica-budget-summary');
+        const budgetSummary = budgetContainer.createDiv('expensica-budget-summary expensica-animate');
         this.renderBudgetSummary(budgetSummary);
         
         // Budget list section
-        const budgetList = budgetContainer.createDiv('expensica-budget-list');
-        this.renderBudgetList(budgetList);
+        const budgetList = budgetContainer.createDiv('expensica-budget-list expensica-animate expensica-animate-delay-1');
+        
+        // Check if there are budgets
+        const budgets = this.plugin.getAllBudgets();
+        if (budgets.length === 0) {
+            // Enhanced empty state
+            const emptyState = budgetList.createDiv('expensica-empty-budget-state');
+            emptyState.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                    <line x1="8" y1="21" x2="16" y2="21"></line>
+                    <line x1="12" y1="17" x2="12" y2="21"></line>
+                    <path d="M6 8h.01M12 8h.01M18 8h.01"></path>
+                </svg>
+                <h3>No Budgets Created Yet</h3>
+                <p>Create your first budget to start tracking spending against your targets and stay on top of your financial goals.</p>
+            `;
+        } else {
+            this.renderBudgetList(budgetList);
+        }
         
         // Add budget button
-        const addBudgetContainer = budgetContainer.createDiv('expensica-add-budget-container');
+        const addBudgetContainer = budgetContainer.createDiv('expensica-add-budget-container expensica-animate expensica-animate-delay-2');
         const addBudgetBtn = addBudgetContainer.createEl('button', {
             cls: 'expensica-btn expensica-btn-primary',
         });
@@ -383,18 +401,40 @@ export class ExpensicaDashboardView extends ItemView {
     renderBudgetSummary(container: HTMLElement) {
         const budgets = this.plugin.getAllBudgets();
         
-        // If no budgets, show a message
+        // If no budgets, show a simplified summary
         if (budgets.length === 0) {
-            const emptyState = container.createDiv('expensica-empty-state');
-            emptyState.innerHTML = `
-                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                    <line x1="8" y1="21" x2="16" y2="21"></line>
-                    <line x1="12" y1="17" x2="12" y2="21"></line>
-                </svg>
-                <h3>No budgets yet</h3>
-                <p>Create your first budget to start tracking spending against your targets.</p>
-            `;
+            const summaryEl = container.createDiv('expensica-summary');
+            
+            // Empty budgeted card
+            const budgetedCard = summaryEl.createDiv('expensica-card expensica-animate');
+            const budgetedCardTitle = budgetedCard.createEl('h3', { cls: 'expensica-card-title' });
+            budgetedCardTitle.innerHTML = '<span class="emoji">💰</span> Total Budgeted';
+            budgetedCard.createEl('p', {
+                text: formatCurrency(0, this.plugin.settings.defaultCurrency),
+                cls: 'expensica-card-value'
+            });
+            budgetedCard.createEl('div', { text: '💰', cls: 'expensica-card-bg-icon' });
+            
+            // Empty spent card
+            const spentCard = summaryEl.createDiv('expensica-card expensica-animate expensica-animate-delay-1');
+            const spentCardTitle = spentCard.createEl('h3', { cls: 'expensica-card-title' });
+            spentCardTitle.innerHTML = '<span class="emoji">💸</span> Total Spent';
+            spentCard.createEl('p', {
+                text: formatCurrency(0, this.plugin.settings.defaultCurrency),
+                cls: 'expensica-card-value expensica-expense'
+            });
+            spentCard.createEl('div', { text: '💸', cls: 'expensica-card-bg-icon' });
+            
+            // Empty remaining card
+            const remainingCard = summaryEl.createDiv('expensica-card expensica-animate expensica-animate-delay-2');
+            const remainingCardTitle = remainingCard.createEl('h3', { cls: 'expensica-card-title' });
+            remainingCardTitle.innerHTML = '<span class="emoji">💵</span> Remaining';
+            remainingCard.createEl('p', {
+                text: formatCurrency(0, this.plugin.settings.defaultCurrency),
+                cls: 'expensica-card-value'
+            });
+            remainingCard.createEl('div', { text: '💵', cls: 'expensica-card-bg-icon' });
+            
             return;
         }
         
@@ -408,56 +448,41 @@ export class ExpensicaDashboardView extends ItemView {
         const remainingAmount = Math.max(0, totalBudgeted - totalSpent);
         const spentPercentage = totalBudgeted > 0 ? Math.min(100, (totalSpent / totalBudgeted) * 100) : 0;
         
-        // Create summary flex container
-        const summaryFlex = container.createDiv('expensica-summary-flex');
+        // Create summary container with dashboard style
+        const summaryEl = container.createDiv('expensica-summary');
         
         // Total budgeted card
-        const budgetedCard = summaryFlex.createDiv('expensica-summary-card');
-        budgetedCard.innerHTML = `
-            <div class="expensica-summary-icon expensica-summary-icon-blue">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                </svg>
-            </div>
-            <div class="expensica-summary-content">
-                <h3>Total Budgeted</h3>
-                <p>${formatCurrency(totalBudgeted, this.plugin.settings.defaultCurrency)}</p>
-            </div>
-        `;
+        const budgetedCard = summaryEl.createDiv('expensica-card expensica-animate');
+        const budgetedCardTitle = budgetedCard.createEl('h3', { cls: 'expensica-card-title' });
+        budgetedCardTitle.innerHTML = '<span class="emoji">💰</span> Total Budgeted';
+        budgetedCard.createEl('p', {
+            text: formatCurrency(totalBudgeted, this.plugin.settings.defaultCurrency),
+            cls: 'expensica-card-value'
+        });
+        budgetedCard.createEl('div', { text: '💰', cls: 'expensica-card-bg-icon' });
         
         // Total spent card
-        const spentCard = summaryFlex.createDiv('expensica-summary-card');
-        spentCard.innerHTML = `
-            <div class="expensica-summary-icon expensica-summary-icon-red">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
-                    <polyline points="17 6 23 6 23 12"></polyline>
-                </svg>
-            </div>
-            <div class="expensica-summary-content">
-                <h3>Total Spent</h3>
-                <p>${formatCurrency(totalSpent, this.plugin.settings.defaultCurrency)}</p>
-            </div>
-        `;
+        const spentCard = summaryEl.createDiv('expensica-card expensica-animate expensica-animate-delay-1');
+        const spentCardTitle = spentCard.createEl('h3', { cls: 'expensica-card-title' });
+        spentCardTitle.innerHTML = '<span class="emoji">💸</span> Total Spent';
+        spentCard.createEl('p', {
+            text: formatCurrency(totalSpent, this.plugin.settings.defaultCurrency),
+            cls: 'expensica-card-value expensica-expense'
+        });
+        spentCard.createEl('div', { text: '💸', cls: 'expensica-card-bg-icon' });
         
-        // Remaining card
-        const remainingCard = summaryFlex.createDiv('expensica-summary-card');
-        remainingCard.innerHTML = `
-            <div class="expensica-summary-icon expensica-summary-icon-green">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="12" y1="20" x2="12" y2="10"></line>
-                    <line x1="18" y1="20" x2="18" y2="4"></line>
-                    <line x1="6" y1="20" x2="6" y2="16"></line>
-                </svg>
-            </div>
-            <div class="expensica-summary-content">
-                <h3>Remaining</h3>
-                <p>${formatCurrency(remainingAmount, this.plugin.settings.defaultCurrency)}</p>
-            </div>
-        `;
+        // Remaining amount card
+        const remainingCard = summaryEl.createDiv('expensica-card expensica-animate expensica-animate-delay-2');
+        const remainingCardTitle = remainingCard.createEl('h3', { cls: 'expensica-card-title' });
+        remainingCardTitle.innerHTML = '<span class="emoji">💵</span> Remaining';
+        remainingCard.createEl('p', {
+            text: formatCurrency(remainingAmount, this.plugin.settings.defaultCurrency),
+            cls: 'expensica-card-value'
+        });
+        remainingCard.createEl('div', { text: '💵', cls: 'expensica-card-bg-icon' });
         
         // Overall budget progress
-        const progressContainer = container.createDiv('expensica-budget-progress-container');
+        const progressContainer = container.createDiv('expensica-budget-progress-container expensica-animate expensica-animate-delay-3');
         progressContainer.innerHTML = `
             <h3>Overall Budget Progress</h3>
             <div class="expensica-budget-progress">
@@ -482,11 +507,23 @@ export class ExpensicaDashboardView extends ItemView {
             return;
         }
         
-        // Create the list container
-        const listContainer = container.createDiv('expensica-budget-items');
+        // Create the list container with chart container styling
+        const listContainer = container.createDiv('expensica-budget-items expensica-chart-container');
+        
+        // Create header with chart header styling
+        const headerSection = listContainer.createDiv('expensica-chart-header');
+        headerSection.innerHTML = `
+            <div class="expensica-chart-title-container">
+                <h3 class="expensica-chart-title">Budget Details</h3>
+                <span class="expensica-chart-subtitle">${budgets.length} active ${budgets.length === 1 ? 'budget' : 'budgets'}</span>
+            </div>
+        `;
+        
+        // Create the budget list table
+        const budgetListTable = listContainer.createDiv('expensica-budget-list-table');
         
         // Create header
-        const header = listContainer.createDiv('expensica-budget-header');
+        const header = budgetListTable.createDiv('expensica-budget-header');
         header.innerHTML = `
             <div class="expensica-budget-col-category">Category</div>
             <div class="expensica-budget-col-amount">Budget</div>
@@ -496,8 +533,11 @@ export class ExpensicaDashboardView extends ItemView {
             <div class="expensica-budget-col-actions">Actions</div>
         `;
         
+        // Create the budget items wrapper for scrolling
+        const budgetItemsWrapper = budgetListTable.createDiv('expensica-budget-items-wrapper');
+        
         // Create a budget item for each budget
-        budgets.forEach(budget => {
+        budgets.forEach((budget, index) => {
             const category = this.plugin.getCategoryById(budget.categoryId);
             if (!category) return; // Skip if category doesn't exist
             
@@ -506,21 +546,31 @@ export class ExpensicaDashboardView extends ItemView {
             
             // Determine the status color
             let statusClass = 'expensica-status-good';
+            let statusText = '';
+            
             if (status.percentage >= 90) {
                 statusClass = 'expensica-status-danger';
+                statusText = 'At Risk';
             } else if (status.percentage >= 75) {
                 statusClass = 'expensica-status-warning';
+                statusText = 'Caution';
+            } else {
+                statusText = 'On Track';
             }
             
-            // Create the budget item
-            const budgetItem = listContainer.createDiv(`expensica-budget-item ${statusClass}`);
+            // Create the budget item with animation delay based on index
+            const budgetItem = budgetItemsWrapper.createDiv(`expensica-budget-item ${statusClass} expensica-animate expensica-animate-delay-${Math.min(3, Math.floor(index / 2))}`);
             
             // Category info
             const categoryCol = budgetItem.createDiv('expensica-budget-col-category');
             categoryCol.innerHTML = `
-                <span class="expensica-category-emoji">${category.emoji}</span>
-                <span class="expensica-category-name">${category.name}</span>
-                <span class="expensica-budget-period">${budget.period}</span>
+                <div class="expensica-category-container">
+                    <span class="expensica-category-emoji">${category.emoji}</span>
+                    <div class="expensica-category-details">
+                        <span class="expensica-category-name">${category.name}</span>
+                        <span class="expensica-budget-period">${budget.period}</span>
+                    </div>
+                </div>
             `;
             
             // Budget amount
@@ -533,7 +583,10 @@ export class ExpensicaDashboardView extends ItemView {
             
             // Remaining amount
             const remainingCol = budgetItem.createDiv('expensica-budget-col-remaining');
-            remainingCol.textContent = formatCurrency(status.remaining, this.plugin.settings.defaultCurrency);
+            remainingCol.innerHTML = `
+                <span class="expensica-amount">${formatCurrency(status.remaining, this.plugin.settings.defaultCurrency)}</span>
+                <span class="expensica-budget-status ${statusClass}">${statusText}</span>
+            `;
             
             // Progress bar
             const progressCol = budgetItem.createDiv('expensica-budget-col-progress');
@@ -545,20 +598,28 @@ export class ExpensicaDashboardView extends ItemView {
                 <div class="expensica-budget-percentage">${Math.round(status.percentage)}%</div>
             `;
             
-            // Actions
+            // Actions column
             const actionsCol = budgetItem.createDiv('expensica-budget-col-actions');
             
             // Edit button
             const editBtn = actionsCol.createEl('button', {
                 cls: 'expensica-budget-action expensica-budget-edit',
+                attr: {
+                    'aria-label': 'Edit budget',
+                    'title': 'Edit budget'
+                }
             });
             editBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>';
             
             // Delete button
             const deleteBtn = actionsCol.createEl('button', {
                 cls: 'expensica-budget-action expensica-budget-delete',
+                attr: {
+                    'aria-label': 'Delete budget',
+                    'title': 'Delete budget'
+                }
             });
-            deleteBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
+            deleteBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
             
             // Add event listeners
             editBtn.addEventListener('click', () => {
@@ -571,7 +632,7 @@ export class ExpensicaDashboardView extends ItemView {
                     this.app,
                     'Delete Budget',
                     `Are you sure you want to delete the budget for ${category.name}?`,
-                    async (confirmed) => {
+                    async (confirmed: boolean) => {
                         if (confirmed) {
                             await this.plugin.deleteBudget(budget.id);
                             this.renderDashboard();
