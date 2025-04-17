@@ -316,6 +316,87 @@ export enum TransactionType {
     ...DEFAULT_INCOME_CATEGORIES
   ];
   
+  export enum BudgetPeriod {
+    MONTHLY = 'monthly',
+    QUARTERLY = 'quarterly',
+    YEARLY = 'yearly'
+  }
+  
+  export interface Budget {
+    id: string;
+    categoryId: string;
+    amount: number;
+    period: BudgetPeriod;
+    rollover: boolean;
+    lastUpdated: string;
+  }
+  
+  export interface BudgetData {
+    budgets: Budget[];
+    lastUpdated: string; // ISO timestamp
+  }
+  
+  export const DEFAULT_BUDGET_DATA: BudgetData = {
+    budgets: [],
+    lastUpdated: new Date().toISOString()
+  };
+  
+  // Helper function to calculate budget status
+  export function calculateBudgetStatus(
+    budget: Budget, 
+    transactions: Transaction[], 
+    currentDate: Date = new Date()
+  ): { spent: number; remaining: number; percentage: number } {
+    
+    // Get start and end date for the budget period
+    const { startDate, endDate } = getBudgetPeriodDates(budget.period, currentDate);
+    
+    // Filter transactions for this category in the current period
+    const periodTransactions = transactions.filter(t => 
+      t.category === budget.categoryId && 
+      t.type === TransactionType.EXPENSE &&
+      new Date(t.date) >= startDate &&
+      new Date(t.date) <= endDate
+    );
+    
+    // Calculate how much was spent
+    const spent = periodTransactions.reduce((total, t) => total + t.amount, 0);
+    
+    // Calculate remaining budget and percentage
+    const remaining = Math.max(0, budget.amount - spent);
+    const percentage = budget.amount > 0 ? Math.min(100, (spent / budget.amount) * 100) : 0;
+    
+    return { spent, remaining, percentage };
+  }
+  
+  // Get the date range for a budget period
+  export function getBudgetPeriodDates(period: BudgetPeriod, currentDate: Date = new Date()): { startDate: Date, endDate: Date } {
+    const now = new Date(currentDate);
+    let startDate: Date;
+    let endDate: Date;
+    
+    switch(period) {
+      case BudgetPeriod.MONTHLY:
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        break;
+      case BudgetPeriod.QUARTERLY:
+        const quarter = Math.floor(now.getMonth() / 3);
+        startDate = new Date(now.getFullYear(), quarter * 3, 1);
+        endDate = new Date(now.getFullYear(), (quarter + 1) * 3, 0);
+        break;
+      case BudgetPeriod.YEARLY:
+        startDate = new Date(now.getFullYear(), 0, 1);
+        endDate = new Date(now.getFullYear(), 11, 31);
+        break;
+      default:
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    }
+    
+    return { startDate, endDate };
+  }
+  
   // Helper class for aggregating transaction data
   export class TransactionAggregator {
     static getTotalIncome(transactions: Transaction[]): number {

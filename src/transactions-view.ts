@@ -6,7 +6,10 @@ import {
     formatCurrency,
     formatDate,
     CategoryType,
-    Category
+    Category,
+    getMonthYearString,
+    generateId,
+    calculateBudgetStatus
 } from './models';
 import ExpensicaPlugin from '../main';
 import { ExpenseModal, IncomeModal, DateRangeType, DateRange, DateRangePickerModal } from './dashboard-view';
@@ -374,6 +377,36 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
             deleteBtn.addEventListener('click', () => {
                 this.deleteTransaction(transaction.id);
             });
+
+            // Category information
+            const categoryEl = transactionEl.createDiv('expensica-transaction-category');
+            if (category) {
+                categoryEl.innerHTML = `${category.emoji} ${category.name}`;
+                
+                // Add budget warning if applicable
+                if (transaction.type === TransactionType.EXPENSE && this.plugin.settings.enableBudgeting) {
+                    const budget = this.plugin.getBudgetForCategory(category.id);
+                    if (budget) {
+                        // Check if over budget
+                        const transactions = this.plugin.getAllTransactions();
+                        const budgetStatus = calculateBudgetStatus(budget, transactions);
+                        
+                        if (budgetStatus.percentage >= 90) {
+                            const warningEl = categoryEl.createSpan('expensica-over-budget-warning');
+                            warningEl.innerHTML = `
+                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                                </svg>
+                                ${budgetStatus.percentage >= 100 ? 'Over budget' : 'Near budget limit'}
+                            `;
+                        }
+                    }
+                }
+            } else {
+                categoryEl.textContent = 'Uncategorized';
+            }
         });
     }
 

@@ -16,7 +16,11 @@ import {
     DEFAULT_EXPENSE_CATEGORIES,
     DEFAULT_INCOME_CATEGORIES,
     getCurrencyByCode,
-    ColorScheme
+    ColorScheme,
+    Budget,
+    BudgetData,
+    DEFAULT_BUDGET_DATA,
+    BudgetPeriod
 } from './src/models';
 
 import { ExportModal } from './src/export-modal';
@@ -46,6 +50,7 @@ interface ExpensicaSettings {
     calendarColorScheme: ColorScheme;
     customCalendarColor: string;
     showWeekNumbers: boolean;
+    enableBudgeting: boolean;
 }
 
 // Define a separate interface for our transactions data
@@ -58,23 +63,26 @@ interface TransactionsData {
 const DEFAULT_SETTINGS: ExpensicaSettings = {
     defaultCurrency: 'USD',
     categories: DEFAULT_CATEGORIES,
-    calendarColorScheme: ColorScheme.RED,
-    customCalendarColor: "#FF5252",
-    showWeekNumbers: false
-}
+    calendarColorScheme: ColorScheme.BLUE,
+    customCalendarColor: '#2196f3',
+    showWeekNumbers: false,
+    enableBudgeting: true
+};
 
 // Default transactions data
 const DEFAULT_TRANSACTIONS_DATA: TransactionsData = {
     transactions: [],
     lastUpdated: new Date().toISOString()
-}
+};
 
 // Define the main plugin class
 export default class ExpensicaPlugin extends Plugin {
     settings: ExpensicaSettings;
     transactionsData: TransactionsData;
+    budgetData: BudgetData;
     dataFolderPath: string = 'expensica-data';
     transactionsFilePath: string = 'expensica-data/transactions.json';
+    budgetFilePath: string = 'expensica-data/budgets.json';
     settingTab: ExpensicaSettingTab | null = null;
 
     async onload() {
@@ -85,6 +93,9 @@ export default class ExpensicaPlugin extends Plugin {
 
         // Load transactions data
         await this.loadTransactionsData();
+        
+        // Load budget data
+        await this.loadBudgetData();
         
         // Make jsPDF globally available
         try {
@@ -134,6 +145,15 @@ export default class ExpensicaPlugin extends Plugin {
             name: 'View All Transactions',
             callback: () => {
                 this.openTransactionsView();
+            }
+        });
+
+        // Add a command to open the budget view
+        this.addCommand({
+            id: 'open-budget',
+            name: 'Open Expensica Budget',
+            callback: () => {
+                this.openBudgetView();
             }
         });
 
@@ -221,6 +241,60 @@ export default class ExpensicaPlugin extends Plugin {
         } catch (error) {
             console.error('Expensica: Error saving transactions data', error);
             new Notice('Error saving transactions data. See console for details.');
+        }
+    }
+
+    async loadBudgetData() {
+        try {
+            const fileExists = await this.app.vault.adapter.exists(this.budgetFilePath);
+            if (!fileExists) {
+                // If file doesn't exist, initialize with default data
+                this.budgetData = DEFAULT_BUDGET_DATA;
+                await this.saveBudgetData();
+                return;
+            }
+
+            // Read the file content
+            const fileContent = await this.app.vault.adapter.read(this.budgetFilePath);
+
+            // Parse the JSON content
+            this.budgetData = JSON.parse(fileContent);
+
+            // Validate the data structure
+            if (!this.budgetData.budgets) {
+                this.budgetData.budgets = [];
+            }
+
+            if (!this.budgetData.lastUpdated) {
+                this.budgetData.lastUpdated = new Date().toISOString();
+            }
+
+            // Log success
+            console.log('Expensica: Budgets loaded successfully', this.budgetData.budgets.length, 'budgets found');
+        } catch (error) {
+            // If there's an error, initialize with default data
+            console.error('Expensica: Error loading budget data', error);
+            new Notice('Error loading budget data. Using default data.');
+            this.budgetData = DEFAULT_BUDGET_DATA;
+            await this.saveBudgetData();
+        }
+    }
+
+    async saveBudgetData() {
+        try {
+            // Update the lastUpdated timestamp
+            this.budgetData.lastUpdated = new Date().toISOString();
+
+            // Convert to JSON
+            const jsonData = JSON.stringify(this.budgetData, null, 2);
+
+            // Write to file
+            await this.app.vault.adapter.write(this.budgetFilePath, jsonData);
+
+            console.log('Expensica: Budgets saved successfully');
+        } catch (error) {
+            console.error('Expensica: Error saving budget data', error);
+            new Notice('Error saving budget data. See console for details.');
         }
     }
 
@@ -495,11 +569,67 @@ export default class ExpensicaPlugin extends Plugin {
             return false;
         }
     }
+
+    // Budget methods
+    async addBudget(budget: Budget) {
+        if (!budget.id) {
+            budget.id = generateId();
+        }
+        budget.lastUpdated = new Date().toISOString();
+        this.budgetData.budgets.push(budget);
+        await this.saveBudgetData();
+    }
+
+    async updateBudget(budget: Budget) {
+        const index = this.budgetData.budgets.findIndex(b => b.id === budget.id);
+        if (index !== -1) {
+            budget.lastUpdated = new Date().toISOString();
+            this.budgetData.budgets[index] = budget;
+            await this.saveBudgetData();
+        }
+    }
+
+    async deleteBudget(id: string) {
+        const index = this.budgetData.budgets.findIndex(b => b.id === id);
+        if (index !== -1) {
+            this.budgetData.budgets.splice(index, 1);
+            await this.saveBudgetData();
+        }
+    }
+
+    getBudgetForCategory(categoryId: string): Budget | undefined {
+        return this.budgetData.budgets.find(b => b.categoryId === categoryId);
+    }
+
+    getAllBudgets(): Budget[] {
+        return this.budgetData.budgets;
+    }
+
+    async openBudgetView() {
+        // Activate existing leaf if it exists
+        const leaves = this.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE);
+        if (leaves.length > 0 && leaves[0].view instanceof ExpensicaDashboardView) {
+            const dashboardView = leaves[0].view as ExpensicaDashboardView;
+            dashboardView.showBudgetTab();
+            this.app.workspace.revealLeaf(leaves[0]);
+        } else {
+            // Open the dashboard first, then switch to the budget tab
+            await this.openDashboard();
+            setTimeout(() => {
+                const newLeaves = this.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE);
+                if (newLeaves.length > 0 && newLeaves[0].view instanceof ExpensicaDashboardView) {
+                    const dashboardView = newLeaves[0].view as ExpensicaDashboardView;
+                    dashboardView.showBudgetTab();
+                }
+            }, 300); // Give some time for the view to initialize
+        }
+    }
 }
 
 // Settings tab
 class ExpensicaSettingTab extends PluginSettingTab {
     plugin: ExpensicaPlugin;
+    updateCustomColorVisibility: () => void;
 
     constructor(app: App, plugin: ExpensicaPlugin) {
         super(app, plugin);
@@ -531,243 +661,171 @@ class ExpensicaSettingTab extends PluginSettingTab {
     }
 
     display(): void {
-        const {containerEl} = this;
+        const { containerEl } = this;
 
         containerEl.empty();
-        
-        // Add the settings container class
         containerEl.addClass('expensica-settings-container');
 
-        containerEl.createEl('h2', {text: 'Expensica Settings'});
+        // General settings
+        containerEl.createEl('h2', { text: 'General Settings' });
 
-        // Wrap each section in a section container
-        const supportSectionEl = containerEl.createDiv('expensica-settings-section');
-        
-        // Add support and social links section at the top
-        const supportSection = supportSectionEl.createDiv('expensica-support-section');
-        
-        // Support text
-        supportSection.createEl('p', {
-            text: 'Thank you for using Expensica! If you find it helpful, consider supporting the development.',
-            cls: 'expensica-support-text'
-        });
-        
-        // Links container
-        const linksContainer = supportSection.createDiv('expensica-links-container');
-        
-        // Buy Me A Coffee button
-        const coffeeLink = linksContainer.createEl('a', {
-            href: 'https://ko-fi.com/dhruvirzala',
-            cls: 'expensica-coffee-btn',
-            attr: { target: '_blank', rel: 'noopener' }
-        });
-        coffeeLink.textContent = '☕️ Buy Me A Coffee';
-        
-        // Website link
-        const websiteLink = linksContainer.createEl('a', {
-            href: 'https://expensica.com/',
-            cls: 'expensica-link',
-            attr: { target: '_blank', rel: 'noopener' }
-        });
-        websiteLink.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg> Website`;
-        
-        // LinkedIn link
-        const linkedinLink = linksContainer.createEl('a', {
-            href: 'https://www.linkedin.com/in/dhruvir-zala/',
-            cls: 'expensica-link',
-            attr: { target: '_blank', rel: 'noopener' }
-        });
-        linkedinLink.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg> LinkedIn`;
+        // Currency setting
+        new Setting(containerEl)
+            .setName('Default Currency')
+            .setDesc('Select the currency to use for all transactions.')
+            .then((setting) => {
+                const container = setting.controlEl.createDiv('currency-dropdown-container');
+                this.renderCurrencyDropdown(
+                    container,
+                    this.plugin.settings.defaultCurrency,
+                    async (value) => {
+                        this.plugin.settings.defaultCurrency = value;
+                        await this.plugin.saveSettings();
+                    }
+                );
+            });
 
-        // Visualization Settings
-        const visualSectionEl = containerEl.createDiv('expensica-settings-section');
-        visualSectionEl.createEl('h3', {text: 'Visualization Settings'});
-        
-        // Calendar color scheme selector
-        const colorSchemeSetting = new Setting(visualSectionEl)
-            .setName('Calendar color scheme')
-            .setDesc('Choose the color scheme for the heatmap calendar');
-            
-        // Define color scheme options first
-        const colorSchemeOptions = [
-            { value: ColorScheme.RED, label: '🔴 Red' },
-            { value: ColorScheme.BLUE, label: '🔵 Blue' },
-            { value: ColorScheme.GREEN, label: '🟢 Green' },
-            { value: ColorScheme.PURPLE, label: '🟣 Purple' },
-            { value: ColorScheme.ORANGE, label: '🟠 Orange' },
-            { value: ColorScheme.TEAL, label: '🔵 Teal' },
-            { value: ColorScheme.COLORBLIND_FRIENDLY, label: '👁️ Colorblind-friendly' },
-            { value: ColorScheme.CUSTOM, label: '🎨 Custom...' }
-        ];
-            
-        // Create container for our custom dropdown
-        const colorDropdownContainer = colorSchemeSetting.controlEl.createDiv('color-dropdown-container');
-        
-        // Create the selected display
-        const colorSelectDisplay = colorDropdownContainer.createDiv('expensica-select-display');
-        
-        // Add the current selection text with preview
-        const currentScheme = this.plugin.settings.calendarColorScheme;
-        const currentOption = colorSchemeOptions.find(o => o.value === currentScheme);
-        
-        // Color preview
-        const colorPreview = colorSelectDisplay.createSpan('color-preview');
-        colorPreview.style.backgroundColor = this.getColorPreview(currentScheme);
-        
-        // Text
-        colorSelectDisplay.createSpan({
-            text: currentOption ? currentOption.label : 'Red',
-            cls: 'expensica-select-display-text'
-        });
-        
-        // Dropdown arrow
-        colorSelectDisplay.createSpan({
-            cls: 'expensica-select-arrow'
-        });
-        
-        // Create the dropdown options (initially hidden)
-        const optionsContainer = colorDropdownContainer.createDiv('expensica-select-options expensica-select-hidden');
-        
-        // Add options
-        colorSchemeOptions.forEach(option => {
-            const optionEl = optionsContainer.createDiv({
-                cls: `expensica-select-option ${option.value === currentScheme ? 'expensica-option-selected' : ''}`
-            });
-            
-            // Color preview
-            const optionPreview = optionEl.createSpan('color-preview');
-            optionPreview.style.backgroundColor = this.getColorPreview(option.value);
-            
-            // Option text
-            optionEl.createSpan({
-                text: option.label
-            });
-            
-            // Add click handler
-            optionEl.addEventListener('click', async () => {
-                // Update the selected display
-                const displayText = colorSelectDisplay.querySelector('.expensica-select-display-text') as HTMLElement;
-                if (displayText) {
-                    displayText.textContent = option.label;
-                }
+        // Calendar color scheme
+        new Setting(containerEl)
+            .setName('Calendar Color Scheme')
+            .setDesc('Select the color scheme for the calendar visualization.')
+            .then((setting) => {
+                const container = setting.controlEl.createDiv('color-dropdown-container');
                 
-                // Update preview color
-                const preview = colorSelectDisplay.querySelector('.color-preview') as HTMLElement;
-                if (preview) {
-                    preview.style.backgroundColor = this.getColorPreview(option.value);
-                }
+                // Create the select display
+                const selectDisplay = container.createDiv('expensica-select-display');
+                const previewColor = this.getColorPreview(this.plugin.settings.calendarColorScheme);
+                const colorPreview = selectDisplay.createDiv('color-preview');
+                colorPreview.style.backgroundColor = previewColor;
+
+                const selectText = selectDisplay.createSpan({ cls: 'expensica-select-display-text' });
+                selectText.textContent = this.plugin.settings.calendarColorScheme.charAt(0).toUpperCase() + this.plugin.settings.calendarColorScheme.slice(1);
                 
-                // Hide the options
-                optionsContainer.addClass('expensica-select-hidden');
+                const selectArrow = selectDisplay.createSpan({ cls: 'expensica-select-arrow' });
+                selectArrow.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
                 
-                // Remove selected from all options
-                optionsContainer.querySelectorAll('.expensica-select-option').forEach(el => {
-                    (el as HTMLElement).removeClass('expensica-option-selected');
+                const optionsContainer = container.createDiv('expensica-select-options');
+                optionsContainer.style.display = 'none';
+                
+                // Color options
+                const colorOptions = [
+                    { value: ColorScheme.RED, text: 'Red' },
+                    { value: ColorScheme.BLUE, text: 'Blue' },
+                    { value: ColorScheme.GREEN, text: 'Green' },
+                    { value: ColorScheme.PURPLE, text: 'Purple' },
+                    { value: ColorScheme.ORANGE, text: 'Orange' },
+                    { value: ColorScheme.TEAL, text: 'Teal' },
+                    { value: ColorScheme.COLORBLIND_FRIENDLY, text: 'Colorblind Friendly' },
+                    { value: ColorScheme.CUSTOM, text: 'Custom' }
+                ];
+                
+                colorOptions.forEach(option => {
+                    const optionEl = optionsContainer.createDiv('expensica-select-option');
+                    const optionColorPreview = optionEl.createDiv('color-preview');
+                    optionColorPreview.style.backgroundColor = this.getColorPreview(option.value);
+                    optionEl.createSpan({ text: option.text });
+                    
+                    if (this.plugin.settings.calendarColorScheme === option.value) {
+                        optionEl.addClass('expensica-option-selected');
+                    }
+                    
+                    optionEl.addEventListener('click', async () => {
+                        this.plugin.settings.calendarColorScheme = option.value;
+                        await this.plugin.saveSettings();
+                        
+                        // Update the display
+                        colorPreview.style.backgroundColor = this.getColorPreview(option.value);
+                        selectText.textContent = option.text;
+                        
+                        // Hide the options
+                        optionsContainer.style.display = 'none';
+                        selectArrow.removeClass('expensica-select-arrow-open');
+                        
+                        // Show/hide custom color input
+                        this.updateCustomColorVisibility();
+                    });
                 });
                 
-                // Add selected to this option
-                optionEl.addClass('expensica-option-selected');
+                // Toggle options on click
+                selectDisplay.addEventListener('click', () => {
+                    if (optionsContainer.style.display === 'none') {
+                        optionsContainer.style.display = 'block';
+                        selectArrow.addClass('expensica-select-arrow-open');
+                    } else {
+                        optionsContainer.style.display = 'none';
+                        selectArrow.removeClass('expensica-select-arrow-open');
+                    }
+                });
                 
-                // Update settings
-                this.plugin.settings.calendarColorScheme = option.value as ColorScheme;
-                
-                // Show/hide custom color picker
-                if (this.plugin.settings.calendarColorScheme === ColorScheme.CUSTOM) {
-                    customColorContainer.style.display = 'block';
-                } else {
-                    customColorContainer.style.display = 'none';
-                }
-                
-                await this.plugin.saveSettings();
+                // Close options when clicking outside
+                document.addEventListener('click', (e) => {
+                    if (!container.contains(e.target as Node)) {
+                        optionsContainer.style.display = 'none';
+                        selectArrow.removeClass('expensica-select-arrow-open');
+                    }
+                });
             });
-        });
+            
+        // Custom color container (visible only when Custom is selected)
+        const customColorContainer = containerEl.createDiv('custom-color-container');
         
-        // Toggle dropdown on click
-        colorSelectDisplay.addEventListener('click', () => {
-            const isHidden = optionsContainer.hasClass('expensica-select-hidden');
-            optionsContainer.toggleClass('expensica-select-hidden', !isHidden);
-            const arrow = colorSelectDisplay.querySelector('.expensica-select-arrow') as HTMLElement;
-            if (arrow) {
-                arrow.toggleClass('expensica-select-arrow-open', !isHidden);
-            }
-        });
-        
-        // Close dropdown when clicking outside
-        document.addEventListener('click', (event) => {
-            if (!colorDropdownContainer.contains(event.target as Node) && !optionsContainer.hasClass('expensica-select-hidden')) {
-                optionsContainer.addClass('expensica-select-hidden');
-                const arrow = colorSelectDisplay.querySelector('.expensica-select-arrow') as HTMLElement;
-                if (arrow) {
-                    arrow.removeClass('expensica-select-arrow-open');
-                }
-            }
-        });
-        
-        // Custom color picker (initially hidden)
-        const customColorContainer = colorSchemeSetting.controlEl.createDiv('custom-color-container');
-        if (this.plugin.settings.calendarColorScheme !== ColorScheme.CUSTOM) {
+        if (this.plugin.settings.calendarColorScheme === ColorScheme.CUSTOM) {
+            customColorContainer.style.display = 'flex';
+        } else {
             customColorContainer.style.display = 'none';
         }
         
-        const customColorInput = customColorContainer.createEl('input', {
+        const colorInput = customColorContainer.createEl('input', {
             type: 'color',
             value: this.plugin.settings.customCalendarColor
         });
         
-        // Add event listener for custom color
-        customColorInput.addEventListener('change', async () => {
-            this.plugin.settings.customCalendarColor = customColorInput.value;
-            
-            // Update the preview color
-            const preview = colorSelectDisplay.querySelector('.color-preview') as HTMLElement;
-            if (preview) {
-                preview.style.backgroundColor = customColorInput.value;
-            }
-            
+        colorInput.addEventListener('change', async () => {
+            this.plugin.settings.customCalendarColor = colorInput.value;
             await this.plugin.saveSettings();
         });
         
-        // Week numbers toggle
-        new Setting(visualSectionEl)
-            .setName('Show week numbers')
-            .setDesc('Display week numbers alongside the calendar')
+        // Method to update custom color visibility
+        this.updateCustomColorVisibility = () => {
+            if (this.plugin.settings.calendarColorScheme === ColorScheme.CUSTOM) {
+                customColorContainer.style.display = 'flex';
+            } else {
+                customColorContainer.style.display = 'none';
+            }
+        };
+
+        // Show week numbers in calendar
+        new Setting(containerEl)
+            .setName('Show Week Numbers')
+            .setDesc('Display week numbers in the calendar visualization.')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.showWeekNumbers)
                 .onChange(async (value) => {
                     this.plugin.settings.showWeekNumbers = value;
                     await this.plugin.saveSettings();
-                })
-            );
-            
-        // Add note about calendar settings
-        const visualNote = visualSectionEl.createDiv('expensica-note');
-        visualNote.innerHTML = '💡 <span>After changing visualization settings, reopen the calendar view to see changes.</span>';
+                }));
 
-        // Currency section
-        const currencySectionEl = containerEl.createDiv('expensica-settings-section');
-        currencySectionEl.createEl('h3', {text: 'Currency Settings'});
-
-        const currencySetting = new Setting(currencySectionEl)
-            .setName('Default currency')
-            .setDesc('Set the default currency for all transactions');
-
-        // Create a container for our custom currency dropdown
-        const currencyContainer = currencySetting.controlEl.createDiv('currency-dropdown-container');
-
-        // Create the custom dropdown UI
-        this.renderCurrencyDropdown(
-            currencyContainer,
-            this.plugin.settings.defaultCurrency,
-            async (currencyCode) => {
-                this.plugin.settings.defaultCurrency = currencyCode;
-                await this.plugin.saveSettings();
-            }
-        );
-
-        // Add note about currency changes
-        const currencyNote = currencySectionEl.createDiv('expensica-note');
-        currencyNote.innerHTML = '💡 <span>After changing the currency, close and reopen the Expensica dashboard to reflect the changes.</span>';
-
+        // Enable budgeting feature
+        new Setting(containerEl)
+            .setName('Enable Budgeting')
+            .setDesc('Enable or disable the budgeting features.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.enableBudgeting)
+                .onChange(async (value) => {
+                    this.plugin.settings.enableBudgeting = value;
+                    await this.plugin.saveSettings();
+                    
+                    // Refresh dashboard if it's open
+                    const leaves = this.plugin.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE);
+                    if (leaves.length > 0 && leaves[0].view instanceof ExpensicaDashboardView) {
+                        const dashboardView = leaves[0].view as ExpensicaDashboardView;
+                        dashboardView.renderDashboard();
+                    }
+                }));
+                
+        // Categories settings
+        containerEl.createEl('h2', { text: 'Categories' });
+        
         // Expense Categories section
         const expenseCategoriesSectionEl = containerEl.createDiv('expensica-settings-section');
         expenseCategoriesSectionEl.createEl('h3', {text: 'Expense Categories'});

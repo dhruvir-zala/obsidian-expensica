@@ -1,16 +1,13 @@
-import { ItemView, WorkspaceLeaf, Notice, Modal, App, setIcon } from 'obsidian';
-import {
-    Transaction,
-    TransactionType,
-    TransactionAggregator,
-    formatCurrency,
-    getMonthYearString,
-    generateId,
-    formatDate,
-    CategoryType
+import { 
+    App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, WorkspaceLeaf, ItemView
+} from 'obsidian';
+import Chart from 'chart.js/auto';
+import { 
+    Transaction, Category, TransactionType, CategoryType, Currency, ColorScheme,
+    formatCurrency, formatDate, getMonthName, getYear, generateId, TransactionAggregator,
+    Budget, BudgetPeriod, calculateBudgetStatus, getCurrencyByCode
 } from './models';
 import ExpensicaPlugin from '../main';
-import { Chart } from 'chart.js/auto';
 import { PremiumVisualizations } from './dashboard-integration';
 import { ConfirmationModal } from './confirmation-modal';
 
@@ -42,6 +39,12 @@ export interface DateRange {
     label: string;
 }
 
+// Dashboard tab options
+export enum DashboardTab {
+    OVERVIEW = 'overview',
+    BUDGET = 'budget'
+}
+
 export class ExpensicaDashboardView extends ItemView {
     plugin: ExpensicaPlugin;
     transactions: Transaction[] = [];
@@ -63,6 +66,9 @@ export class ExpensicaDashboardView extends ItemView {
     dateRange: DateRange;
     customStartDate: Date | null = null;
     customEndDate: Date | null = null;
+
+    // Current tab
+    currentTab: DashboardTab = DashboardTab.OVERVIEW;
 
     constructor(leaf: WorkspaceLeaf, plugin: ExpensicaPlugin) {
         super(leaf);
@@ -271,9 +277,61 @@ export class ExpensicaDashboardView extends ItemView {
         container.empty();
         container.addClass('expensica-dashboard');
 
+        // If budgeting is disabled and current tab is budget, switch to overview
+        if (!this.plugin.settings.enableBudgeting && this.currentTab === DashboardTab.BUDGET) {
+            this.currentTab = DashboardTab.OVERVIEW;
+        }
+
         // Header
         this.renderHeader(container);
 
+        // Tab navigation
+        this.renderTabNavigation(container);
+
+        // Render the current tab
+        switch (this.currentTab) {
+            case DashboardTab.OVERVIEW:
+                this.renderOverviewTab(container);
+                break;
+            case DashboardTab.BUDGET:
+                this.renderBudgetTab(container);
+                break;
+        }
+    }
+
+    // Render the tab navigation
+    renderTabNavigation(container: HTMLElement) {
+        const tabsContainer = container.createDiv('expensica-tabs');
+        
+        // Overview tab
+        const overviewTab = tabsContainer.createEl('button', {
+            text: 'Overview',
+            cls: `expensica-tab ${this.currentTab === DashboardTab.OVERVIEW ? 'active' : ''}`
+        });
+        
+        // Budget tab - only show if budgeting is enabled
+        if (this.plugin.settings.enableBudgeting) {
+            const budgetTab = tabsContainer.createEl('button', {
+                text: 'Budget',
+                cls: `expensica-tab ${this.currentTab === DashboardTab.BUDGET ? 'active' : ''}`
+            });
+            
+            // Add event listener
+            budgetTab.addEventListener('click', () => {
+                this.currentTab = DashboardTab.BUDGET;
+                this.renderDashboard();
+            });
+        }
+        
+        // Add event listeners
+        overviewTab.addEventListener('click', () => {
+            this.currentTab = DashboardTab.OVERVIEW;
+            this.renderDashboard();
+        });
+    }
+
+    // Render the overview tab (original dashboard content)
+    renderOverviewTab(container: HTMLElement) {
         // Summary cards
         this.renderSummary(container);
 
@@ -295,27 +353,234 @@ export class ExpensicaDashboardView extends ItemView {
         this.renderTransactions(container);
     }
 
-    // New method to render premium visualizations
-    private renderPremiumVisualizations(container: HTMLElement) {
-        // Add section title
-        const premiumSection = container.createDiv('expensica-section expensica-animate');
-        const sectionHeader = premiumSection.createDiv('expensica-section-header');
-        const sectionTitle = sectionHeader.createEl('h2', { cls: 'expensica-section-title expensica-calendar-title' });
-        sectionTitle.textContent = 'Spending Heatmap Calendar';
+    // New method to render the budget tab
+    renderBudgetTab(container: HTMLElement) {
+        const budgetContainer = container.createDiv('expensica-budget-container');
+        
+        // Budget summary section
+        const budgetSummary = budgetContainer.createDiv('expensica-budget-summary');
+        this.renderBudgetSummary(budgetSummary);
+        
+        // Budget list section
+        const budgetList = budgetContainer.createDiv('expensica-budget-list');
+        this.renderBudgetList(budgetList);
+        
+        // Add budget button
+        const addBudgetContainer = budgetContainer.createDiv('expensica-add-budget-container');
+        const addBudgetBtn = addBudgetContainer.createEl('button', {
+            cls: 'expensica-btn expensica-btn-primary',
+        });
+        addBudgetBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Add Budget';
+        
+        // Add event listener to open the budget modal
+        addBudgetBtn.addEventListener('click', () => {
+            const modal = new BudgetModal(this.app, this.plugin, this);
+            modal.open();
+        });
+    }
 
-        // Container for premium visualizations
-        const vizContainer = premiumSection.createDiv('expensica-premium-visualizations');
-
-        // Initialize or update premium visualizations
-        if (!this.premiumVisualizations) {
-            this.premiumVisualizations = new PremiumVisualizations(vizContainer, this.plugin, this.currentDate);
-            this.premiumVisualizations.render();
-        } else {
-            this.premiumVisualizations.updateDate(this.currentDate);
-            vizContainer.empty();
-            this.premiumVisualizations = new PremiumVisualizations(vizContainer, this.plugin, this.currentDate);
-            this.premiumVisualizations.render();
+    // Render budget summary cards
+    renderBudgetSummary(container: HTMLElement) {
+        const budgets = this.plugin.getAllBudgets();
+        
+        // If no budgets, show a message
+        if (budgets.length === 0) {
+            const emptyState = container.createDiv('expensica-empty-state');
+            emptyState.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                    <line x1="8" y1="21" x2="16" y2="21"></line>
+                    <line x1="12" y1="17" x2="12" y2="21"></line>
+                </svg>
+                <h3>No budgets yet</h3>
+                <p>Create your first budget to start tracking spending against your targets.</p>
+            `;
+            return;
         }
+        
+        // Create summary cards
+        const totalBudgeted = budgets.reduce((sum, budget) => sum + budget.amount, 0);
+        const totalSpent = budgets.reduce((sum, budget) => {
+            const status = calculateBudgetStatus(budget, this.transactions);
+            return sum + status.spent;
+        }, 0);
+        
+        const remainingAmount = Math.max(0, totalBudgeted - totalSpent);
+        const spentPercentage = totalBudgeted > 0 ? Math.min(100, (totalSpent / totalBudgeted) * 100) : 0;
+        
+        // Create summary flex container
+        const summaryFlex = container.createDiv('expensica-summary-flex');
+        
+        // Total budgeted card
+        const budgetedCard = summaryFlex.createDiv('expensica-summary-card');
+        budgetedCard.innerHTML = `
+            <div class="expensica-summary-icon expensica-summary-icon-blue">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                </svg>
+            </div>
+            <div class="expensica-summary-content">
+                <h3>Total Budgeted</h3>
+                <p>${formatCurrency(totalBudgeted, this.plugin.settings.defaultCurrency)}</p>
+            </div>
+        `;
+        
+        // Total spent card
+        const spentCard = summaryFlex.createDiv('expensica-summary-card');
+        spentCard.innerHTML = `
+            <div class="expensica-summary-icon expensica-summary-icon-red">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+                    <polyline points="17 6 23 6 23 12"></polyline>
+                </svg>
+            </div>
+            <div class="expensica-summary-content">
+                <h3>Total Spent</h3>
+                <p>${formatCurrency(totalSpent, this.plugin.settings.defaultCurrency)}</p>
+            </div>
+        `;
+        
+        // Remaining card
+        const remainingCard = summaryFlex.createDiv('expensica-summary-card');
+        remainingCard.innerHTML = `
+            <div class="expensica-summary-icon expensica-summary-icon-green">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="20" x2="12" y2="10"></line>
+                    <line x1="18" y1="20" x2="18" y2="4"></line>
+                    <line x1="6" y1="20" x2="6" y2="16"></line>
+                </svg>
+            </div>
+            <div class="expensica-summary-content">
+                <h3>Remaining</h3>
+                <p>${formatCurrency(remainingAmount, this.plugin.settings.defaultCurrency)}</p>
+            </div>
+        `;
+        
+        // Overall budget progress
+        const progressContainer = container.createDiv('expensica-budget-progress-container');
+        progressContainer.innerHTML = `
+            <h3>Overall Budget Progress</h3>
+            <div class="expensica-budget-progress">
+                <div class="expensica-budget-bar">
+                    <div class="expensica-budget-fill" style="width: ${spentPercentage}%;"></div>
+                </div>
+                <div class="expensica-budget-labels">
+                    <span>${formatCurrency(totalSpent, this.plugin.settings.defaultCurrency)}</span>
+                    <span>${formatCurrency(totalBudgeted, this.plugin.settings.defaultCurrency)}</span>
+                </div>
+                <div class="expensica-budget-percentage">${Math.round(spentPercentage)}%</div>
+            </div>
+        `;
+    }
+
+    // Render budget list
+    renderBudgetList(container: HTMLElement) {
+        const budgets = this.plugin.getAllBudgets();
+        
+        // If no budgets, return early
+        if (budgets.length === 0) {
+            return;
+        }
+        
+        // Create the list container
+        const listContainer = container.createDiv('expensica-budget-items');
+        
+        // Create header
+        const header = listContainer.createDiv('expensica-budget-header');
+        header.innerHTML = `
+            <div class="expensica-budget-col-category">Category</div>
+            <div class="expensica-budget-col-amount">Budget</div>
+            <div class="expensica-budget-col-spent">Spent</div>
+            <div class="expensica-budget-col-remaining">Remaining</div>
+            <div class="expensica-budget-col-progress">Progress</div>
+            <div class="expensica-budget-col-actions">Actions</div>
+        `;
+        
+        // Create a budget item for each budget
+        budgets.forEach(budget => {
+            const category = this.plugin.getCategoryById(budget.categoryId);
+            if (!category) return; // Skip if category doesn't exist
+            
+            // Calculate budget status
+            const status = calculateBudgetStatus(budget, this.transactions);
+            
+            // Determine the status color
+            let statusClass = 'expensica-status-good';
+            if (status.percentage >= 90) {
+                statusClass = 'expensica-status-danger';
+            } else if (status.percentage >= 75) {
+                statusClass = 'expensica-status-warning';
+            }
+            
+            // Create the budget item
+            const budgetItem = listContainer.createDiv(`expensica-budget-item ${statusClass}`);
+            
+            // Category info
+            const categoryCol = budgetItem.createDiv('expensica-budget-col-category');
+            categoryCol.innerHTML = `
+                <span class="expensica-category-emoji">${category.emoji}</span>
+                <span class="expensica-category-name">${category.name}</span>
+                <span class="expensica-budget-period">${budget.period}</span>
+            `;
+            
+            // Budget amount
+            const amountCol = budgetItem.createDiv('expensica-budget-col-amount');
+            amountCol.textContent = formatCurrency(budget.amount, this.plugin.settings.defaultCurrency);
+            
+            // Spent amount
+            const spentCol = budgetItem.createDiv('expensica-budget-col-spent');
+            spentCol.textContent = formatCurrency(status.spent, this.plugin.settings.defaultCurrency);
+            
+            // Remaining amount
+            const remainingCol = budgetItem.createDiv('expensica-budget-col-remaining');
+            remainingCol.textContent = formatCurrency(status.remaining, this.plugin.settings.defaultCurrency);
+            
+            // Progress bar
+            const progressCol = budgetItem.createDiv('expensica-budget-col-progress');
+            const progressBar = progressCol.createDiv('expensica-budget-progress');
+            progressBar.innerHTML = `
+                <div class="expensica-budget-bar">
+                    <div class="expensica-budget-fill" style="width: ${status.percentage}%;"></div>
+                </div>
+                <div class="expensica-budget-percentage">${Math.round(status.percentage)}%</div>
+            `;
+            
+            // Actions
+            const actionsCol = budgetItem.createDiv('expensica-budget-col-actions');
+            
+            // Edit button
+            const editBtn = actionsCol.createEl('button', {
+                cls: 'expensica-budget-action expensica-budget-edit',
+            });
+            editBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>';
+            
+            // Delete button
+            const deleteBtn = actionsCol.createEl('button', {
+                cls: 'expensica-budget-action expensica-budget-delete',
+            });
+            deleteBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
+            
+            // Add event listeners
+            editBtn.addEventListener('click', () => {
+                const modal = new BudgetModal(this.app, this.plugin, this, budget);
+                modal.open();
+            });
+            
+            deleteBtn.addEventListener('click', () => {
+                const modal = new ConfirmationModal(
+                    this.app,
+                    'Delete Budget',
+                    `Are you sure you want to delete the budget for ${category.name}?`,
+                    async (confirmed) => {
+                        if (confirmed) {
+                            await this.plugin.deleteBudget(budget.id);
+                            this.renderDashboard();
+                        }
+                    }
+                );
+                modal.open();
+            });
+        });
     }
 
     renderHeader(container: HTMLElement) {
@@ -1203,6 +1468,45 @@ currentSelection.addEventListener('click', () => {
         }
         return color;
     }
+
+    // New method to render premium visualizations
+    private renderPremiumVisualizations(container: HTMLElement) {
+        // Add section title
+        const premiumSection = container.createDiv('expensica-section expensica-animate');
+        const sectionHeader = premiumSection.createDiv('expensica-section-header');
+        const sectionTitle = sectionHeader.createEl('h2', { cls: 'expensica-section-title expensica-calendar-title' });
+        sectionTitle.textContent = 'Spending Heatmap Calendar';
+
+        // Container for premium visualizations
+        const vizContainer = premiumSection.createDiv('expensica-premium-visualizations');
+
+        // Initialize or update premium visualizations
+        if (!this.premiumVisualizations) {
+            this.premiumVisualizations = new PremiumVisualizations(vizContainer, this.plugin, this.currentDate);
+            this.premiumVisualizations.render();
+        } else {
+            this.premiumVisualizations.updateDate(this.currentDate);
+            vizContainer.empty();
+            this.premiumVisualizations = new PremiumVisualizations(vizContainer, this.plugin, this.currentDate);
+            this.premiumVisualizations.render();
+        }
+    }
+
+    // Show budget tab
+    showBudgetTab() {
+        // Only switch to budget tab if budgeting is enabled
+        if (this.plugin.settings.enableBudgeting) {
+            this.currentTab = DashboardTab.BUDGET;
+            this.renderDashboard();
+        } else {
+            // If budgeting is disabled, stay on overview tab
+            this.currentTab = DashboardTab.OVERVIEW;
+            this.renderDashboard();
+            
+            // Show a notice that budgeting is disabled
+            new Notice('Budgeting is disabled. Enable it in settings to use budget features.');
+        }
+    }
 }
 
 // Date Range Picker Modal
@@ -1649,5 +1953,281 @@ export class IncomeModal extends TransactionModal {
 
     getModalIcon(): string {
         return '💰';
+    }
+}
+
+// Budget Modal for adding/editing budgets
+class BudgetModal extends Modal {
+    plugin: ExpensicaPlugin;
+    dashboard: ExpensicaDashboardView;
+    budget: Budget | null;
+    categorySelect: HTMLSelectElement | null = null;
+    amountInput: HTMLInputElement | null = null;
+    periodSelect: HTMLSelectElement | null = null;
+    rolloverToggle: HTMLElement | null = null;
+    isRollover: boolean = false;
+
+    constructor(app: App, plugin: ExpensicaPlugin, dashboard: ExpensicaDashboardView, budget: Budget | null = null) {
+        super(app);
+        this.plugin = plugin;
+        this.dashboard = dashboard;
+        this.budget = budget;
+        
+        // If editing an existing budget, set the initial values
+        if (budget) {
+            this.isRollover = budget.rollover;
+        }
+    }
+
+    onOpen() {
+        const { contentEl } = this;
+        contentEl.empty();
+        contentEl.addClass('expensica-modal');
+
+        // Add title
+        contentEl.createEl('h2', { text: this.budget ? 'Edit Budget' : 'Add Budget' });
+
+        // Create form
+        const form = contentEl.createEl('form');
+        form.addClass('expensica-form');
+
+        // Category selection
+        this.renderCategorySelect(form);
+
+        // Amount input
+        this.renderAmountInput(form);
+
+        // Period selection
+        this.renderPeriodSelect(form);
+
+        // Rollover toggle
+        this.renderRolloverToggle(form);
+
+        // Buttons
+        const buttonContainer = form.createDiv('expensica-form-buttons');
+        
+        // Cancel button
+        const cancelButton = buttonContainer.createEl('button', {
+            text: 'Cancel',
+            cls: 'expensica-btn expensica-btn-secondary',
+            type: 'button'
+        });
+        
+        // Save button
+        const saveButton = buttonContainer.createEl('button', {
+            text: 'Save Budget',
+            cls: 'expensica-btn expensica-btn-primary',
+            type: 'submit'
+        });
+
+        // Events
+        cancelButton.addEventListener('click', () => {
+            this.close();
+        });
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await this.saveBudget();
+            this.close();
+        });
+    }
+
+    // Render category dropdown
+    private renderCategorySelect(container: HTMLElement) {
+        const formGroup = container.createDiv('expensica-form-group');
+        formGroup.createEl('label', { text: 'Category', attr: { for: 'budget-category' } });
+        
+        // Create select element
+        this.categorySelect = formGroup.createEl('select', { 
+            cls: 'expensica-select',
+            attr: { id: 'budget-category', name: 'category', required: 'true' }
+        });
+        
+        // Add placeholder option
+        const placeholderOption = this.categorySelect?.createEl('option', {
+            text: 'Select a category',
+            value: ''
+        });
+        
+        if (placeholderOption) {
+            placeholderOption.disabled = true;
+            placeholderOption.selected = !this.budget;
+        }
+        
+        // Get expense categories
+        const categories = this.plugin.getCategories(CategoryType.EXPENSE);
+        
+        // Create an option for each category
+        categories.forEach(category => {
+            if (!this.categorySelect) return;
+            
+            const option = this.categorySelect.createEl('option', {
+                text: `${category.emoji} ${category.name}`,
+                value: category.id
+            });
+            
+            // If editing a budget, select the correct category
+            if (this.budget && this.budget.categoryId === category.id) {
+                option.selected = true;
+            }
+            
+            // If category already has a budget, disable it unless it's the current budget
+            const existingBudget = this.plugin.getBudgetForCategory(category.id);
+            if (existingBudget && (!this.budget || existingBudget.id !== this.budget.id)) {
+                option.disabled = true;
+                option.textContent += ' (already budgeted)';
+            }
+        });
+    }
+
+    // Render amount input
+    private renderAmountInput(container: HTMLElement) {
+        const formGroup = container.createDiv('expensica-form-group');
+        formGroup.createEl('label', { text: 'Budget Amount', attr: { for: 'budget-amount' } });
+        
+        // Currency symbol wrapper
+        const inputWrapper = formGroup.createDiv('expensica-currency-input');
+        
+        // Currency symbol
+        const currency = this.plugin.settings.defaultCurrency;
+        const symbol = getCurrencyByCode(currency)?.symbol || '$';
+        
+        inputWrapper.createSpan({
+            text: symbol,
+            cls: 'expensica-currency-symbol'
+        });
+        
+        // Amount input
+        this.amountInput = inputWrapper.createEl('input', {
+            type: 'number',
+            cls: 'expensica-input',
+            attr: {
+                id: 'budget-amount',
+                name: 'amount',
+                placeholder: '0.00',
+                step: '0.01',
+                min: '0',
+                required: 'true',
+                value: this.budget ? this.budget.amount.toString() : ''
+            }
+        });
+    }
+
+    // Render period select
+    private renderPeriodSelect(container: HTMLElement) {
+        const formGroup = container.createDiv('expensica-form-group');
+        formGroup.createEl('label', { text: 'Budget Period', attr: { for: 'budget-period' } });
+        
+        // Create select element
+        this.periodSelect = formGroup.createEl('select', { 
+            cls: 'expensica-select',
+            attr: { id: 'budget-period', name: 'period', required: 'true' }
+        });
+        
+        // Period options
+        const periods = [
+            { value: BudgetPeriod.MONTHLY, text: 'Monthly' },
+            { value: BudgetPeriod.QUARTERLY, text: 'Quarterly' },
+            { value: BudgetPeriod.YEARLY, text: 'Yearly' }
+        ];
+        
+        // Create options
+        periods.forEach(period => {
+            if (!this.periodSelect) return;
+            
+            const option = this.periodSelect.createEl('option', {
+                text: period.text,
+                value: period.value
+            });
+            
+            // If editing a budget, select the correct period
+            if (this.budget && this.budget.period === period.value) {
+                option.selected = true;
+            }
+        });
+    }
+
+    // Render rollover toggle
+    private renderRolloverToggle(container: HTMLElement) {
+        const formGroup = container.createDiv('expensica-form-group');
+        
+        // Create toggle container
+        const toggleContainer = formGroup.createDiv('expensica-toggle-container');
+        
+        // Toggle switch
+        this.rolloverToggle = toggleContainer.createDiv('expensica-toggle');
+        if (this.isRollover && this.rolloverToggle) {
+            this.rolloverToggle.addClass('active');
+        }
+        
+        // Toggle slider
+        if (this.rolloverToggle) {
+            const toggleSlider = this.rolloverToggle.createDiv('expensica-toggle-slider');
+        }
+        
+        // Toggle label
+        const toggleLabel = toggleContainer.createEl('label', { 
+            text: 'Roll over unspent budget to next period',
+            cls: 'expensica-toggle-label'
+        });
+        
+        // Add event listener
+        if (this.rolloverToggle) {
+            this.rolloverToggle.addEventListener('click', () => {
+                this.isRollover = !this.isRollover;
+                if (this.isRollover && this.rolloverToggle) {
+                    this.rolloverToggle.addClass('active');
+                } else if (this.rolloverToggle) {
+                    this.rolloverToggle.removeClass('active');
+                }
+            });
+        }
+    }
+
+    // Save the budget
+    private async saveBudget() {
+        if (!this.categorySelect || !this.amountInput || !this.periodSelect) {
+            return;
+        }
+        
+        // Get form values
+        const categoryId = this.categorySelect.value;
+        const amount = parseFloat(this.amountInput.value);
+        const period = this.periodSelect.value as BudgetPeriod;
+        
+        // Create or update budget
+        if (this.budget) {
+            // Update existing budget
+            const updatedBudget: Budget = {
+                ...this.budget,
+                categoryId,
+                amount,
+                period,
+                rollover: this.isRollover,
+                lastUpdated: new Date().toISOString()
+            };
+            
+            await this.plugin.updateBudget(updatedBudget);
+        } else {
+            // Create new budget
+            const newBudget: Budget = {
+                id: generateId(),
+                categoryId,
+                amount,
+                period,
+                rollover: this.isRollover,
+                lastUpdated: new Date().toISOString()
+            };
+            
+            await this.plugin.addBudget(newBudget);
+        }
+        
+        // Refresh the dashboard
+        this.dashboard.renderDashboard();
+    }
+
+    onClose() {
+        const { contentEl } = this;
+        contentEl.empty();
     }
 }
