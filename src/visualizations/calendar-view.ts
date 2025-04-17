@@ -1,4 +1,4 @@
-import { Transaction, TransactionType, formatCurrency } from '../models';
+import { Transaction, TransactionType, formatCurrency, ColorScheme } from '../models';
 import ExpensicaPlugin from '../../main';
 import * as d3 from 'd3';
 
@@ -22,6 +22,7 @@ export class CalendarHeatmap {
     private detailsContainer: HTMLElement;
     private cellSize: number = 40;
     private maxAmount: number = 0;
+    private weekNumberWidth: number = 30; // Width of week number column
 
     constructor(container: HTMLElement, plugin: ExpensicaPlugin, transactions: Transaction[], currentDate: Date) {
         this.container = container;
@@ -53,6 +54,10 @@ export class CalendarHeatmap {
         // Get the width and height of the calendar container
         const rect = calendarContainer.getBoundingClientRect();
         this.width = rect.width;
+        
+        // Calculate additional width for week numbers if enabled
+        const weekNumbersOffset = this.plugin.settings.showWeekNumbers ? this.weekNumberWidth : 0;
+        
         // Calculate height based on number of weeks in the month
         const weeksInMonth = this.getWeeksInMonth(this.currentDate.getFullYear(), this.currentDate.getMonth());
         this.height = (weeksInMonth + 1) * this.cellSize + 50; // +1 for days of week header, +50 for month name
@@ -60,9 +65,9 @@ export class CalendarHeatmap {
         // Create the SVG inside the calendar container
         this.svg = d3.select(calendarContainer)
             .append('svg')
-            .attr('width', this.width)
+            .attr('width', this.width + weekNumbersOffset)
             .attr('height', this.height)
-            .attr('viewBox', `0 0 ${this.width} ${this.height}`)
+            .attr('viewBox', `0 0 ${this.width + weekNumbersOffset} ${this.height}`)
             .attr('class', 'expensica-calendar-svg');
     }
 
@@ -131,6 +136,73 @@ export class CalendarHeatmap {
         const daysInMonth = new Date(year, month + 1, 0).getDate();
         return Math.ceil((firstDay + daysInMonth) / 7);
     }
+    
+    // Get the week number for a given date (ISO week number)
+    private getWeekNumber(date: Date): number {
+        const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+        return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    }
+    
+    // Get the color scale based on the selected color scheme
+    private getColorScale(maxValue: number): any {
+        if (maxValue <= 0) {
+            maxValue = 1; // Prevent division by zero
+        }
+        
+        const colorScheme = this.plugin.settings.calendarColorScheme;
+        
+        switch (colorScheme) {
+            case ColorScheme.RED:
+                return d3.scaleSequential()
+                    .domain([0, maxValue])
+                    .interpolator(d3.interpolateRgb("#FFF5F5", "#FF5252"));
+            
+            case ColorScheme.BLUE:
+                return d3.scaleSequential()
+                    .domain([0, maxValue])
+                    .interpolator(d3.interpolateRgb("#EFF8FF", "#0066CC"));
+                    
+            case ColorScheme.GREEN:
+                return d3.scaleSequential()
+                    .domain([0, maxValue])
+                    .interpolator(d3.interpolateRgb("#F2FDF5", "#38A169"));
+                    
+            case ColorScheme.PURPLE:
+                return d3.scaleSequential()
+                    .domain([0, maxValue])
+                    .interpolator(d3.interpolateRgb("#F8F4FF", "#805AD5"));
+                    
+            case ColorScheme.ORANGE:
+                return d3.scaleSequential()
+                    .domain([0, maxValue])
+                    .interpolator(d3.interpolateRgb("#FFF8F1", "#ED8936"));
+                    
+            case ColorScheme.TEAL:
+                return d3.scaleSequential()
+                    .domain([0, maxValue])
+                    .interpolator(d3.interpolateRgb("#EFFCFC", "#38B2AC"));
+                    
+            case ColorScheme.COLORBLIND_FRIENDLY:
+                // Use a colorblind-friendly palette (blue to yellow)
+                return d3.scaleSequential()
+                    .domain([0, maxValue])
+                    .interpolator(d3.interpolateRgb("#F0F8FF", "#FFBF00"));
+                    
+            case ColorScheme.CUSTOM:
+                // Use custom color
+                return d3.scaleSequential()
+                    .domain([0, maxValue])
+                    .interpolator(d3.interpolateRgb("#F5F5F5", this.plugin.settings.customCalendarColor));
+                    
+            default:
+                // Default to red
+                return d3.scaleSequential()
+                    .domain([0, maxValue])
+                    .interpolator(d3.interpolateRgb("#FFF5F5", "#FF5252"));
+        }
+    }
 
     private renderCalendar() {
         // Clear SVG
@@ -138,10 +210,13 @@ export class CalendarHeatmap {
         
         const monthLabel = this.currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
         
+        // Calculate week numbers offset if enabled
+        const weekNumbersOffset = this.plugin.settings.showWeekNumbers ? this.weekNumberWidth : 0;
+        
         // Add month label
         this.svg.append('text')
             .attr('class', 'month-label')
-            .attr('x', this.width / 2)
+            .attr('x', (this.width + weekNumbersOffset) / 2)
             .attr('y', 25)
             .attr('text-anchor', 'middle')
             .attr('font-size', '20px')
@@ -157,18 +232,15 @@ export class CalendarHeatmap {
             .enter()
             .append('text')
             .attr('class', 'day-of-week')
-            .attr('x', (d: string, i: number) => i * this.cellSize + this.cellSize / 2)
+            .attr('x', (d: string, i: number) => weekNumbersOffset + i * this.cellSize + this.cellSize / 2)
             .attr('y', 60)
             .attr('text-anchor', 'middle')
             .attr('font-size', '14px')
             .attr('fill', 'var(--text-muted)')
             .text((d: string) => d);
         
-        // Calculate colorscale based on max expense amount
-        // Use a more refined color palette with better perceptual differentiation
-        const colorScale = d3.scaleSequential()
-            .domain([0, this.maxAmount > 0 ? this.maxAmount : 1])
-            .interpolator(d3.interpolateRgb("#FFF5F5", "#FF5252"));
+        // Calculate colorscale based on max expense amount using the selected color scheme
+        const colorScale = this.getColorScale(this.maxAmount);
         
         // Create day cells
         const year = this.currentDate.getFullYear();
@@ -183,6 +255,41 @@ export class CalendarHeatmap {
         // Track selected cell for reference
         let selectedCell: any = null;
         
+        // Add week numbers if enabled
+        if (this.plugin.settings.showWeekNumbers) {
+            // Add "Week" header
+            this.svg.append('text')
+                .attr('class', 'week-label')
+                .attr('x', this.weekNumberWidth / 2)
+                .attr('y', 60)
+                .attr('text-anchor', 'middle')
+                .attr('font-size', '14px')
+                .attr('fill', 'var(--text-muted)')
+                .text('Wk');
+                
+            // Add week numbers
+            const weeksInMonth = this.getWeeksInMonth(year, month);
+            const firstDayDate = new Date(year, month, 1);
+            
+            for (let week = 0; week < weeksInMonth; week++) {
+                // Calculate the date for the first day of this week
+                const weekStart = new Date(year, month, 1 + (week * 7) - firstDayOfMonth);
+                
+                // Get week number
+                const weekNumber = this.getWeekNumber(weekStart);
+                
+                this.svg.append('text')
+                    .attr('class', 'week-number')
+                    .attr('x', this.weekNumberWidth / 2)
+                    .attr('y', (week + 1) * this.cellSize + 60)
+                    .attr('text-anchor', 'middle')
+                    .attr('dominant-baseline', 'middle')
+                    .attr('font-size', '12px')
+                    .attr('fill', 'var(--text-muted)')
+                    .text(weekNumber);
+            }
+        }
+        
         const dayCells = this.svg.selectAll('.day-cell')
             .data(this.calendarData)
             .enter()
@@ -192,7 +299,7 @@ export class CalendarHeatmap {
                 const dayOfMonth = d.date.getDate();
                 const dayOfWeek = d.date.getDay();
                 const weekOfMonth = Math.floor((dayOfMonth + firstDayOfMonth - 1) / 7);
-                return `translate(${dayOfWeek * this.cellSize}, ${(weekOfMonth + 1) * this.cellSize + 40})`;
+                return `translate(${weekNumbersOffset + dayOfWeek * this.cellSize}, ${(weekOfMonth + 1) * this.cellSize + 40})`;
             });
         
         // Add cell background with enhanced visual design
@@ -382,10 +489,8 @@ export class CalendarHeatmap {
             .attr('fill', 'var(--expensica-success)')
             .attr('opacity', 0.8);
         
-        // Add a color legend
-        if (this.maxAmount > 0) {
-            this.renderColorLegend(colorScale);
-        }
+        // Add color legend
+        this.renderColorLegend(colorScale, weekNumbersOffset);
         
         // Add animation for the calendar cells with staggered timing for a nice effect
         dayCells
@@ -441,12 +546,14 @@ export class CalendarHeatmap {
         return luminance > 160 ? 'var(--text-normal)' : 'white';
     }
 
-    private renderColorLegend(colorScale: any) {
-        const legendWidth = 200;
+    private renderColorLegend(colorScale: any, weekNumbersOffset: number) {
+        // Create a legend at the bottom right
+        const legendWidth = 150;
         const legendHeight = 20;
+        
         const legend = this.svg.append('g')
             .attr('class', 'legend')
-            .attr('transform', `translate(${this.width - legendWidth - 20}, ${this.height - 40})`);
+            .attr('transform', `translate(${this.width + weekNumbersOffset - legendWidth - 20}, ${this.height - 40})`);
         
         // Create gradient
         const defs = this.svg.append('defs');

@@ -10,6 +10,17 @@ export enum TransactionType {
     INCOME = 'income'
   }
   
+  export enum ColorScheme {
+    RED = 'red',
+    BLUE = 'blue',
+    GREEN = 'green',
+    PURPLE = 'purple',
+    ORANGE = 'orange',
+    TEAL = 'teal',
+    CUSTOM = 'custom',
+    COLORBLIND_FRIENDLY = 'colorblind_friendly'
+  }
+  
   export interface Category {
     id: string;
     name: string;
