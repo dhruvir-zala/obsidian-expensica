@@ -489,8 +489,8 @@
 
 .expensica-transaction-title {
   font-weight: 500;
-  margin: 0 0 var(--expensica-spacing-xs) 0;
-  font-size: var(--expensica-font-size);
+  margin: 0 0 4px 0;
+  font-size: 14px;
   color: var(--expensica-text-primary);
 }
 
@@ -1429,6 +1429,7 @@ to {
   font-weight: 500;
   margin: 0 0 4px 0;
   font-size: 14px;
+  color: var(--expensica-text-primary);
 }
 
 .expensica-calendar-transaction-meta {
@@ -3301,7 +3302,7 @@ to {
 }
 
 .expensica-budget-container {
-    padding: 20px 0;
+    padding: 0;
 }
 
 .expensica-budget-summary {
@@ -3434,11 +3435,21 @@ to {
     margin-top: 30px;
 }
 
+.expensica-budget-list-table {
+    padding: 15px;
+}
+
 .expensica-budget-items {
     background: var(--background-secondary);
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.expensica-budget-items:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 .expensica-budget-header {
@@ -3493,15 +3504,20 @@ to {
     cursor: pointer;
     padding: 5px;
     color: var(--text-muted);
-    transition: color 0.2s ease;
+    transition: color 0.2s ease, background-color 0.2s ease;
+    border-radius: 4px;
+    opacity: 0.7;
+    margin-right: 5px;
 }
 
 .expensica-budget-edit:hover {
     color: var(--text-accent);
+    background-color: rgba(var(--rgb-accent), 0.1);
 }
 
 .expensica-budget-delete:hover {
-    color: #f44336;
+    color: var(--text-error);
+    background-color: rgba(var(--rgb-error), 0.1);
 }
 
 .expensica-add-budget-container {
@@ -3820,4 +3836,543 @@ to {
   width: 0;
   height: 0;
   pointer-events: none;
+}
+
+/* Enhanced Budget Items Container */
+.expensica-budget-items {
+    background: var(--background-secondary);
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    margin-bottom: 20px;
+}
+
+.expensica-budget-items:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+}
+
+/* Chart title container for budget details */
+.expensica-chart-title-container {
+    display: flex;
+    align-items: baseline;
+}
+
+.expensica-chart-subtitle {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-left: 10px;
+    font-weight: normal;
+}
+
+/* Budget items wrapper with scrolling */
+.expensica-budget-items-wrapper {
+    max-height: 400px;
+    overflow-y: auto;
+    scroll-behavior: smooth;
+}
+
+.expensica-budget-items-wrapper::-webkit-scrollbar {
+    width: 6px;
+}
+
+.expensica-budget-items-wrapper::-webkit-scrollbar-track {
+    background: var(--background-secondary-alt);
+    border-radius: 3px;
+}
+
+.expensica-budget-items-wrapper::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb-bg);
+    border-radius: 3px;
+}
+
+/* Enhanced budget header */
+.expensica-budget-header {
+    display: grid;
+    grid-template-columns: 25% 15% 15% 15% 20% 10%;
+    padding: 15px 20px;
+    background: var(--background-secondary-alt);
+    border-bottom: 1px solid var(--background-modifier-border);
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-muted);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+/* Enhanced budget item */
+.expensica-budget-item {
+    display: grid;
+    grid-template-columns: 25% 15% 15% 15% 20% 10%;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--background-modifier-border);
+    transition: all 0.25s ease;
+    position: relative;
+}
+
+.expensica-budget-item:last-child {
+    border-bottom: none;
+}
+
+.expensica-budget-item:hover {
+    background: var(--background-modifier-hover);
+    transform: translateX(4px) scale(1.01);
+    z-index: 1;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* Add subtle hover effect for budget items */
+.expensica-budget-item::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: 0;
+    background: linear-gradient(90deg, var(--text-accent-hover) 0%, transparent 100%);
+    opacity: 0;
+    transition: all 0.3s ease;
+}
+
+.expensica-budget-item:hover::after {
+    width: 3px;
+    opacity: 0.8;
+}
+
+.expensica-status-warning:hover::after {
+    background: linear-gradient(90deg, #ff9800 0%, transparent 100%);
+}
+
+.expensica-status-danger:hover::after {
+    background: linear-gradient(90deg, #f44336 0%, transparent 100%);
+}
+
+/* Make amount values stand out more */
+.expensica-budget-col-amount,
+.expensica-budget-col-spent,
+.expensica-budget-col-remaining .expensica-amount {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.3px;
+}
+
+.expensica-budget-col-spent {
+    color: var(--text-error);
+}
+
+.expensica-budget-col-remaining .expensica-amount {
+    display: block;
+    margin-bottom: 5px;
+}
+
+/* Enhanced Budget Progress Bar */
+.expensica-budget-bar {
+    height: 8px;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 8px;
+    position: relative;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Animated highlight effect for budget list */
+.expensica-budget-items-wrapper {
+    position: relative;
+}
+
+.expensica-budget-items-wrapper::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 5px;
+    background: linear-gradient(to bottom, 
+        rgba(var(--rgb-accent), 0.1) 0%,
+        transparent 100%);
+    z-index: 2;
+    pointer-events: none;
+}
+
+.expensica-budget-items-wrapper::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 5px;
+    background: linear-gradient(to top, 
+        rgba(var(--rgb-accent), 0.1) 0%,
+        transparent 100%);
+    z-index: 2;
+    pointer-events: none;
+}
+
+/* Add hover effect to entire budget container */
+.expensica-budget-list:hover .expensica-budget-items {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+/* Enhance the chart header styling */
+.expensica-chart-title {
+    font-size: 16px;
+    margin: 0;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+}
+
+.expensica-chart-title::before {
+    content: '';
+    display: inline-block;
+    width: 4px;
+    height: 16px;
+    background: var(--text-accent);
+    margin-right: 10px;
+    border-radius: 2px;
+}
+
+.expensica-chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+/* Styles for empty budget items */
+.expensica-empty-budget-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    text-align: center;
+    background: var(--background-secondary);
+    border-radius: 12px;
+    margin: 20px 0;
+}
+
+.expensica-empty-budget-state svg {
+    width: 60px;
+    height: 60px;
+    color: var(--text-muted);
+    margin-bottom: 15px;
+    opacity: 0.6;
+}
+
+.expensica-empty-budget-state h3 {
+    font-size: 16px;
+    margin: 0 0 10px;
+    font-weight: 600;
+}
+
+.expensica-empty-budget-state p {
+    font-size: 14px;
+    color: var(--text-muted);
+    max-width: 400px;
+    margin: 0;
+}
+
+/* Enhanced category styling */
+.expensica-category-container {
+    display: flex;
+    align-items: center;
+}
+
+.expensica-category-emoji {
+    margin-right: 12px;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: var(--background-primary);
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.expensica-category-details {
+    display: flex;
+    flex-direction: column;
+}
+
+.expensica-category-name {
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 2px;
+}
+
+.expensica-budget-period {
+    font-size: 12px;
+    opacity: 0.7;
+    text-transform: capitalize;
+    color: var(--text-muted);
+}
+
+/* Enhanced status indicators */
+.expensica-budget-status {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 12px;
+    margin-top: 4px;
+    font-weight: 500;
+}
+
+.expensica-status-good .expensica-budget-status {
+    background-color: rgba(76, 175, 80, 0.15);
+    color: #4caf50;
+}
+
+.expensica-status-warning .expensica-budget-status {
+    background-color: rgba(255, 152, 0, 0.15);
+    color: #ff9800;
+}
+
+.expensica-status-danger .expensica-budget-status {
+    background-color: rgba(244, 67, 54, 0.15);
+    color: #f44336;
+}
+
+/* Enhanced progress bar */
+.expensica-budget-col-progress {
+    padding-right: 15px;
+}
+
+.expensica-budget-progress {
+    position: relative;
+}
+
+.expensica-budget-bar {
+    height: 8px;
+    background: var(--background-modifier-border);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 8px;
+    position: relative;
+}
+
+.expensica-budget-fill {
+    height: 100%;
+    background: var(--text-accent);
+    border-radius: 4px;
+    transition: width 0.5s ease-out;
+    position: relative;
+    overflow: hidden;
+}
+
+.expensica-budget-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, 
+        rgba(255, 255, 255, 0) 0%, 
+        rgba(255, 255, 255, 0.1) 50%, 
+        rgba(255, 255, 255, 0) 100%);
+    animation: shine 2s infinite;
+}
+
+@keyframes shine {
+    from {
+        transform: translateX(-100%);
+    }
+    to {
+        transform: translateX(100%);
+    }
+}
+
+.expensica-status-warning .expensica-budget-fill {
+    background: #ff9800;
+}
+
+.expensica-status-danger .expensica-budget-fill {
+    background: #f44336;
+}
+
+.expensica-budget-percentage {
+    position: absolute;
+    right: 0;
+    top: -20px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-accent);
+}
+
+.expensica-status-warning .expensica-budget-percentage {
+    color: #ff9800;
+}
+
+.expensica-status-danger .expensica-budget-percentage {
+    color: #f44336;
+}
+
+/* Enhanced budget actions */
+.expensica-budget-action {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    color: var(--text-muted);
+    transition: all 0.2s ease;
+    border-radius: 6px;
+    opacity: 0.7;
+    margin-right: 5px;
+}
+
+.expensica-budget-action:hover {
+    transform: scale(1.1);
+}
+
+.expensica-budget-edit:hover {
+    color: var(--text-accent);
+    background-color: rgba(var(--rgb-accent), 0.1);
+    box-shadow: 0 2px 5px rgba(var(--rgb-accent), 0.2);
+}
+
+.expensica-budget-delete:hover {
+    color: var(--text-error);
+    background-color: rgba(var(--rgb-error), 0.1);
+    box-shadow: 0 2px 5px rgba(var(--rgb-error), 0.2);
+}
+
+.expensica-budget-action svg {
+    transition: transform 0.2s ease;
+}
+
+.expensica-budget-action:hover svg {
+    transform: rotate(-5deg);
+}
+
+/* Add budget container enhanced styling */
+.expensica-add-budget-container {
+    display: flex;
+    justify-content: center;
+    margin-top: 25px;
+    margin-bottom: 5px;
+}
+
+.expensica-add-budget-container .expensica-btn {
+    padding: 10px 20px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+}
+
+.expensica-add-budget-container .expensica-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+.expensica-add-budget-container .expensica-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Highlight row when hovering over action buttons */
+.expensica-budget-action:hover ~ .expensica-budget-action {
+    opacity: 0.4;
+}
+
+/* Responsive adjustments */
+@media screen and (max-width: 768px) {
+    .expensica-budget-header, 
+    .expensica-budget-item {
+        grid-template-columns: 30% 35% 35%;
+        padding: 12px 15px;
+    }
+    
+    .expensica-budget-col-spent,
+    .expensica-budget-col-amount,
+    .expensica-budget-col-actions {
+        display: none;
+    }
+    
+    .expensica-category-emoji {
+        margin-right: 8px;
+        font-size: 16px;
+        width: 28px;
+        height: 28px;
+    }
+    
+    .expensica-budget-items-wrapper {
+        max-height: 300px;
+    }
+}
+
+/* Enhanced Budget Progress Bar animation */
+.expensica-budget-fill {
+    height: 100%;
+    background: var(--text-accent);
+    border-radius: 4px;
+    transition: width 0.8s cubic-bezier(0.25, 0.8, 0.25, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.expensica-budget-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, 
+        rgba(255, 255, 255, 0) 0%, 
+        rgba(255, 255, 255, 0.1) 50%, 
+        rgba(255, 255, 255, 0) 100%);
+    animation: shine 2.5s infinite;
+}
+
+@keyframes shine {
+    from {
+        transform: translateX(-100%);
+    }
+    to {
+        transform: translateX(100%);
+    }
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Apply fadeInUp animation to budget items */
+.expensica-budget-item {
+    animation: fadeInUp 0.4s ease forwards;
+    opacity: 0;
+}
+
+/* Enhance the budget status badges */
+.expensica-budget-status {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    margin-top: 4px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    animation: fadeInUp 0.4s ease forwards;
+    opacity: 0;
+    animation-delay: 0.2s;
+}
+
+.expensica-budget-item:hover .expensica-budget-status {
+    transform: translateY(-2px);
 }
