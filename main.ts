@@ -732,8 +732,8 @@ export default class ExpensicaPlugin extends Plugin {
             // Today's transactions section
             if (todaysTransactions.length > 0) {
                 noteContent += `## 📝 Today's Transactions\n\n`;
-                noteContent += `| Time | Description | Category | Amount | Notes |\n`;
-                noteContent += `| ---- | ----------- | -------- | ------ | ----- |\n`;
+                noteContent += `| Description | Category | Amount | Notes |\n`;
+                noteContent += `| ----------- | -------- | ------ | ----- |\n`;
                 
                 // Sort transactions by time (newest first)
                 const sortedTransactions = [...todaysTransactions].sort((a, b) => 
@@ -746,18 +746,13 @@ export default class ExpensicaPlugin extends Plugin {
                     const categoryName = category ? `${category.emoji} ${category.name}` : '❓ Unknown';
                     const notes = transaction.notes || '';
                     
-                    // Format time (just the time portion)
-                    const txDate = new Date(transaction.date);
-                    const timeStr = txDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    
                     // Format amount with color indicator
                     const amountStr = transaction.type === TransactionType.INCOME 
                         ? `+${formatCurrency(transaction.amount, this.settings.defaultCurrency)}` 
                         : `-${formatCurrency(transaction.amount, this.settings.defaultCurrency)}`;
                     
-                    noteContent += `| ${timeStr} | ${transaction.description} | ${categoryName} | ${amountStr} | ${notes} |\n`;
+                    noteContent += `| ${transaction.description} | ${categoryName} | ${amountStr} | ${notes} |\n`;
                 }
-                noteContent += `\n`;
                 
                 // Show expense breakdown by category
                 const expensesByCategory = TransactionAggregator.getExpensesByCategory(
@@ -871,8 +866,8 @@ export default class ExpensicaPlugin extends Plugin {
                 // Transactions section
                 if (dateTransactions.length > 0) {
                     noteContent += `## 📝 Transactions\n\n`;
-                    noteContent += `| Time | Description | Category | Amount | Notes |\n`;
-                    noteContent += `| ---- | ----------- | -------- | ------ | ----- |\n`;
+                    noteContent += `| Description | Category | Amount | Notes |\n`;
+                    noteContent += `| ----------- | -------- | ------ | ----- |\n`;
                     
                     // Sort transactions by time (newest first)
                     const sortedTransactions = [...dateTransactions].sort((a, b) => 
@@ -885,16 +880,12 @@ export default class ExpensicaPlugin extends Plugin {
                         const categoryName = category ? `${category.emoji} ${category.name}` : '❓ Unknown';
                         const notes = transaction.notes || '';
                         
-                        // Format time (just the time portion)
-                        const txDate = new Date(transaction.date);
-                        const timeStr = txDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                        
                         // Format amount with color indicator
                         const amountStr = transaction.type === TransactionType.INCOME 
                             ? `+${formatCurrency(transaction.amount, this.settings.defaultCurrency)}` 
                             : `-${formatCurrency(transaction.amount, this.settings.defaultCurrency)}`;
                         
-                        noteContent += `| ${timeStr} | ${transaction.description} | ${categoryName} | ${amountStr} | ${notes} |\n`;
+                        noteContent += `| ${transaction.description} | ${categoryName} | ${amountStr} | ${notes} |\n`;
                     }
                     noteContent += `\n`;
                     
