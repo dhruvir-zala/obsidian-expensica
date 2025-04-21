@@ -54,6 +54,9 @@ interface ExpensicaSettings {
     customCalendarColor: string;
     showWeekNumbers: boolean;
     enableBudgeting: boolean;
+    enableDailyFinanceReview: boolean;
+    enableDailyFinanceReviewForAnyDate: boolean;
+    dailyReviewFolder: string;
 }
 
 // Define a separate interface for our transactions data
@@ -69,7 +72,10 @@ const DEFAULT_SETTINGS: ExpensicaSettings = {
     calendarColorScheme: ColorScheme.BLUE,
     customCalendarColor: '#2196f3',
     showWeekNumbers: false,
-    enableBudgeting: true
+    enableBudgeting: true,
+    enableDailyFinanceReview: true,
+    enableDailyFinanceReviewForAnyDate: true,
+    dailyReviewFolder: ''
 };
 
 // Default transactions data
@@ -172,8 +178,12 @@ export default class ExpensicaPlugin extends Plugin {
         // Add a command to create a note with today's transactions
         this.addCommand({
             id: 'create-todays-transactions-note',
-            name: 'Create Daily Finance Review',
+            name: 'Create Daily Finance Review (For Today)',
             callback: () => {
+                if (!this.settings.enableDailyFinanceReview) {
+                    new Notice('Daily Finance Review feature is disabled. Please enable it in settings.');
+                    return;
+                }
                 this.createDailyFinanceReview();
             }
         });
@@ -183,6 +193,10 @@ export default class ExpensicaPlugin extends Plugin {
             id: 'create-daily-review-for-date',
             name: 'Create/Update Daily Finance Review for Any Date',
             callback: () => {
+                if (!this.settings.enableDailyFinanceReviewForAnyDate) {
+                    new Notice('Daily Finance Review for Any Date feature is disabled. Please enable it in settings.');
+                    return;
+                }
                 this.createDailyFinanceReviewForDate();
             }
         });
@@ -776,14 +790,30 @@ export default class ExpensicaPlugin extends Plugin {
             
             // Create or update the note
             const files = this.app.vault.getMarkdownFiles();
-            const existingNote = files.find(file => file.basename === noteTitle);
+            
+            // Check if folder exists
+            if (this.settings.dailyReviewFolder) {
+                const folderExists = await this.app.vault.adapter.exists(this.settings.dailyReviewFolder);
+                if (!folderExists) {
+                    // Create the folder
+                    await this.app.vault.createFolder(this.settings.dailyReviewFolder);
+                }
+            }
+            
+            // Determine note path
+            const notePath = this.settings.dailyReviewFolder 
+                ? `${this.settings.dailyReviewFolder}/${noteTitle}.md`
+                : `${noteTitle}.md`;
+            
+            // Look for existing note
+            const existingNote = files.find(file => file.path === notePath);
             
             if (existingNote) {
                 await this.app.vault.modify(existingNote, noteContent);
                 new Notice(`Updated note: ${noteTitle}`);
                 this.app.workspace.getLeaf().openFile(existingNote);
             } else {
-                const newNote = await this.app.vault.create(`${noteTitle}.md`, noteContent);
+                const newNote = await this.app.vault.create(notePath, noteContent);
                 new Notice(`Created note: ${noteTitle}`);
                 this.app.workspace.getLeaf().openFile(newNote);
             }
@@ -899,14 +929,30 @@ export default class ExpensicaPlugin extends Plugin {
                 
                 // Create or update the note
                 const files = this.app.vault.getMarkdownFiles();
-                const existingNote = files.find(file => file.basename === noteTitle);
+
+                // Check if folder exists
+                if (this.settings.dailyReviewFolder) {
+                    const folderExists = await this.app.vault.adapter.exists(this.settings.dailyReviewFolder);
+                    if (!folderExists) {
+                        // Create the folder
+                        await this.app.vault.createFolder(this.settings.dailyReviewFolder);
+                    }
+                }
+                
+                // Determine note path
+                const notePath = this.settings.dailyReviewFolder 
+                    ? `${this.settings.dailyReviewFolder}/${noteTitle}.md`
+                    : `${noteTitle}.md`;
+                
+                // Look for existing note
+                const existingNote = files.find(file => file.path === notePath);
                 
                 if (existingNote) {
                     await this.app.vault.modify(existingNote, noteContent);
                     new Notice(`Updated note: ${noteTitle}`);
                     this.app.workspace.getLeaf().openFile(existingNote);
                 } else {
-                    const newNote = await this.app.vault.create(`${noteTitle}.md`, noteContent);
+                    const newNote = await this.app.vault.create(notePath, noteContent);
                     new Notice(`Created note: ${noteTitle}`);
                     this.app.workspace.getLeaf().openFile(newNote);
                 }
@@ -1115,7 +1161,50 @@ class ExpensicaSettingTab extends PluginSettingTab {
                         dashboardView.renderDashboard();
                     }
                 }));
-                
+
+        // Enable daily finance review feature
+        new Setting(containerEl)
+            .setName('Enable Daily Finance Review (For Today)')
+            .setDesc('Enable or disable the ability to create daily finance reviews for today.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.enableDailyFinanceReview)
+                .onChange(async (value) => {
+                    this.plugin.settings.enableDailyFinanceReview = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        // Enable daily finance review for any date feature
+        new Setting(containerEl)
+            .setName('Enable Daily Finance Review for Any Date')
+            .setDesc('Enable or disable the ability to create/update daily finance reviews for any date.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.enableDailyFinanceReviewForAnyDate)
+                .onChange(async (value) => {
+                    this.plugin.settings.enableDailyFinanceReviewForAnyDate = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        // Daily review folder setting
+        new Setting(containerEl)
+            .setName('Daily Finance Review Folder')
+            .setDesc('Select a folder where all daily finance review notes will be stored.')
+            .addText(text => text
+                .setPlaceholder('Example: Daily Finance Reviews')
+                .setValue(this.plugin.settings.dailyReviewFolder)
+                .onChange(async (value) => {
+                    this.plugin.settings.dailyReviewFolder = value;
+                    await this.plugin.saveSettings();
+                }))
+            .addButton(button => button
+                .setButtonText('Browse')
+                .onClick(async () => {
+                    new FolderSuggestionModal(this.app, this.plugin, async (folder) => {
+                        this.plugin.settings.dailyReviewFolder = folder;
+                        await this.plugin.saveSettings();
+                        this.display(); // Refresh the settings display
+                    }).open();
+                }));
+
         // Categories settings
         containerEl.createEl('h2', { text: 'Categories' });
         
@@ -1626,6 +1715,157 @@ class EmojiPickerModal extends Modal {
     
     onClose() {
         const {contentEl} = this;
+        contentEl.empty();
+    }
+}
+
+// Folder suggestion modal for selecting folder
+class FolderSuggestionModal extends Modal {
+    plugin: ExpensicaPlugin;
+    onSelect: (folder: string) => void;
+    
+    constructor(app: App, plugin: ExpensicaPlugin, onSelect: (folder: string) => void) {
+        super(app);
+        this.plugin = plugin;
+        this.onSelect = onSelect;
+    }
+    
+    onOpen() {
+        const { contentEl } = this;
+        contentEl.empty();
+        contentEl.addClass('expensica-modal');
+        
+        // Create title
+        const modalTitle = contentEl.createEl('h2', { cls: 'expensica-modal-title' });
+        modalTitle.innerHTML = '<span class="expensica-modal-title-icon">📁</span> Select Folder for Daily Reviews';
+        
+        contentEl.createEl('p', {text: 'Choose where to store your daily finance review notes:'});
+        
+        // Get all folders in the vault
+        const folders = this.getFolders();
+        
+        const folderContainer = contentEl.createDiv('folder-container');
+        
+        // Add option for root folder
+        const rootOption = folderContainer.createDiv('folder-option');
+        rootOption.setText('Root folder');
+        rootOption.addEventListener('click', () => {
+            this.onSelect('');
+            this.close();
+        });
+        
+        // Add all folders
+        folders.forEach(folder => {
+            const folderOption = folderContainer.createDiv('folder-option');
+            folderOption.setText(folder);
+            folderOption.addEventListener('click', () => {
+                this.onSelect(folder);
+                this.close();
+            });
+        });
+        
+        // Add option to create new folder
+        const newFolderOption = folderContainer.createDiv('folder-option new-folder-option');
+        newFolderOption.setText('+ Create new folder');
+        newFolderOption.addEventListener('click', () => {
+            // Hide folder list and show input for new folder
+            folderContainer.style.display = 'none';
+            
+            const newFolderContainer = contentEl.createDiv('new-folder-container');
+            const input = newFolderContainer.createEl('input', {
+                attr: {
+                    type: 'text',
+                    placeholder: 'Enter folder name'
+                },
+                cls: 'new-folder-input'
+            });
+            
+            const buttonContainer = newFolderContainer.createDiv('button-container');
+            
+            const cancelButton = buttonContainer.createEl('button', {
+                text: 'Cancel',
+                cls: 'expensica-btn expensica-btn-secondary'
+            });
+            
+            const createButton = buttonContainer.createEl('button', {
+                text: 'Create',
+                cls: 'expensica-btn expensica-btn-primary'
+            });
+            
+            cancelButton.addEventListener('click', () => {
+                // Show folder list again
+                folderContainer.style.display = 'block';
+                newFolderContainer.remove();
+            });
+            
+            createButton.addEventListener('click', async () => {
+                const folderName = input.value.trim();
+                if (folderName) {
+                    try {
+                        // Create the folder
+                        await this.plugin.app.vault.createFolder(folderName);
+                        new Notice(`Created folder: ${folderName}`);
+                        this.onSelect(folderName);
+                        this.close();
+                    } catch (error) {
+                        new Notice(`Error creating folder: ${error.message}`);
+                    }
+                } else {
+                    new Notice('Please enter a folder name');
+                }
+            });
+        });
+    }
+    
+    // Get all folders in the vault
+    getFolders(): string[] {
+        const folders: string[] = [];
+        
+        // Recursive function to get all folders
+        const processFolder = (folder: string) => {
+            folders.push(folder);
+            
+            // Get all subfolders
+            const files = this.plugin.app.vault.getFiles();
+            const subfolders = new Set<string>();
+            
+            files.forEach(file => {
+                if (file.path.startsWith(folder) && file.path !== folder) {
+                    const parentPath = file.parent?.path;
+                    if (parentPath && parentPath.startsWith(folder) && parentPath !== folder) {
+                        subfolders.add(parentPath);
+                    }
+                }
+            });
+            
+            // Process subfolders
+            subfolders.forEach(subfolder => {
+                processFolder(subfolder);
+            });
+        };
+        
+        // Get top-level folders
+        const files = this.plugin.app.vault.getFiles();
+        const topFolders = new Set<string>();
+        
+        files.forEach(file => {
+            const parentPath = file.parent?.path;
+            if (parentPath && parentPath !== '/') {
+                const topFolder = parentPath.split('/')[0];
+                topFolders.add(topFolder);
+            }
+        });
+        
+        // Process each top-level folder
+        topFolders.forEach(folder => {
+            processFolder(folder);
+        });
+        
+        return folders;
+    }
+    
+    onClose() {
+        const { contentEl } = this;
         contentEl.empty();
     }
 }
