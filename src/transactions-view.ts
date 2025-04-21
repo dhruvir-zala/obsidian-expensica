@@ -36,6 +36,8 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
     plugin: ExpensicaPlugin;
     transactions: Transaction[] = [];
     filteredTransactions: Transaction[] = [];
+    searchQuery: string = '';
+    inputFocused: boolean = false;
     
     // Pagination
     currentPage: number = 1;
@@ -73,13 +75,23 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         
         // Render the view
         this.renderView();
+        
+        // Register keyboard handlers
+        this.registerDomEvent(document, 'keydown', (event) => {
+            // If the search input is focused, don't let Obsidian's keyboard shortcuts interfere
+            const searchInput = document.getElementById('expensica-search-input');
+            if (searchInput === document.activeElement) {
+                // Don't let Obsidian handle these keyboard events
+                event.stopPropagation();
+            }
+        }, true);
     }
 
     async onClose() {
         // Cleanup
     }
 
-    renderView() {
+    renderView(preserveFocus = false) {
         const container = this.contentEl;
         container.empty();
         container.addClass('expensica-container');
@@ -88,6 +100,51 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
 
         // Header section (always visible at the top)
         this.renderHeader(container);
+        
+        // Search bar section
+        const searchSection = container.createDiv('expensica-search-section');
+        const searchContainer = searchSection.createDiv('expensica-search-container expensica-custom-search');
+        const searchInput = searchContainer.createEl('input', {
+            type: 'text',
+            placeholder: 'Search transactions...',
+            cls: 'expensica-search-input expensica-custom-input',
+            attr: {
+                id: 'expensica-search-input'
+            }
+        });
+        searchInput.value = this.searchQuery;
+        
+        // Add search icon
+        const searchIcon = searchContainer.createDiv('expensica-search-icon');
+        searchIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>';
+        
+        // Prevent default behavior that might cause focus loss
+        searchInput.addEventListener('keydown', (e) => {
+            e.stopPropagation();
+        });
+        
+        searchInput.addEventListener('input', (e) => {
+            e.stopPropagation();
+            const target = e.target as HTMLInputElement;
+            this.searchQuery = target.value;
+            this.inputFocused = true;
+            this.updateSearchResults();
+        });
+        
+        searchInput.addEventListener('focus', () => {
+            this.inputFocused = true;
+        });
+
+        searchInput.addEventListener('blur', () => {
+            this.inputFocused = false;
+        });
+        
+        // Restore focus if needed
+        if (preserveFocus && this.inputFocused) {
+            setTimeout(() => {
+                searchInput.focus();
+            }, 0);
+        }
         
         // Transactions list (takes available space)
         this.renderTransactionsList(container);
@@ -139,15 +196,6 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         addIncomeBtn.addEventListener('click', () => {
             const modal = new IncomeModal(this.app, this.plugin, this as any);
             modal.open();
-        });
-        
-        // Export button
-        const exportBtn = actionsSection.createEl('button', { 
-            cls: 'expensica-btn' 
-        });
-        exportBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Export';
-        exportBtn.addEventListener('click', () => {
-            this.plugin.openExportModal();
         });
     }
 
@@ -248,12 +296,24 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         // Load all transactions
         this.transactions = this.plugin.getAllTransactions();
         
+        // Sort transactions by date (latest first)
+        this.transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        
         // Filter transactions based on the date range
         this.filteredTransactions = this.transactions.filter(transaction => {
             const transactionDate = new Date(transaction.date);
             return transactionDate >= this.dateRange.startDate && 
                    transactionDate <= this.dateRange.endDate;
         });
+        
+        // Apply search filter if there's a search query
+        if (this.searchQuery) {
+            const query = this.searchQuery.toLowerCase();
+            this.filteredTransactions = this.filteredTransactions.filter(transaction => 
+                transaction.description.toLowerCase().includes(query) ||
+                transaction.category.toLowerCase().includes(query)
+            );
+        }
         
         // Update pagination
         this.totalPages = Math.ceil(this.filteredTransactions.length / this.pageSize);
@@ -384,55 +444,80 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
 
     renderPagination(container: HTMLElement) {
         if (this.filteredTransactions.length === 0) return;
-        
+
+        // Check for existing pagination and remove it
+        const existingPagination = container.querySelector('.expensica-pagination');
+        if (existingPagination) {
+            existingPagination.remove();
+        }
+
         const paginationSection = container.createDiv('expensica-pagination');
         
-        // Calculate total pages
-        this.totalPages = Math.ceil(this.filteredTransactions.length / this.pageSize);
+        // Navigation buttons container
+        const navigationContainer = paginationSection.createDiv('expensica-pagination-nav');
         
-        if (this.totalPages <= 1) return;
-        
-        // Previous page button
-        const prevBtn = paginationSection.createEl('button', {
+        // First page button
+        const firstBtn = navigationContainer.createEl('button', {
             cls: `expensica-pagination-btn ${this.currentPage === 1 ? 'disabled' : ''}`,
-            attr: { disabled: this.currentPage === 1 ? 'disabled' : null }
+            text: 'First'
         });
-        
-        prevBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>';
-        
+        firstBtn.addEventListener('click', () => {
+            if (this.currentPage !== 1) {
+                this.currentPage = 1;
+                this.renderView();
+            }
+        });
+
+        // Previous page button
+        const prevBtn = navigationContainer.createEl('button', {
+            cls: `expensica-pagination-btn ${this.currentPage === 1 ? 'disabled' : ''}`,
+            text: 'Previous'
+        });
         prevBtn.addEventListener('click', () => {
             if (this.currentPage > 1) {
                 this.currentPage--;
                 this.renderView();
             }
         });
-        
-        // Page indicators
-        const pageInfo = paginationSection.createEl('span', {
-            text: `Page ${this.currentPage} of ${this.totalPages}`,
-            cls: 'expensica-pagination-info'
+
+        // Page indicator
+        const pageIndicator = navigationContainer.createEl('span', {
+            cls: 'expensica-pagination-info',
+            text: `Page ${this.currentPage} of ${this.totalPages}`
         });
-        
+
         // Next page button
-        const nextBtn = paginationSection.createEl('button', {
+        const nextBtn = navigationContainer.createEl('button', {
             cls: `expensica-pagination-btn ${this.currentPage === this.totalPages ? 'disabled' : ''}`,
-            attr: { disabled: this.currentPage === this.totalPages ? 'disabled' : null }
+            text: 'Next'
         });
-        
-        nextBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>';
-        
         nextBtn.addEventListener('click', () => {
             if (this.currentPage < this.totalPages) {
                 this.currentPage++;
                 this.renderView();
             }
         });
+
+        // Last page button
+        const lastBtn = navigationContainer.createEl('button', {
+            cls: `expensica-pagination-btn ${this.currentPage === this.totalPages ? 'disabled' : ''}`,
+            text: 'Last'
+        });
+        lastBtn.addEventListener('click', () => {
+            if (this.currentPage !== this.totalPages) {
+                this.currentPage = this.totalPages;
+                this.renderView();
+            }
+        });
+
+        // Items per page selector container
+        const itemsPerPageContainer = paginationSection.createDiv('expensica-items-per-page');
+        itemsPerPageContainer.createEl('span', { text: 'Items per page:' });
         
-        // Page size selector
-        const pageSizeSelector = paginationSection.createDiv('expensica-page-size-selector');
-        pageSizeSelector.createEl('span', { text: 'Show:' });
+        const pageSizeSelect = itemsPerPageContainer.createEl('select', {
+            cls: 'expensica-page-size-select'
+        });
         
-        const pageSizeSelect = pageSizeSelector.createEl('select');
         [10, 20, 50, 100].forEach(size => {
             const option = pageSizeSelect.createEl('option', {
                 text: String(size),
@@ -446,7 +531,8 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         
         pageSizeSelect.addEventListener('change', () => {
             this.pageSize = parseInt(pageSizeSelect.value);
-            this.currentPage = 1;
+            this.totalPages = Math.ceil(this.filteredTransactions.length / this.pageSize);
+            this.currentPage = 1; // Reset to first page when changing page size
             this.renderView();
         });
     }
@@ -573,4 +659,180 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
             label
         };
     }
+
+    // New method to update search results without re-rendering the entire view
+    updateSearchResults() {
+        // Store current focus state
+        const wasFocused = this.inputFocused;
+        
+        // Use a more efficient debounce approach
+        if (this._debounceTimeout) {
+            clearTimeout(this._debounceTimeout);
+        }
+        
+        this._debounceTimeout = setTimeout(() => {
+            this.loadTransactionsData();
+            
+            // Update only transaction count without full re-render
+            const countEl = this.contentEl.querySelector('.expensica-transaction-count');
+            if (countEl) {
+                countEl.textContent = `${this.filteredTransactions.length} transactions`;
+            }
+            
+            // Update transactions list
+            const transactionsSection = this.contentEl.querySelector('.expensica-transactions-section');
+            if (transactionsSection) {
+                // Clear the transactions section
+                transactionsSection.innerHTML = '';
+                
+                // Re-render transactions
+                if (this.filteredTransactions.length === 0) {
+                    // No transactions found
+                    const emptyState = createDiv({ cls: 'expensica-empty-state', parent: transactionsSection });
+                    createDiv({ text: '📋', cls: 'expensica-empty-state-icon', parent: emptyState });
+                    createEl('p', {
+                        text: 'No transactions found matching your filters.',
+                        cls: 'expensica-empty-state-message',
+                        parent: emptyState
+                    });
+                } else {
+                    // Transactions container
+                    const transactionsContainer = createDiv({ 
+                        cls: 'expensica-transactions', 
+                        parent: transactionsSection 
+                    });
+                    
+                    // Calculate pagination
+                    const startIdx = (this.currentPage - 1) * this.pageSize;
+                    const endIdx = Math.min(startIdx + this.pageSize, this.filteredTransactions.length);
+                    
+                    // Get current page transactions
+                    const pageTransactions = this.filteredTransactions.slice(startIdx, endIdx);
+                    
+                    // Render each transaction
+                    this.renderTransactionsToContainer(transactionsContainer, pageTransactions);
+                }
+            }
+            
+            // Remove all existing pagination sections first
+            const existingPaginationSections = this.contentEl.querySelectorAll('.expensica-pagination');
+            existingPaginationSections.forEach(section => section.remove());
+            
+            // Now render a single pagination section at the bottom
+            if (this.filteredTransactions.length > 0) {
+                this.renderPagination(this.contentEl);
+            }
+            
+            // Restore focus to search input if it was previously focused
+            if (wasFocused) {
+                const searchInput = this.contentEl.querySelector('#expensica-search-input') as HTMLInputElement;
+                if (searchInput) {
+                    searchInput.focus();
+                }
+            }
+            
+            this._debounceTimeout = null;
+        }, 300);
+    }
+    
+    // Helper method to render transactions to a container
+    renderTransactionsToContainer(container: HTMLElement, transactions: Transaction[]) {
+        transactions.forEach(transaction => {
+            const transactionEl = container.createDiv('expensica-transaction');
+
+            // Get category details
+            const category = this.plugin.getCategoryById(transaction.category);
+
+            // Handle unknown category (e.g., if category was deleted)
+            const categoryDisplay = category ?
+                { id: category.id, name: category.name, emoji: category.emoji, type: category.type } :
+                {
+                    id: 'unknown',
+                    name: 'Unknown Category',
+                    emoji: transaction.type === TransactionType.INCOME ? '❓' : '❓',
+                    type: transaction.type === TransactionType.INCOME ? CategoryType.INCOME : CategoryType.EXPENSE
+                };
+
+            // Icon based on transaction type
+            const iconEl = transactionEl.createDiv('expensica-transaction-icon');
+            iconEl.innerText = categoryDisplay.emoji;
+            if (transaction.type === TransactionType.INCOME) {
+                iconEl.addClass('expensica-income-icon');
+            } else {
+                iconEl.addClass('expensica-expense-icon');
+            }
+
+            // Transaction details
+            const detailsEl = transactionEl.createDiv('expensica-transaction-details');
+            detailsEl.createEl('div', { text: transaction.description, cls: 'expensica-transaction-title' });
+            const metaEl = detailsEl.createDiv('expensica-transaction-meta');
+
+            // Format date for display
+            const date = new Date(transaction.date);
+            const formattedDate = date.toLocaleDateString('en-US', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric'
+            });
+
+            const dateEl = metaEl.createEl('span', { cls: 'expensica-transaction-date' });
+            dateEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg> ${formattedDate}`;
+
+            const categorySpan = metaEl.createEl('span', {
+                text: categoryDisplay.name,
+                cls: `expensica-transaction-category ${!category ? 'category-unknown' : ''}`
+            });
+
+            // Add warning if category doesn't exist
+            if (!category) {
+                categorySpan.setAttribute('title', 'This category was deleted. Edit the transaction to select a new category.');
+            }
+
+            // Transaction amount
+            const amountEl = transactionEl.createDiv('expensica-transaction-amount');
+            const formattedAmount = formatCurrency(transaction.amount, this.plugin.settings.defaultCurrency);
+            if (transaction.type === TransactionType.INCOME) {
+                amountEl.createEl('span', {
+                    text: `+${formattedAmount}`,
+                    cls: 'expensica-income'
+                });
+            } else {
+                amountEl.createEl('span', {
+                    text: `-${formattedAmount}`,
+                    cls: 'expensica-expense'
+                });
+            }
+
+            // Add edit and delete options
+            const actionsEl = transactionEl.createDiv('expensica-transaction-actions');
+            const editBtn = actionsEl.createEl('button', {
+                cls: 'expensica-action-btn expensica-edit-btn',
+                attr: { 'aria-label': 'Edit transaction' }
+            });
+            editBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>';
+
+            const deleteBtn = actionsEl.createEl('button', {
+                cls: 'expensica-action-btn expensica-delete-btn',
+                attr: { 'aria-label': 'Delete transaction' }
+            });
+            deleteBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
+
+            // Add event listeners
+            editBtn.addEventListener('click', () => {
+                if (transaction.type === TransactionType.EXPENSE) {
+                    const modal = new ExpenseModal(this.app, this.plugin, this as any, transaction);
+                    modal.open();
+                } else {
+                    const modal = new IncomeModal(this.app, this.plugin, this as any, transaction);
+                    modal.open();
+                }
+            });
+
+            deleteBtn.addEventListener('click', () => {
+                this.deleteTransaction(transaction.id);
+            });
+        });
+    }
+    
+    private _debounceTimeout: NodeJS.Timeout | null = null;
 } 
