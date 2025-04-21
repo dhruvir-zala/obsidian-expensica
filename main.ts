@@ -1005,6 +1005,49 @@ class ExpensicaSettingTab extends PluginSettingTab {
         containerEl.empty();
         containerEl.addClass('expensica-settings-container');
 
+        // Add links card at the top
+        const linksCard = containerEl.createDiv('expensica-links-card');
+        linksCard.createEl('h2', { text: 'Support & Resources' });
+
+        // Buy Me a Coffee section
+        const coffeeSection = linksCard.createDiv('expensica-links-section');
+        coffeeSection.createEl('h3', { text: 'Support the Developer' });
+        const coffeeLink = coffeeSection.createEl('a', {
+            href: 'https://ko-fi.com/X8X71DLZHF',
+            attr: { target: '_blank' }
+        });
+        coffeeLink.innerHTML = '<img height="36" style="border:0px;height:36px;" src="https://storage.ko-fi.com/cdn/kofi6.png?v=6" border="0" alt="Buy Me a Coffee at ko-fi.com" />';
+
+        // Website and Social Links
+        const socialSection = linksCard.createDiv('expensica-links-section');
+        socialSection.createEl('h3', { text: 'Connect with Expensica' });
+        
+        const websiteLink = socialSection.createEl('a', {
+            href: 'https://expensica.com/',
+            text: '🌐 Visit Expensica Website',
+            attr: { target: '_blank' }
+        });
+        websiteLink.style.display = 'block';
+        websiteLink.style.marginBottom = '8px';
+        
+        const linkedinLink = socialSection.createDiv();
+        linkedinLink.innerHTML = '<a href="https://www.linkedin.com/company/expensica/" target="_blank">💼 Follow on LinkedIn</a>';
+        linkedinLink.style.display = 'block';
+        linkedinLink.style.marginBottom = '8px';
+
+        // GitHub Issues
+        const githubSection = linksCard.createDiv('expensica-links-section');
+        githubSection.createEl('h3', { text: 'Report Issues & Request Features' });
+        const githubLink = githubSection.createEl('a', {
+            href: 'https://github.com/dhruvir-zala/obsidian-expensica/issues',
+            text: '🐛 GitHub Issues & Feature Requests',
+            attr: { target: '_blank' }
+        });
+        githubLink.style.display = 'block';
+
+        // Add a separator
+        containerEl.createEl('hr', { cls: 'expensica-settings-separator' });
+
         // General settings
         containerEl.createEl('h2', { text: 'General Settings' });
 
