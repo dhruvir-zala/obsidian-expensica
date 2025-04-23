@@ -20,7 +20,8 @@ export class CalendarHeatmap {
     private height: number = 0;
     private tooltipDiv: any;
     private detailsContainer: HTMLElement;
-    private cellSize: number = 40;
+    private cellSize: number = 48;
+    private cellGap: number = 8;
     private maxAmount: number = 0;
     private weekNumberWidth: number = 30; // Width of week number column
 
@@ -58,9 +59,20 @@ export class CalendarHeatmap {
         // Calculate additional width for week numbers if enabled
         const weekNumbersOffset = this.plugin.settings.showWeekNumbers ? this.weekNumberWidth : 0;
         
+        // Adjust cell gap based on available width
+        if (this.width < 500) {
+            this.cellGap = 4; // Smaller gap for small screens
+        } else if (this.width < 700) {
+            this.cellGap = 6; // Medium gap for medium screens
+        }
+        // else use the default 8px gap for larger screens
+        
         // Calculate height based on number of weeks in the month
         const weeksInMonth = this.getWeeksInMonth(this.currentDate.getFullYear(), this.currentDate.getMonth());
-        this.height = (weeksInMonth + 1) * this.cellSize + 50; // +1 for days of week header, +50 for month name
+        const calendarHeight = (weeksInMonth + 1) * (this.cellSize + this.cellGap) + 50; // Calendar height
+        
+        // Add extra space at the bottom for the legend (90px instead of 75px)
+        this.height = calendarHeight + 90;
 
         // Create the SVG inside the calendar container
         this.svg = d3.select(calendarContainer)
@@ -213,30 +225,34 @@ export class CalendarHeatmap {
         // Calculate week numbers offset if enabled
         const weekNumbersOffset = this.plugin.settings.showWeekNumbers ? this.weekNumberWidth : 0;
         
-        // Add month label
+        // Calculate calendar height (without the legend space)
+        const weeksInMonth = this.getWeeksInMonth(this.currentDate.getFullYear(), this.currentDate.getMonth());
+        const calendarHeight = (weeksInMonth + 1) * (this.cellSize + this.cellGap) + 50;
+        
+        // Add month label with Notion-inspired styling
         this.svg.append('text')
             .attr('class', 'month-label')
             .attr('x', (this.width + weekNumbersOffset) / 2)
             .attr('y', 25)
             .attr('text-anchor', 'middle')
-            .attr('font-size', '20px')
-            .attr('font-weight', 'bold')
+            .attr('font-size', '16px')
+            .attr('font-weight', '500')
             .attr('fill', 'var(--text-normal)')
             .text(monthLabel);
         
-        // Days of the week
-        const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        // Days of the week - Shorter Notion-like format
+        const daysOfWeek = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
         
         this.svg.selectAll('.day-of-week')
             .data(daysOfWeek)
             .enter()
             .append('text')
             .attr('class', 'day-of-week')
-            .attr('x', (d: string, i: number) => weekNumbersOffset + i * this.cellSize + this.cellSize / 2)
+            .attr('x', (d: string, i: number) => weekNumbersOffset + i * (this.cellSize + this.cellGap) + this.cellSize / 2)
             .attr('y', 60)
             .attr('text-anchor', 'middle')
-            .attr('font-size', '14px')
-            .attr('fill', 'var(--text-muted)')
+            .attr('font-size', '12px')
+            .attr('fill', 'rgba(55, 53, 47, 0.65)')
             .text((d: string) => d);
         
         // Calculate colorscale based on max expense amount using the selected color scheme
@@ -263,8 +279,8 @@ export class CalendarHeatmap {
                 .attr('x', this.weekNumberWidth / 2)
                 .attr('y', 60)
                 .attr('text-anchor', 'middle')
-                .attr('font-size', '14px')
-                .attr('fill', 'var(--text-muted)')
+                .attr('font-size', '11px')
+                .attr('fill', 'rgba(55, 53, 47, 0.5)')
                 .text('Wk');
                 
             // Add week numbers
@@ -281,11 +297,11 @@ export class CalendarHeatmap {
                 this.svg.append('text')
                     .attr('class', 'week-number')
                     .attr('x', this.weekNumberWidth / 2)
-                    .attr('y', (week + 1) * this.cellSize + 60)
+                    .attr('y', (week + 1) * (this.cellSize + this.cellGap) + 60)
                     .attr('text-anchor', 'middle')
                     .attr('dominant-baseline', 'middle')
-                    .attr('font-size', '12px')
-                    .attr('fill', 'var(--text-muted)')
+                    .attr('font-size', '11px')
+                    .attr('fill', 'rgba(55, 53, 47, 0.5)')
                     .text(weekNumber);
             }
         }
@@ -299,39 +315,38 @@ export class CalendarHeatmap {
                 const dayOfMonth = d.date.getDate();
                 const dayOfWeek = d.date.getDay();
                 const weekOfMonth = Math.floor((dayOfMonth + firstDayOfMonth - 1) / 7);
-                return `translate(${weekNumbersOffset + dayOfWeek * this.cellSize}, ${(weekOfMonth + 1) * this.cellSize + 40})`;
+                
+                // Calculate position with added gap between cells
+                const xPos = weekNumbersOffset + dayOfWeek * (this.cellSize + this.cellGap);
+                const yPos = (weekOfMonth + 1) * (this.cellSize + this.cellGap) + 40;
+                
+                return `translate(${xPos}, ${yPos})`;
             });
         
-        // Add cell background with enhanced visual design
+        // Add cell background with Notion-inspired visual design
         dayCells.append('rect')
             .attr('width', this.cellSize - 4)
             .attr('height', this.cellSize - 4)
-            .attr('rx', 6) // More rounded corners
-            .attr('ry', 6)
-            .attr('fill', (d: DayData) => d.totalAmount > 0 ? colorScale(d.totalAmount) : 'var(--background-secondary)')
+            .attr('rx', 4) // Subtle rounded corners like Notion
+            .attr('ry', 4)
+            .attr('fill', (d: DayData) => d.totalAmount > 0 ? colorScale(d.totalAmount) : 'var(--background-primary)')
             .attr('stroke', (d: DayData) => {
                 // Highlight today's date with a special border
                 if (isCurrentMonth && d.date.getDate() === todayDate) {
                     return 'var(--interactive-accent)';
                 }
-                return 'var(--background-modifier-border)';
+                return 'var(--background-modifier-border)'; // Using a more visible border color from Obsidian
             })
             .attr('stroke-width', (d: DayData) => {
-                return isCurrentMonth && d.date.getDate() === todayDate ? 2 : 1;
-            })
-            .attr('stroke-dasharray', (d: DayData) => {
-                // Use dashed border for days with income but no expenses
-                const hasIncome = d.transactions.some(t => t.type === TransactionType.INCOME);
-                const hasExpenses = d.totalAmount > 0;
-                return (hasIncome && !hasExpenses) ? "2,2" : "none";
+                return isCurrentMonth && d.date.getDate() === todayDate ? 2 : 1.5;
             })
             .attr('opacity', (d: DayData) => {
-                // Make weekend days slightly more prominent
+                // More subtle opacity for Notion-like aesthetic
                 const isWeekend = d.date.getDay() === 0 || d.date.getDay() === 6;
                 if (d.totalAmount > 0) {
-                    return 0.9;
+                    return 1.0; // Full opacity for cells with expenses
                 }
-                return isWeekend ? 0.4 : 0.3;
+                return isWeekend ? 0.7 : 0.6; // Subtle distinction for weekend days
             })
             .classed('has-expenses', (d: DayData) => d.totalAmount > 0)
             .classed('is-today', (d: DayData) => isCurrentMonth && d.date.getDate() === todayDate)
@@ -339,14 +354,14 @@ export class CalendarHeatmap {
                 // Highlight the cell
                 const cell = d3.select(event.currentTarget);
                 cell.transition()
-                    .duration(200)
+                    .duration(100) // Faster transition for better responsiveness
                     .attr('stroke', 'var(--interactive-accent)')
-                    .attr('stroke-width', 2)
+                    .attr('stroke-width', 2) // Consistent with non-selected cells
                     .attr('opacity', 1);
                 
                 // Show tooltip
                 this.tooltipDiv.transition()
-                    .duration(200)
+                    .duration(100)
                     .style('opacity', .9);
                 
                 const formatCurrencyValue = (value: number) => {
@@ -368,6 +383,7 @@ export class CalendarHeatmap {
                 
                 // Determine if this day is above average
                 const daysInMonth = new Date(year, month + 1, 0).getDate();
+                
                 const dailyAverage = monthlyTotal / daysInMonth;
                 const comparedToAverage = dailyAverage > 0 
                     ? (((d.totalAmount - dailyAverage) / dailyAverage) * 100).toFixed(0)
@@ -398,31 +414,32 @@ export class CalendarHeatmap {
                     return;
                 }
                 
-                // Reset the cell
+                // Reset the cell with Notion styling
                 d3.select(event.currentTarget)
                     .transition()
-                    .duration(200)
+                    .duration(100) // Faster transition for better responsiveness
                     .attr('stroke', (d: DayData) => {
                         // Maintain today's highlight
                         if (isCurrentMonth && d.date.getDate() === todayDate) {
                             return 'var(--interactive-accent)';
                         }
-                        return 'var(--background-modifier-border)';
+                        return 'var(--background-modifier-border)'; // Using a more visible border color from Obsidian
                     })
                     .attr('stroke-width', (d: DayData) => {
-                        return isCurrentMonth && d.date.getDate() === todayDate ? 2 : 1;
+                        return isCurrentMonth && d.date.getDate() === todayDate ? 2 : 1.5;
                     })
                     .attr('opacity', (d: DayData) => {
+                        // Notion-like opacity values
                         const isWeekend = d.date.getDay() === 0 || d.date.getDay() === 6;
                         if (d.totalAmount > 0) {
-                            return 0.9;
+                            return 1.0; // Full opacity for cells with expenses
                         }
-                        return isWeekend ? 0.4 : 0.3;
+                        return isWeekend ? 0.7 : 0.6; // Subtle distinction for weekend days
                     });
                 
-                // Hide tooltip
+                // Hide tooltip with subtle fade
                 this.tooltipDiv.transition()
-                    .duration(500)
+                    .duration(100)
                     .style('opacity', 0);
             })
             .on('click', (event: any, d: DayData) => {
@@ -430,45 +447,51 @@ export class CalendarHeatmap {
                 if (selectedCell) {
                     selectedCell
                         .attr('stroke', (d: DayData) => {
+                            // Maintain today's highlight with Notion styling
                             if (isCurrentMonth && d.date.getDate() === todayDate) {
                                 return 'var(--interactive-accent)';
                             }
-                            return 'var(--background-modifier-border)';
+                            return 'var(--background-modifier-border)'; // Using a more visible border color from Obsidian
                         })
                         .attr('stroke-width', (d: DayData) => {
-                            return isCurrentMonth && d.date.getDate() === todayDate ? 2 : 1;
+                            return isCurrentMonth && d.date.getDate() === todayDate ? 2 : 1.5;
                         });
                 }
                 
-                // Highlight the selected cell with a distinct visual cue
+                // Highlight the selected cell with a Notion-like subtle highlight
                 selectedCell = d3.select(event.currentTarget);
                 selectedCell
                     .attr('stroke', 'var(--interactive-accent)')
-                    .attr('stroke-width', 2);
+                    .attr('stroke-width', 2.5); // Increased thickness for better visibility
                 
                 // Show transaction details with a nice transition
                 this.showDayDetails(d);
             });
         
-        // Add day number
+        // Add day number with Notion-inspired styling
         dayCells.append('text')
             .attr('x', this.cellSize / 2 - 2)
-            .attr('y', this.cellSize / 2 - 2)
+            .attr('y', this.cellSize / 2 - 6)
             .attr('text-anchor', 'middle')
             .attr('dominant-baseline', 'middle')
             .attr('font-size', '13px')
-            .attr('font-weight', (d: DayData) => d.totalAmount > 0 ? 'bold' : 'medium')
-            .attr('fill', (d: DayData) => this.getTextColor(d.totalAmount, colorScale))
+            .attr('font-weight', (d: DayData) => d.totalAmount > 0 ? '500' : '400')
+            .attr('fill', (d: DayData) => {
+                if (d.totalAmount > 0) {
+                    return this.getTextColor(d.totalAmount, colorScale);
+                }
+                return 'var(--text-normal)';
+            })
             .text((d: DayData) => d.date.getDate());
         
-        // Add spending amount for days with expenses
+        // Add spending amount for days with expenses with Notion-like styling
         dayCells.filter((d: DayData) => d.totalAmount > 0)
             .append('text')
             .attr('x', this.cellSize / 2 - 2)
-            .attr('y', this.cellSize / 2 + 14)
+            .attr('y', this.cellSize / 2 + 12)
             .attr('text-anchor', 'middle')
-            .attr('font-size', '9px')
-            .attr('font-weight', 'bold')
+            .attr('font-size', '10px')
+            .attr('font-weight', '500')
             .attr('fill', (d: DayData) => this.getTextColor(d.totalAmount, colorScale))
             .text((d: DayData) => {
                 const currency = this.plugin.settings.defaultCurrency;
@@ -483,14 +506,14 @@ export class CalendarHeatmap {
         // Add tiny indicator for days with income
         dayCells.filter((d: DayData) => d.transactions.some(t => t.type === TransactionType.INCOME))
             .append('circle')
-            .attr('cx', this.cellSize - 10)
-            .attr('cy', 8)
-            .attr('r', 3)
+            .attr('cx', this.cellSize - 12)
+            .attr('cy', 10)
+            .attr('r', 3.5)
             .attr('fill', 'var(--expensica-success)')
             .attr('opacity', 0.8);
         
         // Add color legend
-        this.renderColorLegend(colorScale, weekNumbersOffset);
+        this.renderColorLegend(colorScale, weekNumbersOffset, calendarHeight);
         
         // Add animation for the calendar cells with staggered timing for a nice effect
         dayCells
@@ -546,14 +569,25 @@ export class CalendarHeatmap {
         return luminance > 160 ? 'var(--text-normal)' : 'white';
     }
 
-    private renderColorLegend(colorScale: any, weekNumbersOffset: number) {
-        // Create a legend at the bottom right
-        const legendWidth = 150;
-        const legendHeight = 20;
+    private renderColorLegend(colorScale: any, weekNumbersOffset: number, calendarHeight: number) {
+        // Create a centered legend at the bottom with improved Notion-inspired styling
+        const legendWidth = 220; // Wider legend for better visibility
+        const legendHeight = 16; // Taller bar for better visibility
+        const legendY = calendarHeight + 35; // Increased from 20px to 35px for more space at the top
         
         const legend = this.svg.append('g')
             .attr('class', 'legend')
-            .attr('transform', `translate(${this.width + weekNumbersOffset - legendWidth - 20}, ${this.height - 40})`);
+            .attr('transform', `translate(${(this.width + weekNumbersOffset - legendWidth) / 2}, ${legendY})`);
+        
+        // Add legend title with improved styling
+        legend.append('text')
+            .attr('x', legendWidth / 2)
+            .attr('y', -15)
+            .attr('text-anchor', 'middle')
+            .attr('font-size', '13px')
+            .attr('font-weight', '500')
+            .attr('fill', 'var(--text-normal)')
+            .text('Spending Intensity');
         
         // Create gradient
         const defs = this.svg.append('defs');
@@ -574,39 +608,51 @@ export class CalendarHeatmap {
                 .attr('stop-color', colorScale(value));
         }
         
-        // Draw the gradient rect
+        // Draw the gradient rect with improved styling
         legend.append('rect')
             .attr('width', legendWidth)
             .attr('height', legendHeight)
             .attr('fill', 'url(#legend-gradient)')
-            .attr('rx', 4)
-            .attr('ry', 4);
+            .attr('rx', 4) // More noticeable rounding
+            .attr('ry', 4)
+            .attr('stroke', 'var(--background-modifier-border)') // Match cell border color
+            .attr('stroke-width', 1.5); // Match cell border thickness
         
-        // Add min and max labels
+        // Add min and max labels with improved styling
         legend.append('text')
             .attr('x', 0)
-            .attr('y', legendHeight + 15)
+            .attr('y', legendHeight + 16)
             .attr('text-anchor', 'start')
             .attr('font-size', '12px')
+            .attr('font-weight', '500')
             .attr('fill', 'var(--text-muted)')
             .text(formatCurrency(0, this.plugin.settings.defaultCurrency));
         
         legend.append('text')
             .attr('x', legendWidth)
-            .attr('y', legendHeight + 15)
+            .attr('y', legendHeight + 16)
             .attr('text-anchor', 'end')
             .attr('font-size', '12px')
+            .attr('font-weight', '500')
             .attr('fill', 'var(--text-muted)')
             .text(formatCurrency(this.maxAmount, this.plugin.settings.defaultCurrency));
-        
-        // Add legend title
+            
+        // Add "min" and "max" labels for clarity
         legend.append('text')
-            .attr('x', legendWidth / 2)
-            .attr('y', -5)
-            .attr('text-anchor', 'middle')
-            .attr('font-size', '12px')
-            .attr('fill', 'var(--text-normal)')
-            .text('Daily Expense Intensity');
+            .attr('x', 0)
+            .attr('y', legendHeight + 32)
+            .attr('text-anchor', 'start')
+            .attr('font-size', '10px')
+            .attr('fill', 'var(--text-faint)')
+            .text('Minimum');
+            
+        legend.append('text')
+            .attr('x', legendWidth)
+            .attr('y', legendHeight + 32)
+            .attr('text-anchor', 'end')
+            .attr('font-size', '10px')
+            .attr('fill', 'var(--text-faint)')
+            .text('Maximum');
     }
 
     private showDayDetails(dayData: DayData) {
@@ -739,34 +785,12 @@ export class CalendarHeatmap {
         
         // If no expense transactions, show message
         if (expenseTransactions.length === 0) {
-            // Check if there are income transactions
-            const hasIncome = dayData.transactions.some(t => t.type === TransactionType.INCOME);
-            
             const emptyStateEl = this.detailsContainer.createDiv('expensica-calendar-empty-state');
-            
-            // Different message depending on whether there are income transactions
-            if (hasIncome) {
-                emptyStateEl.createEl('div', { text: '💰', cls: 'expensica-calendar-empty-icon' });
-                emptyStateEl.createEl('p', {
-                    text: 'No expenses on this day, but you have income transactions.',
-                    cls: 'expensica-calendar-empty-message'
-                });
-                
-                const incomeTotal = dayData.transactions
-                    .filter(t => t.type === TransactionType.INCOME)
-                    .reduce((sum, t) => sum + t.amount, 0);
-                
-                emptyStateEl.createEl('p', {
-                    text: `Total income: ${formatCurrency(incomeTotal, this.plugin.settings.defaultCurrency)}`,
-                    cls: 'expensica-income'
-                });
-            } else {
-                emptyStateEl.createEl('div', { text: '✨', cls: 'expensica-calendar-empty-icon' });
-                emptyStateEl.createEl('p', {
-                    text: 'No expenses recorded for this day.',
-                    cls: 'expensica-calendar-empty-message'
-                });
-            }
+            emptyStateEl.createEl('div', { text: '✨', cls: 'expensica-calendar-empty-icon' });
+            emptyStateEl.createEl('p', {
+                text: 'No expenses recorded for this day.',
+                cls: 'expensica-calendar-empty-message'
+            });
             
             return;
         }

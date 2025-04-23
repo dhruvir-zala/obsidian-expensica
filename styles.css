@@ -84,39 +84,55 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--expensica-spacing-xl) var(--expensica-spacing-2xl);
+  padding: var(--expensica-spacing-lg) var(--expensica-spacing-xl);
   background-color: var(--background-primary);
   border-radius: var(--expensica-radius-lg);
-  border: 1px solid var(--expensica-border-primary);
   margin-bottom: var(--expensica-spacing-xl);
   position: relative;
+  border: none;
+  box-shadow: none;
+  transition: background-color 0.2s ease;
+  animation: fadeIn 0.3s ease;
 }
 
 .expensica-header::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(45deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 100%);
-  pointer-events: none;
+  content: none;
+}
+
+/* Title Section */
+.expensica-title-section {
+  display: flex;
+  align-items: center;
 }
 
 .expensica-title {
   margin: 0;
-  font-size: var(--expensica-font-size-2xl);
-  font-weight: 700;
-  letter-spacing: -0.5px;
+  font-size: var(--expensica-font-size-xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
   color: var(--text-normal);
   line-height: var(--expensica-line-height-tight);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  text-shadow: none;
   position: relative;
+  transition: color 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.expensica-logo-icon {
+  color: var(--text-accent);
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+}
+
+.expensica-title:hover .expensica-logo-icon {
+  opacity: 1;
 }
 
 .expensica-actions {
   display: flex;
-  gap: 12px;
+  gap: 16px;
   align-items: center;
   position: relative;
 }
@@ -164,41 +180,46 @@
 /* Buttons */
 
 .expensica-btn {
-  padding: 8px 16px;
-  border-radius: var(--expensica-radius);
+  padding: 8px 14px;
+  border-radius: 4px;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 6px;
-  transition: var(--expensica-transition);
-  box-shadow: var(--expensica-shadow);
+  gap: 8px;
+  transition: all 0.2s ease;
+  box-shadow: none;
   border: 1px solid var(--background-modifier-border);
   background-color: var(--background-primary);
   color: var(--text-normal);
+  height: 36px;
 }
 
 .expensica-btn svg {
   width: 16px;
   height: 16px;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
 }
 
 .expensica-btn:hover {
-  background-color: var(--background-secondary);
-  transform: translateY(-1px);
-  box-shadow: var(--expensica-shadow-lg);
-  border-color: var(--interactive-accent);
+  background-color: var(--background-modifier-hover);
+  transform: none;
+  box-shadow: none;
+  border-color: var(--background-modifier-border-hover);
 }
 
 .expensica-btn:active {
-  transform: translateY(0);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  transform: scale(0.98);
+  box-shadow: none;
+  background-color: var(--background-modifier-active);
 }
 
 .expensica-btn-primary {
-  background-color: var(--expensica-primary);
-  color: var(--text-on-accent);
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+  border-color: var(--background-modifier-border);
 }
 
 .expensica-btn-secondary {
@@ -207,15 +228,15 @@
 }
 
 .expensica-btn-success {
-  background-color: var(--expensica-success);
-  border-color: var(--expensica-success);
-  color: white;
+  background-color: var(--background-primary);
+  border-color: var(--background-modifier-border);
+  color: var(--text-accent);
 }
 
 .expensica-btn-danger {
-  background-color: var(--expensica-error);
-  border-color: var(--expensica-error);
-  color: white;
+  background-color: var(--background-primary);
+  border-color: var(--background-modifier-border);
+  color: var(--text-error);
 }
 
 .expensica-action-icon {
@@ -267,79 +288,119 @@
 }
 
 .expensica-card {
-  background-color: var(--expensica-bg-primary);
-  border-radius: var(--expensica-radius-lg);
-  padding: var(--expensica-spacing-xl);
-  border: 1px solid var(--expensica-border-primary);
+  background-color: var(--background-primary);
+  border-radius: 4px;
+  padding: var(--expensica-spacing);
   position: relative;
   overflow: hidden;
+  border: 1px solid rgba(55, 53, 47, 0.09);
+  transition: all 0.15s ease;
+  box-shadow: rgba(15, 15, 15, 0.1) 0px 0px 0px 1px, 
+              rgba(15, 15, 15, 0.1) 0px 2px 4px;
+}
+
+.theme-dark .expensica-card {
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: rgba(255, 255, 255, 0.1) 0px 0px 0px 1px, 
+              rgba(0, 0, 0, 0.1) 0px 2px 4px;
 }
 
 .expensica-card:hover {
-  transform: translateY(-2px);
+  background-color: rgba(55, 53, 47, 0.02);
+  transform: none;
+  box-shadow: rgba(15, 15, 15, 0.1) 0px 0px 0px 1px, 
+              rgba(15, 15, 15, 0.1) 0px 4px 6px;
+  transition: all 0.15s ease;
+}
+
+.theme-dark .expensica-card:hover {
+  background-color: rgba(255, 255, 255, 0.02);
+  box-shadow: rgba(255, 255, 255, 0.1) 0px 0px 0px 1px, 
+              rgba(0, 0, 0, 0.1) 0px 4px 6px;
 }
 
 .expensica-card-title {
-  font-size: var(--expensica-font-size-sm);
-  color: var(--expensica-text-secondary);
-  margin: 0 0 var(--expensica-spacing) 0;
+  font-size: 12px;
+  color: rgba(55, 53, 47, 0.65);
+  margin: 0 0 8px 0;
   display: flex;
   align-items: center;
   gap: var(--expensica-spacing-xs);
   font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.theme-dark .expensica-card-title {
+  color: rgba(255, 255, 255, 0.65);
 }
 
 .expensica-card-title svg,
 .expensica-card-title span.emoji {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   opacity: 0.7;
 }
 
 .expensica-card-value {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 600;
   margin: 0;
   line-height: 1.2;
-  color: var(--expensica-text-primary);
+  color: rgb(55, 53, 47);
+}
+
+.theme-dark .expensica-card-value {
+  color: rgb(255, 255, 255);
 }
 
 .expensica-card-trend {
-  font-size: var(--expensica-font-size-sm);
-  margin-top: var(--expensica-spacing);
+  font-size: 12px;
+  margin-top: 8px;
   display: flex;
   align-items: center;
-  gap: var(--expensica-spacing-xs);
-  color: var(--expensica-text-secondary);
+  gap: 4px;
+  color: rgba(55, 53, 47, 0.65);
+}
+
+.theme-dark .expensica-card-trend {
+  color: rgba(255, 255, 255, 0.65);
 }
 
 .expensica-trend-up {
-  color: var(--expensica-success);
+  color: rgb(68, 131, 97);
 }
 
 .expensica-trend-down {
-  color: var(--expensica-error);
+  color: rgb(212, 76, 71);
 }
 
 .expensica-card-bg-icon {
   position: absolute;
-  right: -10px;
-  bottom: -10px;
-  font-size: 64px;
-  opacity: 0.06;
+  right: -5px;
+  bottom: -5px;
+  font-size: 50px;
+  opacity: 0.04;
   transform: rotate(-5deg);
 }
 
+.theme-dark .expensica-card-bg-icon {
+  opacity: 0.03;
+}
+
 .expensica-income {
-  color: var(--expensica-success);
+  color: rgb(68, 131, 97);
 }
 
 .expensica-expense {
-  color: var(--expensica-error);
+  color: rgb(212, 76, 71);
 }
 
 .expensica-balance {
-  color: var(--expensica-primary);
+  color: rgb(11, 110, 153);
+}
+
+.theme-dark .expensica-balance {
+  color: rgb(77, 171, 211);
 }
 
 /* Charts Section */
@@ -1508,69 +1569,76 @@ to {
 
 /* Date Range Selector Styles */
 .expensica-date-range-container {
-  margin-right: 10px;
+  position: relative;
+  z-index: 10;
 }
 
 .expensica-date-range-selector {
   position: relative;
-  min-width: 180px;
+  cursor: pointer;
 }
 
 .expensica-date-range-current {
   display: flex;
   align-items: center;
-  gap: 6px;
-  background-color: var(--background-secondary);
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 24px;
+  gap: 8px;
   padding: 8px 14px;
-  cursor: pointer;
-  box-shadow: var(--expensica-shadow);
-  transition: var(--expensica-transition);
+  background-color: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  font-size: 14px;
+  color: var(--text-normal);
+  transition: all 0.2s ease;
+  height: 36px;
+  animation: slideInDown 0.2s ease;
 }
 
 .expensica-date-range-current:hover {
   background-color: var(--background-modifier-hover);
-  border-color: var(--interactive-accent);
+  border-color: var(--background-modifier-border-hover);
 }
 
 .expensica-date-range-text {
-  font-size: 14px;
   font-weight: 500;
-  white-space: nowrap;
-  color: var(--text-normal);
+  margin-left: 4px;
+  transition: color 0.2s ease;
 }
 
 .expensica-date-range-icon {
   display: flex;
   align-items: center;
   color: var(--text-muted);
-  transition: transform 0.2s ease;
+  transition: color 0.2s ease, transform 0.2s ease;
 }
 
 .expensica-date-range-options {
   position: absolute;
-  top: 100%;
+  top: calc(100% + 6px);
   left: 0;
-  right: 0;
-  margin-top: 5px;
+  min-width: 100%;
   background-color: var(--background-primary);
-  border-radius: 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  z-index: 10;
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1), 0 0 0 1px var(--background-modifier-border);
+  z-index: 100;
   overflow: hidden;
-  border: 1px solid var(--background-modifier-border);
+  opacity: 1;
+  transform-origin: top center;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  animation: slideInDown 0.2s ease;
 }
 
 .expensica-date-range-hidden {
-  display: none;
+  opacity: 0;
+  transform: scaleY(0.95);
+  pointer-events: none;
 }
 
 .expensica-date-range-option {
-  padding: 10px 16px;
+  padding: 10px 14px;
   font-size: 14px;
-  transition: background-color 0.15s ease;
+  color: var(--text-normal);
   cursor: pointer;
+  transition: background-color 0.2s ease;
 }
 
 .expensica-date-range-option:hover {
@@ -1578,53 +1646,8 @@ to {
 }
 
 .expensica-date-range-option-active {
-  background-color: rgba(var(--interactive-accent-rgb), 0.1);
-  font-weight: 600;
-}
-
-/* Date Range Picker Modal Styles */
-.expensica-date-picker-group {
-  display: flex;
-  gap: 16px;
-}
-
-.expensica-date-picker-group .expensica-form-group {
-  flex: 1;
-}
-
-/* Responsive Styles for Date Range Selector */
-@media screen and (max-width: 768px) {
-  .expensica-header {
-      flex-direction: column;
-      align-items: flex-start;
-  }
-  
-  .expensica-actions {
-      flex-direction: column;
-      width: 100%;
-      gap: 10px;
-      margin-top: 16px;
-  }
-  
-  .expensica-date-range-container {
-      width: 100%;
-      margin-right: 0;
-      margin-bottom: 10px;
-  }
-  
-  .expensica-date-range-selector {
-      width: 100%;
-  }
-  
-  .expensica-date-range-current {
-      width: 100%;
-      justify-content: space-between;
-  }
-  
-  .expensica-btn {
-      width: 100%;
-      justify-content: center;
-  }
+  color: var(--text-accent);
+  background-color: var(--background-modifier-hover);
 }
 
 /* Calendar Navigation */
@@ -1826,7 +1849,8 @@ to {
 /* Responsive adjustments */
 @media screen and (max-width: 1024px) {
   .expensica-summary {
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 12px;
   }
 }
 
@@ -2011,13 +2035,17 @@ to {
 /* Mobile Optimizations */
 @media screen and (max-width: 768px) {
   .expensica-calendar-day {
-    min-width: 36px;
-    min-height: 36px;
+    min-width: 42px;
+    min-height: 42px;
     padding: var(--expensica-spacing-xs);
   }
 
   .expensica-calendar-day-number {
     font-size: var(--expensica-font-size-sm);
+  }
+  
+  .expensica-calendar-container {
+    padding: 12px; /* Reduced padding on mobile */
   }
 }
 
@@ -3273,50 +3301,72 @@ to {
 .expensica-tabs {
     display: flex;
     gap: 8px;
-    padding: 0 4px;
+    padding: 0;
     margin-bottom: var(--expensica-spacing-xl);
     position: relative;
-    border-bottom: 1px solid var(--background-modifier-border);
+    border-bottom: 1px solid rgba(55, 53, 47, 0.09);
+    transition: border-color 0.2s ease;
+}
+
+.theme-dark .expensica-tabs {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .expensica-tab {
     position: relative;
-    padding: 12px 24px;
+    padding: 8px 12px;
     border: none;
     background: transparent;
-    color: var(--text-muted);
+    color: rgba(55, 53, 47, 0.65);
     cursor: pointer;
-    font-weight: 600;
-    font-size: 15px;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    border-radius: 8px 8px 0 0;
+    font-weight: 500;
+    font-size: 14px;
+    transition: all 0.15s ease;
+    border-radius: 3px;
+    margin-bottom: 8px;
+}
+
+.theme-dark .expensica-tab {
+    color: rgba(255, 255, 255, 0.65);
 }
 
 .expensica-tab:hover {
-    color: var(--text-normal);
-    background-color: var(--background-modifier-hover);
+    color: rgba(55, 53, 47, 0.85);
+    background-color: rgba(55, 53, 47, 0.08);
+}
+
+.theme-dark .expensica-tab:hover {
+    color: rgba(255, 255, 255, 0.85);
+    background-color: rgba(255, 255, 255, 0.06);
 }
 
 .expensica-tab.active {
-    color: var(--text-accent);
-    background-color: var(--background-primary);
+    color: rgb(55, 53, 47);
+    font-weight: 500;
+    background-color: transparent;
+}
+
+.theme-dark .expensica-tab.active {
+    color: rgb(255, 255, 255);
 }
 
 .expensica-tab.active::after {
     content: '';
     position: absolute;
-    bottom: -1px;
+    bottom: -8px;
     left: 0;
     width: 100%;
-    height: 2px;
-    background-color: var(--text-accent);
-    border-radius: 2px 2px 0 0;
-    transition: transform 0.2s ease;
+    height: 3px;
+    background-color: rgb(55, 53, 47);
+    border-radius: 3px 3px 0 0;
+}
+
+.theme-dark .expensica-tab.active::after {
+    background-color: rgb(255, 255, 255);
 }
 
 .expensica-tab:focus {
     outline: none;
-    box-shadow: 0 0 0 2px var(--background-modifier-border);
 }
 
 .expensica-tab:active {
@@ -4682,4 +4732,502 @@ to {
         font-size: 0.9rem !important;
         height: 42px !important;
     }
+}
+
+/* Responsive design for mobile */
+@media screen and (max-width: 768px) {
+  .expensica-header {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: var(--expensica-spacing) var(--expensica-spacing-lg);
+  }
+  
+  .expensica-title-section {
+    margin-bottom: var(--expensica-spacing);
+  }
+  
+  .expensica-actions {
+    flex-direction: column;
+    width: 100%;
+    gap: 8px;
+  }
+  
+  .expensica-date-range-container {
+    width: 100%;
+  }
+  
+  .expensica-date-range-current {
+    width: 100%;
+    justify-content: space-between;
+  }
+  
+  .expensica-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Animations and Transitions */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.expensica-header {
+  animation: fadeIn 0.3s ease;
+}
+
+.expensica-date-range-options {
+  animation: slideInDown 0.2s ease;
+}
+
+/* Button hover effects */
+.expensica-btn:hover svg {
+  opacity: 1;
+}
+
+/* Interactive elements with subtle feedback */
+.expensica-btn:active {
+  transform: scale(0.98);
+}
+
+.expensica-date-range-current:active {
+  transform: scale(0.98);
+}
+
+/* Notion-inspired Spending Heatmap Calendar */
+
+/* Heading typography and styling */
+.expensica-calendar-title {
+  background: var(--background-primary);
+  color: var(--text-normal);
+  padding: 12px 16px;
+  border-radius: 4px;
+  margin: 0 0 24px 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  border: none;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: none;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+.expensica-calendar-title::before {
+  display: none;
+}
+
+.expensica-calendar-title::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background: var(--background-modifier-border);
+}
+
+/* Calendar Container Redesign */
+.expensica-calendar-container {
+  background-color: var(--background-primary);
+  border-radius: 8px;
+  padding: 24px;
+  border: 1px solid var(--background-modifier-border);
+  margin-bottom: 32px;
+  box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px, 
+              rgba(15, 15, 15, 0.05) 0px 2px 4px;
+  transition: box-shadow 0.15s ease;
+}
+
+.expensica-calendar-container:hover {
+  box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px, 
+              rgba(15, 15, 15, 0.08) 0px 4px 6px;
+}
+
+.expensica-calendar-flex-container {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.expensica-calendar-grid-container {
+  flex: 1;
+  min-width: 320px;
+}
+
+/* Notion-like Calendar Header */
+.expensica-calendar-header {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(55, 53, 47, 0.09);
+}
+
+.expensica-calendar-header span {
+  text-align: center;
+  font-size: 12px;
+  color: rgba(55, 53, 47, 0.65);
+  font-weight: 500;
+  padding: 4px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.theme-dark .expensica-calendar-header span {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+/* Calendar Day cells */
+.expensica-calendar-day {
+  aspect-ratio: 1;
+  border-radius: 4px;
+  background-color: var(--background-primary);
+  transition: background-color 0.15s ease;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(55, 53, 47, 0.09);
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
+}
+
+.theme-dark .expensica-calendar-day {
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.expensica-calendar-day:hover {
+  background-color: rgba(55, 53, 47, 0.04);
+  transform: none;
+}
+
+.theme-dark .expensica-calendar-day:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.expensica-calendar-day-number {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text-normal);
+  line-height: 1;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.expensica-calendar-day.today {
+  border: 1px solid var(--interactive-accent);
+  background-color: rgba(var(--interactive-accent-rgb), 0.05);
+}
+
+/* Details container redesign */
+.expensica-calendar-details-container {
+  flex: 1;
+  min-width: 300px;
+  background-color: var(--background-primary);
+  border-radius: 8px;
+  padding: 20px;
+  border: 1px solid rgba(55, 53, 47, 0.09);
+  max-height: 500px;
+  overflow-y: auto;
+  box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px, 
+              rgba(15, 15, 15, 0.05) 0px 2px 4px;
+}
+
+.theme-dark .expensica-calendar-details-container {
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* Calendar Details Title */
+.expensica-calendar-details-title {
+  margin: 0 0 16px 0;
+  font-size: 16px;
+  font-weight: 600;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(55, 53, 47, 0.09);
+  letter-spacing: -0.01em;
+  color: var(--text-normal);
+}
+
+.theme-dark .expensica-calendar-details-title {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* Tooltip Redesign */
+.expensica-calendar-tooltip {
+  background-color: var(--background-primary);
+  border-radius: 4px;
+  padding: 8px 12px;
+  box-shadow: rgba(15, 15, 15, 0.1) 0px 0px 0px 1px, 
+              rgba(15, 15, 15, 0.2) 0px 3px 6px;
+  border: none;
+  max-width: 250px;
+  transition: opacity 0.2s ease;
+}
+
+.expensica-calendar-tooltip .tooltip-title {
+  font-weight: 500;
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.expensica-calendar-tooltip .tooltip-value {
+  font-weight: 600;
+  color: var(--text-normal);
+  font-size: 16px;
+  margin-bottom: 8px;
+}
+
+.expensica-calendar-tooltip .tooltip-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+/* Preserve the heatmap colors but improve the styling */
+.expensica-calendar-day[data-intensity="0"] {
+  background-color: var(--background-primary);
+}
+
+.theme-dark .expensica-calendar-day[data-intensity="0"] {
+  background-color: var(--background-primary);
+}
+
+/* Responsive styles */
+@media screen and (max-width: 768px) {
+  .expensica-calendar-container {
+    padding: 16px;
+  }
+  
+  .expensica-calendar-flex-container {
+    gap: 16px;
+  }
+  
+  .expensica-calendar-title {
+    font-size: 18px;
+    padding: 10px 14px;
+  }
+  
+  .expensica-calendar-day {
+    min-width: 36px;
+    min-height: 36px;
+  }
+  
+  .expensica-calendar-day-number {
+    font-size: 12px;
+  }
+}
+
+/* Notion-like Icon Styling */
+.notion-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(55, 53, 47, 0.65);
+  margin-right: 6px;
+}
+
+.theme-dark .notion-icon {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+/* Calendar Heatmap Legend improvements */
+.expensica-calendar-legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(55, 53, 47, 0.09);
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.theme-dark .expensica-calendar-legend {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.expensica-legend-item {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  color: rgba(55, 53, 47, 0.65);
+}
+
+.theme-dark .expensica-legend-item {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.expensica-legend-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  margin-right: 4px;
+}
+
+/* Week number styling */
+.week-label, .week-number {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  font-size: 11px;
+  color: rgba(55, 53, 47, 0.5);
+  font-weight: 400;
+}
+
+.theme-dark .week-label, 
+.theme-dark .week-number {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Calendar transactions styling improvements */
+.expensica-calendar-transaction-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.expensica-calendar-transaction-item {
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  border-radius: 4px;
+  background: var(--background-primary);
+  border: 1px solid rgba(55, 53, 47, 0.09);
+  transition: background-color 0.15s ease;
+}
+
+.theme-dark .expensica-calendar-transaction-item {
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.expensica-calendar-transaction-item:hover {
+  background-color: rgba(55, 53, 47, 0.03);
+}
+
+.theme-dark .expensica-calendar-transaction-item:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.expensica-calendar-transaction-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  margin-right: 12px;
+  font-size: 16px;
+}
+
+.expensica-calendar-transaction-title {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 4px;
+  color: var(--text-normal);
+}
+
+.expensica-calendar-transaction-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: rgba(55, 53, 47, 0.65);
+}
+
+.theme-dark .expensica-calendar-transaction-meta {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.expensica-calendar-transaction-category {
+  padding: 2px 6px;
+  background-color: rgba(55, 53, 47, 0.06);
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+.theme-dark .expensica-calendar-transaction-category {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+/* Calendar Summary Styling */
+.expensica-calendar-summary {
+  background-color: rgba(55, 53, 47, 0.03);
+  border-radius: 4px;
+  padding: 16px;
+  margin-bottom: 20px;
+  border: 1px solid rgba(55, 53, 47, 0.09);
+}
+
+.theme-dark .expensica-calendar-summary {
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.expensica-calendar-insight {
+  font-size: 13px;
+  color: rgba(55, 53, 47, 0.65);
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.theme-dark .expensica-calendar-insight {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+/* Preserve the heatmap colors but style better */
+
+/* Animation for selected day */
+@keyframes subtle-pulse {
+  0% { box-shadow: 0 0 0 1px var(--interactive-accent); }
+  50% { box-shadow: 0 0 0 3px var(--interactive-accent); }
+  100% { box-shadow: 0 0 0 1px var(--interactive-accent); }
+}
+
+.expensica-calendar-day.selected {
+  animation: subtle-pulse 2s infinite;
+  border: 2px solid var(--interactive-accent);
+  background-color: rgba(var(--interactive-accent-rgb), 0.08);
+}
+
+/* Calendar legend styling */
+.expensica-calendar-svg .legend rect {
+  filter: drop-shadow(0px 2px 3px rgba(0, 0, 0, 0.1));
+}
+
+/* Mobile optimization for the legend */
+@media screen and (max-width: 768px) {
+  .expensica-calendar-svg .legend text {
+    font-size: 10px !important;
+  }
 }

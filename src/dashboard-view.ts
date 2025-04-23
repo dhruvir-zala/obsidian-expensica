@@ -646,26 +646,30 @@ export class ExpensicaDashboardView extends ItemView {
 
     renderHeader(container: HTMLElement) {
         const headerEl = container.createDiv('expensica-header');
-        headerEl.createEl('h1', { text: 'Expensica Dashboard', cls: 'expensica-title' });
+        
+        // Left section - Logo and title
+        const titleSection = headerEl.createDiv('expensica-title-section');
+        const logoTitle = titleSection.createEl('h1', { cls: 'expensica-title' });
+        logoTitle.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expensica-logo-icon"><path d="M12 1v22"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg> Expensica Dashboard';
 
         const actionsEl = headerEl.createDiv('expensica-actions');
 
         // Add date range selector
         this.renderDateRangeSelector(actionsEl);
 
-        // Add expense button
+        // Add expense button with subtle design
         const addExpenseBtn = actionsEl.createEl('button', {
             cls: 'expensica-btn expensica-btn-danger',
         });
         addExpenseBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Add Expense';
 
-        // Add income button
+        // Add income button with subtle design
         const addIncomeBtn = actionsEl.createEl('button', {
             cls: 'expensica-btn expensica-btn-success',
         });
         addIncomeBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Add Income';
 
-        // Add export button
+        // Add export button with subtle design
         const exportBtn = actionsEl.createEl('button', {
             cls: 'expensica-btn expensica-btn-primary',
         });
@@ -687,16 +691,16 @@ export class ExpensicaDashboardView extends ItemView {
         });
     }
 
-    // New method to render the date range selector
+    // New method to render the date range selector with Notion-inspired design
     private renderDateRangeSelector(container: HTMLElement) {
         const dateRangeContainer = container.createDiv('expensica-date-range-container');
 
         // Create the date range selector dropdown
         const dateRangeSelector = dateRangeContainer.createDiv('expensica-date-range-selector');
         
-        // Current selection display
+        // Current selection display with subtle calendar icon
         const currentSelection = dateRangeSelector.createDiv('expensica-date-range-current');
-        currentSelection.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`;
+        currentSelection.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
         
         const dateRangeText = currentSelection.createSpan({ 
             text: this.dateRange.label,
@@ -704,7 +708,7 @@ export class ExpensicaDashboardView extends ItemView {
         });
         
         const dropdownIcon = currentSelection.createSpan({ cls: 'expensica-date-range-icon' });
-        dropdownIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+        dropdownIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
 
         // Dropdown options container
         const optionsContainer = dateRangeSelector.createDiv('expensica-date-range-options');
@@ -770,22 +774,27 @@ export class ExpensicaDashboardView extends ItemView {
                     this.renderDashboard();
                 }
                 
-                // Hide the dropdown
+                // Hide the dropdown and reset icon rotation
                 optionsContainer.addClass('expensica-date-range-hidden');
+                dropdownIcon.style.transform = 'rotate(0deg)';
             });
         });
 
-// Toggle dropdown on click
-currentSelection.addEventListener('click', () => {
-    const isHidden = optionsContainer.hasClass('expensica-date-range-hidden');
-    optionsContainer.toggleClass('expensica-date-range-hidden', !isHidden);
-});
+        // Toggle dropdown on click
+        currentSelection.addEventListener('click', () => {
+            const isHidden = optionsContainer.hasClass('expensica-date-range-hidden');
+            optionsContainer.toggleClass('expensica-date-range-hidden', !isHidden);
+            
+            // Rotate dropdown icon when open/closed
+            dropdownIcon.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+        });
 
         // Close dropdown when clicking outside
         document.addEventListener('click', (event) => {
             const target = event.target as HTMLElement;
             if (!dateRangeSelector.contains(target)) {
                 optionsContainer.addClass('expensica-date-range-hidden');
+                dropdownIcon.style.transform = 'rotate(0deg)';
             }
         });
     }
@@ -1536,7 +1545,18 @@ currentSelection.addEventListener('click', () => {
         const premiumSection = container.createDiv('expensica-section expensica-animate');
         const sectionHeader = premiumSection.createDiv('expensica-section-header');
         const sectionTitle = sectionHeader.createEl('h2', { cls: 'expensica-section-title expensica-calendar-title' });
-        sectionTitle.textContent = 'Spending Heatmap Calendar';
+        
+        // Add calendar icon with Notion-like styling
+        const calendarIcon = document.createElement('span');
+        calendarIcon.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 2V5M16 2V5M3.5 9.09H20.5M21 8.5V17C21 20 19.5 22 16 22H8C4.5 22 3 20 3 17V8.5C3 5.5 4.5 3.5 8 3.5H16C19.5 3.5 21 5.5 21 8.5Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M11.995 13.7H12.005M8.294 13.7H8.304M8.294 16.7H8.304" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M11.995 16.7H12.005M15.695 13.7H15.705M15.695 16.7H15.705" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>`;
+        calendarIcon.className = 'notion-icon';
+        
+        sectionTitle.prepend(calendarIcon);
+        sectionTitle.appendChild(document.createTextNode('Spending Heatmap Calendar'));
 
         // Container for premium visualizations
         const vizContainer = premiumSection.createDiv('expensica-premium-visualizations');
