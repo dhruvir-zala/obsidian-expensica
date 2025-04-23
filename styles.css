@@ -19,8 +19,22 @@
   
   /* Background Colors */
   --expensica-bg-primary: #FFFFFF;
-  --expensica-bg-secondary: #F5F7FA;
-  --expensica-bg-tertiary: #EDF2F7;
+  
+  /* Notion-inspired colors and styling */
+  --notion-text: rgba(55, 53, 47, 0.85);
+  --notion-text-light: rgba(55, 53, 47, 0.65);
+  --notion-text-lighter: rgba(55, 53, 47, 0.45);
+  --notion-border: rgba(55, 53, 47, 0.09);
+  --notion-bg-hover: rgba(55, 53, 47, 0.03);
+  --notion-bg-active: rgba(55, 53, 47, 0.06);
+  
+  /* Dark mode Notion-inspired colors */
+  --notion-dark-text: rgba(255, 255, 255, 0.85);
+  --notion-dark-text-light: rgba(255, 255, 255, 0.65);
+  --notion-dark-text-lighter: rgba(255, 255, 255, 0.45);
+  --notion-dark-border: rgba(255, 255, 255, 0.09);
+  --notion-dark-bg-hover: rgba(255, 255, 255, 0.03);
+  --notion-dark-bg-active: rgba(255, 255, 255, 0.06);
   
   /* Border Colors */
   --expensica-border-primary: rgba(0, 0, 0, 0.2);
@@ -1326,15 +1340,46 @@ to { opacity: 1; transform: translateY(0); }
 
 .expensica-calendar-details-total {
   font-size: 16px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  background-color: var(--background-secondary-alt, #f5f5f5);
+  border-radius: 8px;
+  padding: 14px 16px;
+  box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px, 
+              rgba(15, 15, 15, 0.1) 0px 3px 6px, 
+              rgba(15, 15, 15, 0.2) 0px 9px 24px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.theme-dark .expensica-calendar-details-total {
+  background-color: var(--background-secondary, #2d3039);
+  box-shadow: rgba(0, 0, 0, 0.1) 0px 0px 0px 1px, 
+              rgba(0, 0, 0, 0.2) 0px 3px 6px, 
+              rgba(0, 0, 0, 0.3) 0px 9px 24px;
+}
+
+.expensica-calendar-details-total:hover {
+  transform: translateY(-2px);
+  box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px, 
+              rgba(15, 15, 15, 0.1) 0px 5px 10px, 
+              rgba(15, 15, 15, 0.2) 0px 15px 40px;
+}
+
+.theme-dark .expensica-calendar-details-total:hover {
+  box-shadow: rgba(0, 0, 0, 0.1) 0px 0px 0px 1px, 
+              rgba(0, 0, 0, 0.2) 0px 5px 10px, 
+              rgba(0, 0, 0, 0.3) 0px 15px 40px;
 }
 
 .expensica-calendar-details-amount {
   font-weight: 600;
   font-size: 18px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background-color: rgba(244, 67, 54, 0.1);
+  color: var(--text-error, #e63e3e);
 }
 
 .expensica-calendar-insight {
@@ -1350,30 +1395,79 @@ to { opacity: 1; transform: translateY(0); }
 }
 
 .expensica-category-breakdown {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px dashed var(--background-modifier-border);
+  margin-top: 20px;
+  padding: 16px;
+  background-color: var(--background-secondary-alt, #f5f5f5);
+  border-radius: 8px;
+  box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px, 
+              rgba(15, 15, 15, 0.1) 0px 3px 6px, 
+              rgba(15, 15, 15, 0.2) 0px 9px 24px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.theme-dark .expensica-category-breakdown {
+  background-color: var(--background-secondary, #2d3039);
+  box-shadow: rgba(0, 0, 0, 0.1) 0px 0px 0px 1px, 
+              rgba(0, 0, 0, 0.2) 0px 3px 6px, 
+              rgba(0, 0, 0, 0.3) 0px 9px 24px;
+}
+
+.expensica-category-breakdown:hover {
+  transform: translateY(-2px);
+  box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px, 
+              rgba(15, 15, 15, 0.1) 0px 5px 10px, 
+              rgba(15, 15, 15, 0.2) 0px 15px 40px;
+}
+
+.expensica-breakdown-title-container {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+  gap: 8px;
+}
+
+.expensica-breakdown-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: var(--text-normal);
+  background-color: rgba(55, 53, 47, 0.08);
+  height: 24px;
+  width: 24px;
+  border-radius: 4px;
+}
+
+.theme-dark .expensica-breakdown-icon {
+  background-color: rgba(255, 255, 255, 0.1);
 }
 
 .expensica-breakdown-title {
   font-size: 14px;
   font-weight: 500;
-  margin: 0 0 12px 0;
-  color: var(--text-muted);
+  margin: 0;
+  color: var(--text-normal);
 }
 
 .expensica-breakdown-chart {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .expensica-category-bar {
   position: relative;
-  height: 24px;
-  background-color: var(--background-modifier-border);
-  border-radius: 4px;
+  height: 28px;
+  background-color: var(--background-primary);
+  border-radius: 6px;
   overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+  transition: transform 0.15s ease;
+}
+
+.expensica-category-bar:hover {
+  transform: scale(1.01);
 }
 
 .expensica-bar-fill {
@@ -1382,6 +1476,11 @@ to { opacity: 1; transform: translateY(0); }
   left: 0;
   height: 100%;
   transition: width 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  opacity: 0.85;
+}
+
+.expensica-bar-fill:hover {
+  opacity: 1;
 }
 
 .expensica-bar-label {
@@ -1393,22 +1492,25 @@ to { opacity: 1; transform: translateY(0); }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 10px;
+  padding: 0 12px;
   font-size: 12px;
   z-index: 1;
 }
 
 .expensica-bar-category {
   font-weight: 500;
-  text-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
+  color: var(--text-normal);
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.3);
 }
 
 .expensica-bar-amount {
   font-weight: 600;
   font-size: 11px;
-  background-color: rgba(255, 255, 255, 0.2);
-  padding: 2px 6px;
-  border-radius: 10px;
+  background-color: rgba(255, 255, 255, 0.25);
+  padding: 3px 8px;
+  border-radius: 4px;
+  backdrop-filter: blur(2px);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .expensica-transactions-header {
@@ -2160,18 +2262,29 @@ to {
 
 /* View All Transactions button */
 .expensica-view-all-btn {
-    background: none;
+    background-color: #F7FAFC;
     border: none;
-    color: var(--interactive-accent);
+    color: #4A5568;
     cursor: pointer;
-    font-size: 0.85em;
+    font-size: 14px;
+    font-weight: 400;
     display: flex;
     align-items: center;
     gap: 4px;
-    padding: 4px 8px;
+    padding: 6px 12px;
     border-radius: 4px;
-    transition: background-color 0.2s;
+    transition: background-color 0.2s ease-in-out;
     margin-left: auto;
+}
+
+/* Dark mode support for View All button */
+.theme-dark .expensica-view-all-btn {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.theme-dark .expensica-view-all-btn:hover {
+    background-color: rgba(255, 255, 255, 0.12);
 }
 
 /* Section header styling */
@@ -2183,8 +2296,11 @@ to {
 }
 
 .expensica-view-all-btn:hover {
-    background-color: var(--interactive-accent-hover);
-    color: var(--text-on-accent);
+    background-color: #EDF2F7;
+}
+
+.expensica-view-all-btn svg {
+    margin-left: 4px;
 }
 
 /* Transactions View Styles */
@@ -2774,30 +2890,35 @@ to {
 }
 
 .expensica-transactions-title {
-    background: var(--background-secondary);
+    background: var(--background-primary);
     color: var(--text-normal);
-    padding: 16px 24px;
-    border-radius: var(--expensica-radius);
-    margin: 0;
-    font-size: 1.4em;
+    padding: 12px 16px;
+    border-radius: 4px;
+    margin: 0 0 24px 0;
+    font-size: 20px;
     font-weight: 600;
-    letter-spacing: -0.5px;
-    border: 1px solid var(--background-modifier-border);
+    letter-spacing: -0.02em;
+    border: none;
     position: relative;
     display: flex;
     align-items: center;
     gap: 12px;
+    box-shadow: none;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
 }
 
 .expensica-transactions-title::before {
+    display: none;
+}
+
+.expensica-transactions-title::after {
     content: '';
     position: absolute;
+    bottom: -8px;
     left: 0;
-    top: 0;
-    bottom: 0;
-    width: 4px;
-    background: var(--expensica-primary);
-    border-radius: 2px 0 0 2px;
+    width: 100%;
+    height: 1px;
+    background: var(--background-modifier-border);
 }
 
 .expensica-section-header {
@@ -5230,4 +5351,427 @@ to {
   .expensica-calendar-svg .legend text {
     font-size: 10px !important;
   }
+}
+
+/* Notion-inspired Calendar Navigation */
+.expensica-calendar-nav {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-bottom: 20px;
+  gap: 8px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+  position: relative;
+}
+
+.expensica-calendar-nav-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.expensica-calendar-nav button {
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 15px;
+  color: var(--notion-text-light);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.1s ease, color 0.1s ease, transform 0.1s ease;
+  height: 34px;
+  min-width: 34px;
+  user-select: none;
+}
+
+.theme-dark .expensica-calendar-nav button {
+  color: var(--notion-dark-text-light);
+}
+
+.expensica-calendar-nav button:hover {
+  background-color: var(--notion-bg-hover);
+  color: var(--notion-text);
+}
+
+.theme-dark .expensica-calendar-nav button:hover {
+  background-color: var(--notion-dark-bg-hover);
+  color: var(--notion-dark-text);
+}
+
+.expensica-calendar-nav button:active {
+  background-color: var(--notion-bg-active);
+  transform: scale(0.97);
+}
+
+.theme-dark .expensica-calendar-nav button:active {
+  background-color: var(--notion-dark-bg-active);
+}
+
+.expensica-calendar-nav button.today {
+  font-weight: 500;
+  margin: 0 3px;
+  color: var(--notion-text);
+  font-size: 15px;
+}
+
+.theme-dark .expensica-calendar-nav button.today {
+  color: var(--notion-dark-text);
+}
+
+.expensica-calendar-nav button.today:hover {
+  background-color: var(--notion-bg-hover);
+}
+
+.theme-dark .expensica-calendar-nav button.today:hover {
+  background-color: var(--notion-dark-bg-hover);
+}
+
+/* Month/date display in navigation */
+.expensica-calendar-month-display {
+  margin-left: 12px;
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--notion-text);
+  user-select: none;
+}
+
+.theme-dark .expensica-calendar-month-display {
+  color: var(--notion-dark-text);
+}
+
+/* Adjust the old navigation styles to avoid conflicts */
+.expensica-calendar-nav-button {
+  display: none; /* Hide the old implementation */
+}
+
+/* Add a subtle separator */
+.expensica-calendar-nav::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -10px;
+  height: 1px;
+  background-color: var(--notion-border);
+  opacity: 0.5;
+}
+
+.theme-dark .expensica-calendar-nav::after {
+  background-color: var(--notion-dark-border);
+}
+
+/* Mobile optimizations */
+@media screen and (max-width: 768px) {
+  .expensica-calendar-nav {
+    margin-bottom: 16px;
+  }
+  
+  .expensica-calendar-nav button {
+    height: 38px;
+    min-width: 38px;
+    padding: 6px 10px;
+    font-size: 16px;
+  }
+  
+  .expensica-calendar-month-display {
+    font-size: 16px;
+  }
+}
+
+/* Remove border below calendar navigation */
+.expensica-calendar-nav::after {
+  display: none !important;
+}
+
+.expensica-calendar-details-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.expensica-calendar-details-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: var(--text-normal);
+  background-color: rgba(55, 53, 47, 0.08);
+  height: 24px;
+  width: 24px;
+  border-radius: 4px;
+  margin-right: 4px;
+}
+
+.theme-dark .expensica-calendar-details-icon {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.expensica-calendar-details-text {
+  font-weight: 500;
+  color: var(--text-normal);
+}
+
+/* Notion-inspired Budget Progress Redesign */
+.notion-budget-progress-container {
+    background: var(--background-primary);
+    border-radius: 8px;
+    padding: 24px;
+    border: 1px solid var(--background-modifier-border);
+    margin-bottom: 24px;
+    transition: all 0.2s ease;
+}
+
+.notion-budget-progress-container:hover {
+    background-color: var(--background-modifier-hover);
+}
+
+.notion-budget-progress-container h3 {
+    font-size: 14px;
+    font-weight: 500;
+    margin: 0 0 16px;
+    color: var(--text-normal);
+    letter-spacing: 0.03em;
+}
+
+.notion-budget-progress {
+    position: relative;
+    margin-top: 20px;
+}
+
+.notion-budget-bar {
+    height: 8px;
+    background: var(--background-modifier-border);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 12px;
+}
+
+.notion-budget-fill {
+    height: 100%;
+    background: var(--text-accent);
+    border-radius: 4px;
+    transition: width 0.5s ease;
+}
+
+.expensica-status-warning .notion-budget-fill {
+    background: #F7A429;
+}
+
+.expensica-status-danger .notion-budget-fill {
+    background: #E03E3E;
+}
+
+.notion-budget-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+
+.notion-budget-percentage {
+    position: absolute;
+    right: 0;
+    top: -22px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-normal);
+}
+
+.expensica-status-warning .notion-budget-percentage {
+    color: #F7A429;
+}
+
+.expensica-status-danger .notion-budget-percentage {
+    color: #E03E3E;
+}
+
+/* Notion-inspired Budget Items Redesign */
+.notion-budget-items {
+    background: var(--background-primary);
+    border-radius: 8px;
+    border: 1px solid var(--background-modifier-border);
+    overflow: hidden;
+    transition: all 0.2s ease;
+    margin-bottom: 24px;
+}
+
+.notion-budget-items:hover {
+    background-color: var(--background-modifier-hover);
+}
+
+.notion-budget-header {
+    display: grid;
+    grid-template-columns: 25% 15% 15% 15% 20% 10%;
+    padding: 16px;
+    background: var(--background-primary);
+    border-bottom: 1px solid var(--background-modifier-border);
+    font-weight: 500;
+    font-size: 12px;
+    color: var(--text-muted);
+    letter-spacing: 0.03em;
+}
+
+.notion-budget-item {
+    display: grid;
+    grid-template-columns: 25% 15% 15% 15% 20% 10%;
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(55, 53, 47, 0.09);
+    transition: background 0.2s ease;
+    position: relative;
+}
+
+.notion-budget-item:last-child {
+    border-bottom: none;
+}
+
+.notion-budget-item:hover {
+    background: rgba(55, 53, 47, 0.03);
+}
+
+.notion-category-container {
+    display: flex;
+    align-items: center;
+}
+
+.notion-category-emoji {
+    margin-right: 8px;
+    font-size: 16px;
+}
+
+.notion-category-details {
+    display: flex;
+    flex-direction: column;
+}
+
+.notion-category-name {
+    font-weight: 500;
+    color: var(--text-normal);
+    margin-bottom: 2px;
+}
+
+.notion-budget-period {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-transform: capitalize;
+}
+
+.notion-chart-title-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    padding: 16px 16px 0 16px;
+}
+
+.notion-chart-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-normal);
+    letter-spacing: 0.03em;
+    margin: 0;
+}
+
+.notion-chart-subtitle {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: normal;
+}
+
+/* Notion-inspired action buttons */
+.notion-budget-action {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    color: var(--text-muted);
+    transition: all 0.2s ease;
+    border-radius: 3px;
+    opacity: 0.7;
+    margin-right: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+}
+
+.notion-budget-action:hover {
+    background-color: rgba(55, 53, 47, 0.08);
+    opacity: 1;
+}
+
+.notion-budget-edit:hover {
+    color: #0B6E99;
+}
+
+.notion-budget-delete:hover {
+    color: #E03E3E;
+}
+
+.notion-budget-action svg {
+    width: 16px;
+    height: 16px;
+}
+
+.notion-budget-items-wrapper {
+    max-height: 400px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 4px 0;
+}
+
+.notion-budget-items-wrapper::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.notion-budget-items-wrapper::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.notion-budget-items-wrapper::-webkit-scrollbar-thumb {
+    background-color: rgba(55, 53, 47, 0.2);
+    border-radius: 3px;
+}
+
+/* Restore the Add Budget styles we need */
+.notion-add-budget-container {
+    display: flex;
+    justify-content: center;
+    margin-top: 16px;
+}
+
+.notion-add-budget-btn {
+    background-color: var(--background-secondary);
+    color: var(--text-normal);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.notion-add-budget-btn:hover {
+    background-color: var(--background-modifier-hover);
+}
+
+.notion-add-budget-btn svg {
+    width: 16px;
+    height: 16px;
+    margin-right: 6px;
+}
+
+/* Subtle animations and transitions */
+.notion-budget-progress {
+    transition: all 0.2s ease;
+}
+
+.notion-budget-fill {
+    transition: width 0.4s ease-in-out;
 }

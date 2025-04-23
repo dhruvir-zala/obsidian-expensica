@@ -678,7 +678,21 @@ export class CalendarHeatmap {
         
         // Display total expenses
         const totalEl = summaryContainer.createDiv('expensica-calendar-details-total');
-        totalEl.createSpan({ text: 'Total Expenses: ' });
+        
+        // Left side with label and icon
+        const labelContainer = totalEl.createDiv('expensica-calendar-details-label');
+        // Add currency icon (similar to Notion's approach with icons)
+        const iconSpan = labelContainer.createSpan({
+            cls: 'expensica-calendar-details-icon'
+        });
+        iconSpan.innerHTML = '💰';
+        
+        labelContainer.createSpan({
+            text: 'Total Expenses',
+            cls: 'expensica-calendar-details-text'
+        });
+        
+        // Right side with amount
         totalEl.createSpan({
             text: formatCurrency(totalExpenses, this.plugin.settings.defaultCurrency),
             cls: 'expensica-calendar-details-amount expensica-expense'
@@ -746,7 +760,21 @@ export class CalendarHeatmap {
                 
                 if (categories.size > 1) {
                     const breakdownEl = summaryContainer.createDiv('expensica-category-breakdown');
-                    breakdownEl.createEl('h4', { text: 'Category Breakdown', cls: 'expensica-breakdown-title' });
+                    
+                    // Create title container with icon
+                    const titleContainer = breakdownEl.createDiv('expensica-breakdown-title-container');
+                    
+                    // Add icon
+                    const iconSpan = titleContainer.createSpan({
+                        cls: 'expensica-breakdown-icon'
+                    });
+                    iconSpan.innerHTML = '📊';
+                    
+                    // Add title text
+                    titleContainer.createEl('h4', { 
+                        text: 'Category Breakdown', 
+                        cls: 'expensica-breakdown-title' 
+                    });
                     
                     const breakdownChart = breakdownEl.createDiv('expensica-breakdown-chart');
                     

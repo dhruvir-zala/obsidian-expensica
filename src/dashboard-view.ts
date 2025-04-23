@@ -482,18 +482,18 @@ export class ExpensicaDashboardView extends ItemView {
         remainingCard.createEl('div', { text: '💵', cls: 'expensica-card-bg-icon' });
         
         // Overall budget progress
-        const progressContainer = container.createDiv('expensica-budget-progress-container expensica-animate expensica-animate-delay-3');
+        const progressContainer = container.createDiv('notion-budget-progress-container expensica-animate expensica-animate-delay-3');
         progressContainer.innerHTML = `
             <h3>Overall Budget Progress</h3>
-            <div class="expensica-budget-progress">
-                <div class="expensica-budget-bar">
-                    <div class="expensica-budget-fill" style="width: ${spentPercentage}%;"></div>
+            <div class="notion-budget-progress">
+                <div class="notion-budget-bar">
+                    <div class="notion-budget-fill" style="width: ${spentPercentage}%;"></div>
                 </div>
-                <div class="expensica-budget-labels">
+                <div class="notion-budget-percentage">${Math.round(spentPercentage)}%</div>
+                <div class="notion-budget-labels">
                     <span>${formatCurrency(totalSpent, this.plugin.settings.defaultCurrency)}</span>
                     <span>${formatCurrency(totalBudgeted, this.plugin.settings.defaultCurrency)}</span>
                 </div>
-                <div class="expensica-budget-percentage">${Math.round(spentPercentage)}%</div>
             </div>
         `;
     }
@@ -508,22 +508,20 @@ export class ExpensicaDashboardView extends ItemView {
         }
         
         // Create the list container with chart container styling
-        const listContainer = container.createDiv('expensica-budget-items expensica-chart-container');
+        const listContainer = container.createDiv('notion-budget-items expensica-animate');
         
         // Create header with chart header styling
-        const headerSection = listContainer.createDiv('expensica-chart-header');
+        const headerSection = listContainer.createDiv('notion-chart-title-container');
         headerSection.innerHTML = `
-            <div class="expensica-chart-title-container">
-                <h3 class="expensica-chart-title">Budget Details</h3>
-                <span class="expensica-chart-subtitle">${budgets.length} active ${budgets.length === 1 ? 'budget' : 'budgets'}</span>
-            </div>
+            <h3 class="notion-chart-title">Budget Details</h3>
+            <span class="notion-chart-subtitle">${budgets.length} active ${budgets.length === 1 ? 'budget' : 'budgets'}</span>
         `;
         
         // Create the budget list table
         const budgetListTable = listContainer.createDiv('expensica-budget-list-table');
         
         // Create header
-        const header = budgetListTable.createDiv('expensica-budget-header');
+        const header = budgetListTable.createDiv('notion-budget-header');
         header.innerHTML = `
             <div class="expensica-budget-col-category">Category</div>
             <div class="expensica-budget-col-amount">Budget</div>
@@ -559,16 +557,16 @@ export class ExpensicaDashboardView extends ItemView {
             }
             
             // Create the budget item with animation delay based on index
-            const budgetItem = budgetItemsWrapper.createDiv(`expensica-budget-item ${statusClass} expensica-animate expensica-animate-delay-${Math.min(3, Math.floor(index / 2))}`);
+            const budgetItem = budgetItemsWrapper.createDiv(`notion-budget-item ${statusClass} expensica-animate expensica-animate-delay-${Math.min(3, Math.floor(index / 2))}`);
             
             // Category info
             const categoryCol = budgetItem.createDiv('expensica-budget-col-category');
             categoryCol.innerHTML = `
-                <div class="expensica-category-container">
-                    <span class="expensica-category-emoji">${category.emoji}</span>
-                    <div class="expensica-category-details">
-                        <span class="expensica-category-name">${category.name}</span>
-                        <span class="expensica-budget-period">${budget.period}</span>
+                <div class="notion-category-container">
+                    <span class="notion-category-emoji">${category.emoji}</span>
+                    <div class="notion-category-details">
+                        <span class="notion-category-name">${category.name}</span>
+                        <span class="notion-budget-period">${budget.period}</span>
                     </div>
                 </div>
             `;
@@ -590,12 +588,12 @@ export class ExpensicaDashboardView extends ItemView {
             
             // Progress bar
             const progressCol = budgetItem.createDiv('expensica-budget-col-progress');
-            const progressBar = progressCol.createDiv('expensica-budget-progress');
+            const progressBar = progressCol.createDiv('notion-budget-progress');
             progressBar.innerHTML = `
-                <div class="expensica-budget-bar">
-                    <div class="expensica-budget-fill" style="width: ${status.percentage}%;"></div>
+                <div class="notion-budget-bar">
+                    <div class="notion-budget-fill" style="width: ${status.percentage}%;"></div>
                 </div>
-                <div class="expensica-budget-percentage">${Math.round(status.percentage)}%</div>
+                <div class="notion-budget-percentage">${Math.round(status.percentage)}%</div>
             `;
             
             // Actions column
@@ -603,7 +601,7 @@ export class ExpensicaDashboardView extends ItemView {
             
             // Edit button
             const editBtn = actionsCol.createEl('button', {
-                cls: 'expensica-budget-action expensica-budget-edit',
+                cls: 'notion-budget-action notion-budget-edit',
                 attr: {
                     'aria-label': 'Edit budget',
                     'title': 'Edit budget'
@@ -613,7 +611,7 @@ export class ExpensicaDashboardView extends ItemView {
             
             // Delete button
             const deleteBtn = actionsCol.createEl('button', {
-                cls: 'expensica-budget-action expensica-budget-delete',
+                cls: 'notion-budget-action notion-budget-delete',
                 attr: {
                     'aria-label': 'Delete budget',
                     'title': 'Delete budget'
@@ -642,6 +640,8 @@ export class ExpensicaDashboardView extends ItemView {
                 modal.open();
             });
         });
+
+        // We're not adding the 'Add Budget' button here since it already exists in renderBudgetTab
     }
 
     renderHeader(container: HTMLElement) {
@@ -1375,7 +1375,19 @@ export class ExpensicaDashboardView extends ItemView {
         // Section header
         const sectionHeader = transactionsSection.createDiv('expensica-section-header');
         const sectionTitle = sectionHeader.createEl('h2', { cls: 'expensica-section-title expensica-transactions-title' });
-        sectionTitle.textContent = 'Recent Transactions';
+        
+        // Add transaction icon with Notion-like styling (similar to calendar icon in Spending Heatmap)
+        const transactionIcon = document.createElement('span');
+        transactionIcon.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M19.3 7.92001H4.7C4.31 7.92001 4 7.61001 4 7.22001C4 6.83001 4.31 6.52001 4.7 6.52001H19.3C19.69 6.52001 20 6.83001 20 7.22001C20 7.61001 19.69 7.92001 19.3 7.92001Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M17.3 11.92H6.7C6.31 11.92 6 11.61 6 11.22C6 10.83 6.31 10.52 6.7 10.52H17.3C17.69 10.52 18 10.83 18 11.22C18 11.61 17.69 11.92 17.3 11.92Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M15.3 15.92H8.7C8.31 15.92 8 15.61 8 15.22C8 14.83 8.31 14.52 8.7 14.52H15.3C15.69 14.52 16 14.83 16 15.22C16 15.61 15.69 15.92 15.3 15.92Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M13.3 19.92H10.7C10.31 19.92 10 19.61 10 19.22C10 18.83 10.31 18.52 10.7 18.52H13.3C13.69 18.52 14 18.83 14 19.22C14 19.61 13.69 19.92 13.3 19.92Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>`;
+        transactionIcon.className = 'notion-icon';
+        
+        sectionTitle.prepend(transactionIcon);
+        sectionTitle.appendChild(document.createTextNode('Recent Transactions'));
         
         // Add "View All" button
         const viewAllBtn = sectionHeader.createEl('button', { 
