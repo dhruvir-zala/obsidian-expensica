@@ -34,20 +34,46 @@ export enum TransactionType {
     symbol: string; // Currency symbol (e.g. $, €)
   }
   
-  export interface Transaction {
-    id: string;
-    date: string; // ISO date string
-    type: TransactionType;
-    amount: number;
+export interface Transaction {
+  id: string;
+  date: string; // ISO date string
+  type: TransactionType;
+  amount: number;
     description: string;
     category: string; // Category ID
-    notes?: string;
-  }
+  notes?: string;
+}
+
+let hasWarnedAboutIdFallback = false;
   
-  // Helper function to generate a unique ID
-  export function generateId(): string {
-    return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+// Helper function to generate a unique ID
+export function generateId(): string {
+  const now = new Date();
+  const datePart = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, '0'),
+      String(now.getDate()).padStart(2, '0')
+    ].join('');
+  const timePart = [
+    String(now.getHours()).padStart(2, '0'),
+    String(now.getMinutes()).padStart(2, '0'),
+    String(now.getSeconds()).padStart(2, '0')
+  ].join('');
+  const randomPart = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID().replace(/-/g, '').slice(0, 8)
+    : fallbackRandomIdPart();
+
+  return `${datePart}-${timePart}-${randomPart}`;
+}
+
+function fallbackRandomIdPart(): string {
+  if (!hasWarnedAboutIdFallback) {
+    console.warn('Expensica: crypto.randomUUID() unavailable, using fallback transaction ID generation.');
+    hasWarnedAboutIdFallback = true;
   }
+
+  return Math.random().toString(36).slice(2, 10).padEnd(8, '0');
+}
   
   // Helper function to format a date
   export function formatDate(date: Date): string {
