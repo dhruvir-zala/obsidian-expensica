@@ -1,4 +1,4 @@
-import { Transaction, TransactionType, formatCurrency, ColorScheme } from '../models';
+import { Transaction, TransactionType, formatCurrency, ColorScheme, parseLocalDate } from '../models';
 import ExpensicaPlugin from '../../main';
 import * as d3 from 'd3';
 
@@ -110,7 +110,7 @@ export class CalendarHeatmap {
             
             // Filter transactions for this date
             const dayTransactions = this.transactions.filter(t => {
-                const tDate = new Date(t.date);
+                const tDate = parseLocalDate(t.date);
                 return tDate.getFullYear() === year && 
                        tDate.getMonth() === month && 
                        tDate.getDate() === day;

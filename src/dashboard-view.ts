@@ -4,7 +4,7 @@ import {
 import Chart from 'chart.js/auto';
 import { 
     Transaction, Category, TransactionType, CategoryType, Currency, ColorScheme,
-    formatCurrency, formatDate, getMonthName, getYear, generateId, TransactionAggregator,
+    formatCurrency, formatDate, parseLocalDate, getMonthName, getYear, generateId, TransactionAggregator,
     Budget, BudgetPeriod, calculateBudgetStatus, getCurrencyByCode
 } from './models';
 import ExpensicaPlugin from '../main';
@@ -226,7 +226,7 @@ export class ExpensicaDashboardView extends ItemView {
         
         // Filter transactions based on the date range
         this.transactions = allTransactions.filter(transaction => {
-            const transactionDate = new Date(transaction.date);
+            const transactionDate = parseLocalDate(transaction.date);
             return transactionDate >= this.dateRange.startDate && 
                    transactionDate <= this.dateRange.endDate;
         });
@@ -1428,7 +1428,7 @@ export class ExpensicaDashboardView extends ItemView {
         this.transactions
             .filter(t => t.type === TransactionType.EXPENSE)
             .forEach(transaction => {
-                const date = new Date(transaction.date);
+                const date = parseLocalDate(transaction.date);
                 const weekNumber = getWeekNumber(date);
                 const weekLabel = `Week ${weekNumber}`;
                 
@@ -1822,7 +1822,7 @@ export class ExpensicaDashboardView extends ItemView {
                 const metaEl = detailsEl.createDiv('expensica-transaction-meta');
 
                 // Format date for display
-                const date = new Date(transaction.date);
+                const date = parseLocalDate(transaction.date);
                 const formattedDate = date.toLocaleDateString('en-US', {
                     day: 'numeric',
                     month: 'short'

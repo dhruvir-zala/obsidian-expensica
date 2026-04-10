@@ -56,6 +56,12 @@ export enum TransactionType {
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   }
+
+  // Parse a YYYY-MM-DD string as a local calendar date instead of UTC.
+  export function parseLocalDate(dateString: string): Date {
+    const [year, month, day] = dateString.substring(0, 10).split('-').map(Number);
+    return new Date(year, month - 1, day);
+  }
   
   // Common world currencies
   export const COMMON_CURRENCIES: Currency[] = [
@@ -355,8 +361,8 @@ export enum TransactionType {
     const periodTransactions = transactions.filter(t => 
       t.category === budget.categoryId && 
       t.type === TransactionType.EXPENSE &&
-      new Date(t.date) >= startDate &&
-      new Date(t.date) <= endDate
+      parseLocalDate(t.date) >= startDate &&
+      parseLocalDate(t.date) <= endDate
     );
     
     // Calculate how much was spent
