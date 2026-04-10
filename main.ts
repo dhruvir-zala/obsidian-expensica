@@ -8,6 +8,7 @@ import {
     TransactionType,
     generateId,
     formatDate,
+    parseLocalDate,
     Category,
     CategoryType,
     Currency,
@@ -547,7 +548,7 @@ export default class ExpensicaPlugin extends Plugin {
     // Get transactions for a specific month
     getTransactionsForMonth(year: number, month: number): Transaction[] {
         return this.transactionsData.transactions.filter(transaction => {
-            const date = new Date(transaction.date);
+            const date = parseLocalDate(transaction.date);
             return date.getFullYear() === year && date.getMonth() === month;
         });
     }
@@ -675,12 +676,12 @@ export default class ExpensicaPlugin extends Plugin {
             
             // Filter for different time periods
             const todaysTransactions = allTransactions.filter(transaction => {
-                const transactionDate = new Date(transaction.date);
+                const transactionDate = parseLocalDate(transaction.date);
                 return transactionDate >= todayStart && transactionDate <= todayEnd;
             });
             
             const yesterdayTransactions = allTransactions.filter(transaction => {
-                const transactionDate = new Date(transaction.date);
+                const transactionDate = parseLocalDate(transaction.date);
                 return transactionDate >= yesterdayStart && transactionDate <= yesterdayEnd;
             });
             
@@ -834,7 +835,7 @@ export default class ExpensicaPlugin extends Plugin {
                 
                 // Filter transactions for the selected date
                 const dateTransactions = allTransactions.filter(transaction => {
-                    const transactionDate = new Date(transaction.date);
+                    const transactionDate = parseLocalDate(transaction.date);
                     return transactionDate >= dateStart && transactionDate <= dateEnd;
                 });
                 
@@ -1929,7 +1930,7 @@ class DatePickerModal extends Modal {
         
         // Set default value to today
         const today = new Date();
-        dateInput.value = today.toISOString().split('T')[0];
+        dateInput.value = formatDate(today);
         
         // Create submit button
         const submitButton = contentEl.createEl('button', {
@@ -1939,7 +1940,7 @@ class DatePickerModal extends Modal {
         
         // Handle submit
         submitButton.addEventListener('click', () => {
-            const selectedDate = new Date(dateInput.value);
+            const selectedDate = parseLocalDate(dateInput.value);
             this.onSelect(selectedDate);
             this.close();
         });

@@ -1,6 +1,6 @@
 import { App, Modal, Setting, Notice } from 'obsidian';
 import { ExportOptions, ExportService } from './export-service';
-import { Category, CategoryType } from './models';
+import { Category, CategoryType, formatDate } from './models';
 import ExpensicaPlugin from '../main';
 
 export class ExportModal extends Modal {
@@ -14,7 +14,7 @@ export class ExportModal extends Modal {
     
     // Generate default filename based on date
     const today = new Date();
-    const formattedDate = today.toISOString().split('T')[0]; // YYYY-MM-DD
+    const formattedDate = formatDate(today);
     
     // Initialize with default export options
     this.exportOptions = {

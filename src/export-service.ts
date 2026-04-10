@@ -1,4 +1,4 @@
-import { Transaction, TransactionType, Category } from './models';
+import { Transaction, TransactionType, Category, parseLocalDate } from './models';
 
 // Import jsPDF dynamically for Obsidian compatibility
 let jsPDF: any;
@@ -52,14 +52,14 @@ export class ExportService {
     return transactions.filter(transaction => {
       // Filter by date range
       if (options.dateFrom) {
-        const fromDate = new Date(options.dateFrom);
-        const transactionDate = new Date(transaction.date);
+        const fromDate = parseLocalDate(options.dateFrom);
+        const transactionDate = parseLocalDate(transaction.date);
         if (transactionDate < fromDate) return false;
       }
       
       if (options.dateTo) {
-        const toDate = new Date(options.dateTo);
-        const transactionDate = new Date(transaction.date);
+        const toDate = parseLocalDate(options.dateTo);
+        const transactionDate = parseLocalDate(transaction.date);
         if (transactionDate > toDate) return false;
       }
       
@@ -146,7 +146,7 @@ export class ExportService {
       
       // Group transactions by month
       const groupedTransactions = transactions.reduce((groups, transaction) => {
-        const date = new Date(transaction.date);
+        const date = parseLocalDate(transaction.date);
         const monthKey = `${date.getFullYear()}-${date.getMonth() + 1}`;
         if (!groups[monthKey]) {
           groups[monthKey] = [];
@@ -178,7 +178,7 @@ export class ExportService {
         const tableData = monthTransactions.map(transaction => {
           const category = categories.find(c => c.id === transaction.category);
           return [
-            new Date(transaction.date).toLocaleDateString('en-US', {
+            parseLocalDate(transaction.date).toLocaleDateString('en-US', {
               month: 'short',
               day: 'numeric'
             }),

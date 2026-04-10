@@ -5,6 +5,7 @@ import {
     TransactionAggregator,
     formatCurrency,
     formatDate,
+    parseLocalDate,
     CategoryType,
     Category,
     getMonthYearString,
@@ -300,7 +301,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         
         // Filter transactions based on the date range
         this.filteredTransactions = this.transactions.filter(transaction => {
-            const transactionDate = new Date(transaction.date);
+            const transactionDate = parseLocalDate(transaction.date);
             return transactionDate >= this.dateRange.startDate && 
                    transactionDate <= this.dateRange.endDate;
         });
@@ -375,7 +376,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
             const metaEl = detailsEl.createDiv('expensica-transaction-meta');
 
             // Format date for display
-            const date = new Date(transaction.date);
+            const date = parseLocalDate(transaction.date);
             const formattedDate = date.toLocaleDateString('en-US', {
                 day: 'numeric',
                 month: 'short',
@@ -767,7 +768,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
             const metaEl = detailsEl.createDiv('expensica-transaction-meta');
 
             // Format date for display
-            const date = new Date(transaction.date);
+            const date = parseLocalDate(transaction.date);
             const formattedDate = date.toLocaleDateString('en-US', {
                 day: 'numeric',
                 month: 'short',
