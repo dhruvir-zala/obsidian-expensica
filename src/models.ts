@@ -62,6 +62,20 @@ export enum TransactionType {
     const [year, month, day] = dateString.substring(0, 10).split('-').map(Number);
     return new Date(year, month - 1, day);
   }
+
+  // Deterministic category color shared by dashboard and calendar views.
+  export function getCategoryColor(categoryName: string): string {
+    return `hsl(${stringToHue(categoryName)}, 70%, 60%)`;
+  }
+
+  export function stringToHue(str: string): number {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+
+    return ((hash % 360) + 360) % 360;
+  }
   
   // Common world currencies
   export const COMMON_CURRENCIES: Currency[] = [
