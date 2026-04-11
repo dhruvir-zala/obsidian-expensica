@@ -5,7 +5,7 @@ import Chart from 'chart.js/auto';
 import { 
     Transaction, Category, TransactionType, CategoryType, Currency, ColorScheme,
     formatCurrency, formatDate, parseLocalDate, getMonthName, getYear, generateId, TransactionAggregator,
-    Budget, BudgetPeriod, calculateBudgetStatus, getCurrencyByCode
+    Budget, BudgetPeriod, calculateBudgetStatus, getCurrencyByCode, getCategoryColor
 } from './models';
 import ExpensicaPlugin from '../main';
 import { PremiumVisualizations } from './dashboard-integration';
@@ -69,6 +69,8 @@ export class ExpensicaDashboardView extends ItemView {
 
     // Current tab
     currentTab: DashboardTab = DashboardTab.OVERVIEW;
+    private themeObserver: MutationObserver | null = null;
+    private themeRefreshTimeout: number | null = null;
 
     constructor(leaf: WorkspaceLeaf, plugin: ExpensicaPlugin) {
         super(leaf);
@@ -99,6 +101,8 @@ export class ExpensicaDashboardView extends ItemView {
 
         // Add resize event listener
         window.addEventListener('resize', this.handleResize.bind(this));
+
+        this.setupThemeObserver();
     }
 
     async onClose() {
@@ -117,6 +121,16 @@ export class ExpensicaDashboardView extends ItemView {
 
         // Remove resize event listener
         window.removeEventListener('resize', this.handleResize.bind(this));
+
+        if (this.themeObserver) {
+            this.themeObserver.disconnect();
+            this.themeObserver = null;
+        }
+
+        if (this.themeRefreshTimeout !== null) {
+            window.clearTimeout(this.themeRefreshTimeout);
+            this.themeRefreshTimeout = null;
+        }
     }
 
     // Handler for window resize events
@@ -1335,8 +1349,11 @@ export class ExpensicaDashboardView extends ItemView {
             return;
         }
 
-        // Generate colors for each category
-        const colors = this.generateColors(categories.length);
+        // Match the calendar category breakdown colors by deriving color from the plain category name.
+        const colors = categories.map(categoryLabel => {
+            const category = this.plugin.settings.categories.find(c => `${c.emoji} ${c.name}` === categoryLabel);
+            return getCategoryColor(category ? category.name : categoryLabel);
+        });
 
         // Create the chart
         this.expensesChart = new Chart(canvas, {
@@ -1446,6 +1463,9 @@ export class ExpensicaDashboardView extends ItemView {
         });
         
         const amounts = weeks.map(week => expensesByWeek[week]);
+        const expenseColor = this.getThemeColor('--text-error', 'rgb(212, 76, 71)');
+        const expenseFillColor = this.getThemeColorWithAlpha('--text-error', 'rgb(212, 76, 71)', 0.7);
+        const expenseHoverColor = this.getThemeColorWithAlpha('--text-error', 'rgb(212, 76, 71)', 0.9);
 
         // Create the chart
         this.expensesChart = new Chart(canvas, {
@@ -1455,11 +1475,11 @@ export class ExpensicaDashboardView extends ItemView {
                 datasets: [{
                     label: 'Expenses',
                     data: amounts,
-                    backgroundColor: 'rgba(244, 67, 54, 0.7)',
-                    borderColor: 'rgba(244, 67, 54, 1)',
+                    backgroundColor: expenseFillColor,
+                    borderColor: expenseColor,
                     borderWidth: 1,
                     borderRadius: 4,
-                    hoverBackgroundColor: 'rgba(244, 67, 54, 0.9)'
+                    hoverBackgroundColor: expenseHoverColor
                 }]
             },
             options: {
@@ -1538,6 +1558,8 @@ export class ExpensicaDashboardView extends ItemView {
         // Prepare data for chart
         const months = monthsData.map(m => m.label);
         const expenses = monthsData.map(m => m.expenses);
+        const expenseColor = this.getThemeColor('--text-error', 'rgb(212, 76, 71)');
+        const expenseFillColor = this.getThemeColorWithAlpha('--text-error', 'rgb(212, 76, 71)', 0.1);
 
         // Create the chart
         this.expensesChart = new Chart(canvas, {
@@ -1547,12 +1569,12 @@ export class ExpensicaDashboardView extends ItemView {
                 datasets: [{
                     label: 'Monthly Expenses',
                     data: expenses,
-                    borderColor: 'rgba(244, 67, 54, 1)',
-                    backgroundColor: 'rgba(244, 67, 54, 0.1)',
+                    borderColor: expenseColor,
+                    backgroundColor: expenseFillColor,
                     borderWidth: 2,
                     tension: 0.3,
                     fill: true,
-                    pointBackgroundColor: 'rgba(244, 67, 54, 1)',
+                    pointBackgroundColor: expenseColor,
                     pointRadius: 4,
                     pointHoverRadius: 6
                 }]
@@ -1663,6 +1685,10 @@ export class ExpensicaDashboardView extends ItemView {
             const parts = date.split('-');
             return `${parts[2]}/${parts[1]}`; // DD/MM format
         });
+        const incomeColor = this.getThemeColor('--text-success', 'rgb(68, 131, 97)');
+        const incomeFillColor = this.getThemeColorWithAlpha('--text-success', 'rgb(68, 131, 97)', 0.1);
+        const expenseColor = this.getThemeColor('--text-error', 'rgb(212, 76, 71)');
+        const expenseFillColor = this.getThemeColorWithAlpha('--text-error', 'rgb(212, 76, 71)', 0.1);
 
         // Create the chart
         this.incomeExpenseChart = new Chart(canvas, {
@@ -1673,22 +1699,22 @@ export class ExpensicaDashboardView extends ItemView {
                     {
                         label: 'Income',
                         data: incomeData,
-                        borderColor: '#4caf50',
-                        backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                        borderColor: incomeColor,
+                        backgroundColor: incomeFillColor,
                         fill: true,
                         tension: 0.4,
-                        pointBackgroundColor: '#4caf50',
+                        pointBackgroundColor: incomeColor,
                         pointRadius: 4,
                         pointHoverRadius: 6
                     },
                     {
                         label: 'Expenses',
                         data: expenseData,
-                        borderColor: '#f44336',
-                        backgroundColor: 'rgba(244, 67, 54, 0.1)',
+                        borderColor: expenseColor,
+                        backgroundColor: expenseFillColor,
                         fill: true,
                         tension: 0.4,
-                        pointBackgroundColor: '#f44336',
+                        pointBackgroundColor: expenseColor,
                         pointRadius: 4,
                         pointHoverRadius: 6
                     }
@@ -1889,26 +1915,105 @@ export class ExpensicaDashboardView extends ItemView {
     }
 
     getTextColor(): string {
-        // Get text color based on theme
-        const isDarkMode = document.body.classList.contains('theme-dark');
-        return isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
+        const fallback = this.isDarkTheme()
+            ? 'rgba(255, 255, 255, 0.88)'
+            : 'rgba(0, 0, 0, 0.78)';
+        return this.getThemeColorWithAlpha('--text-normal', fallback, 1);
     }
 
     getGridColor(): string {
-        // Get grid color based on theme
-        const isDarkMode = document.body.classList.contains('theme-dark');
-        return isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+        const fallback = this.isDarkTheme()
+            ? 'rgba(255, 255, 255, 1)'
+            : 'rgba(0, 0, 0, 1)';
+        return this.getThemeColorWithAlpha('--text-normal', fallback, 0.14);
     }
 
-    generateColors(count: number): string[] {
-        // Generate an array of colors for charts
-        const colors = [];
-        const hueStep = 360 / count;
-        for (let i = 0; i < count; i++) {
-            const hue = i * hueStep;
-            colors.push(`hsl(${hue}, 70%, 60%)`);
+    setupThemeObserver() {
+        if (this.themeObserver) {
+            this.themeObserver.disconnect();
         }
-        return colors;
+
+        this.themeObserver = new MutationObserver(() => {
+            if (this.themeRefreshTimeout !== null) {
+                window.clearTimeout(this.themeRefreshTimeout);
+            }
+
+            this.themeRefreshTimeout = window.setTimeout(() => {
+                this.themeRefreshTimeout = null;
+                this.renderDashboard();
+            }, 50);
+        });
+
+        this.themeObserver.observe(document.body, {
+            attributes: true,
+            attributeFilter: ['class']
+        });
+    }
+
+    isDarkTheme(): boolean {
+        if (document.body.classList.contains('theme-light')) {
+            return false;
+        }
+
+        if (document.body.classList.contains('theme-dark')) {
+            return true;
+        }
+
+        const backgroundColor = this.getThemeColor('--background-primary', getComputedStyle(document.body).backgroundColor);
+        const rgbMatch = backgroundColor.match(/rgba?\(\s*(\d+(?:\.\d+)?)[,\s]+(\d+(?:\.\d+)?)[,\s]+(\d+(?:\.\d+)?)/);
+        if (!rgbMatch) {
+            return false;
+        }
+
+        const red = parseFloat(rgbMatch[1]);
+        const green = parseFloat(rgbMatch[2]);
+        const blue = parseFloat(rgbMatch[3]);
+        const luminance = 0.299 * red + 0.587 * green + 0.114 * blue;
+        return luminance < 128;
+    }
+
+    getThemeColor(variableName: string, fallback: string): string {
+        const value = getComputedStyle(document.body).getPropertyValue(variableName).trim();
+        if (!value) {
+            return fallback;
+        }
+
+        return this.resolveCssColor(`var(${variableName})`, fallback);
+    }
+
+    getThemeColorWithAlpha(variableName: string, fallback: string, alpha: number): string {
+        return this.withAlpha(this.getThemeColor(variableName, fallback), alpha);
+    }
+
+    resolveCssColor(color: string, fallback: string): string {
+        const probe = document.createElement('span');
+        probe.style.color = fallback;
+        probe.style.color = color;
+        probe.style.display = 'none';
+        document.body.appendChild(probe);
+        const resolvedColor = getComputedStyle(probe).color;
+        probe.remove();
+        return resolvedColor && resolvedColor !== 'rgba(0, 0, 0, 0)' ? resolvedColor : fallback;
+    }
+
+    withAlpha(color: string, alpha: number): string {
+        const rgbMatch = color.match(/rgba?\(\s*(\d+(?:\.\d+)?)[,\s]+(\d+(?:\.\d+)?)[,\s]+(\d+(?:\.\d+)?)/);
+        if (rgbMatch) {
+            return `rgba(${rgbMatch[1]}, ${rgbMatch[2]}, ${rgbMatch[3]}, ${alpha})`;
+        }
+
+        const hexMatch = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+        if (hexMatch) {
+            const hex = hexMatch[1].length === 3
+                ? hexMatch[1].split('').map((value) => value + value).join('')
+                : hexMatch[1];
+            const red = parseInt(hex.slice(0, 2), 16);
+            const green = parseInt(hex.slice(2, 4), 16);
+            const blue = parseInt(hex.slice(4, 6), 16);
+            return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+        }
+
+        return color;
     }
 
     adjustColor(color: string, amount: number): string {

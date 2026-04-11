@@ -1,4 +1,4 @@
-import { Transaction, TransactionType, formatCurrency, ColorScheme, parseLocalDate } from '../models';
+import { Transaction, TransactionType, formatCurrency, ColorScheme, parseLocalDate, getCategoryColor } from '../models';
 import ExpensicaPlugin from '../../main';
 import * as d3 from 'd3';
 
@@ -164,56 +164,49 @@ export class CalendarHeatmap {
         }
         
         const colorScheme = this.plugin.settings.calendarColorScheme;
+        const createScale = (maxColor: string) => {
+            const transparentMinColor = this.withAlpha(maxColor, 0);
+            return d3.scaleSequential()
+                .domain([0, maxValue])
+                .interpolator(d3.interpolateRgb(transparentMinColor, maxColor));
+        };
         
         switch (colorScheme) {
             case ColorScheme.RED:
-                return d3.scaleSequential()
-                    .domain([0, maxValue])
-                    .interpolator(d3.interpolateRgb("#FFF5F5", "#FF5252"));
+                return createScale("#FF5252");
             
             case ColorScheme.BLUE:
-                return d3.scaleSequential()
-                    .domain([0, maxValue])
-                    .interpolator(d3.interpolateRgb("#EFF8FF", "#0066CC"));
+                return createScale("#0066CC");
                     
             case ColorScheme.GREEN:
-                return d3.scaleSequential()
-                    .domain([0, maxValue])
-                    .interpolator(d3.interpolateRgb("#F2FDF5", "#38A169"));
+                return createScale("#38A169");
                     
             case ColorScheme.PURPLE:
-                return d3.scaleSequential()
-                    .domain([0, maxValue])
-                    .interpolator(d3.interpolateRgb("#F8F4FF", "#805AD5"));
+                return createScale("#805AD5");
                     
             case ColorScheme.ORANGE:
-                return d3.scaleSequential()
-                    .domain([0, maxValue])
-                    .interpolator(d3.interpolateRgb("#FFF8F1", "#ED8936"));
+                return createScale("#ED8936");
                     
             case ColorScheme.TEAL:
-                return d3.scaleSequential()
-                    .domain([0, maxValue])
-                    .interpolator(d3.interpolateRgb("#EFFCFC", "#38B2AC"));
+                return createScale("#38B2AC");
                     
             case ColorScheme.COLORBLIND_FRIENDLY:
                 // Use a colorblind-friendly palette (blue to yellow)
-                return d3.scaleSequential()
-                    .domain([0, maxValue])
-                    .interpolator(d3.interpolateRgb("#F0F8FF", "#FFBF00"));
+                return createScale("#FFBF00");
                     
             case ColorScheme.CUSTOM:
                 // Use custom color
-                return d3.scaleSequential()
-                    .domain([0, maxValue])
-                    .interpolator(d3.interpolateRgb("#F5F5F5", this.plugin.settings.customCalendarColor));
+                return createScale(this.plugin.settings.customCalendarColor);
                     
             default:
                 // Default to red
-                return d3.scaleSequential()
-                    .domain([0, maxValue])
-                    .interpolator(d3.interpolateRgb("#FFF5F5", "#FF5252"));
+                return createScale("#FF5252");
         }
+    }
+
+    private withAlpha(color: string, alpha: number): string {
+        const parsedColor = d3.rgb(color);
+        return `rgba(${parsedColor.r}, ${parsedColor.g}, ${parsedColor.b}, ${alpha})`;
     }
 
     private renderCalendar() {
@@ -252,7 +245,7 @@ export class CalendarHeatmap {
             .attr('y', 60)
             .attr('text-anchor', 'middle')
             .attr('font-size', '12px')
-            .attr('fill', 'rgba(55, 53, 47, 0.65)')
+            .attr('fill', 'var(--text-muted)')
             .text((d: string) => d);
         
         // Calculate colorscale based on max expense amount using the selected color scheme
@@ -280,7 +273,7 @@ export class CalendarHeatmap {
                 .attr('y', 60)
                 .attr('text-anchor', 'middle')
                 .attr('font-size', '11px')
-                .attr('fill', 'rgba(55, 53, 47, 0.5)')
+                .attr('fill', 'var(--text-faint)')
                 .text('Wk');
                 
             // Add week numbers
@@ -301,7 +294,7 @@ export class CalendarHeatmap {
                     .attr('text-anchor', 'middle')
                     .attr('dominant-baseline', 'middle')
                     .attr('font-size', '11px')
-                    .attr('fill', 'rgba(55, 53, 47, 0.5)')
+                    .attr('fill', 'var(--text-faint)')
                     .text(weekNumber);
             }
         }
@@ -329,7 +322,7 @@ export class CalendarHeatmap {
             .attr('height', this.cellSize - 4)
             .attr('rx', 4) // Subtle rounded corners like Notion
             .attr('ry', 4)
-            .attr('fill', (d: DayData) => d.totalAmount > 0 ? colorScale(d.totalAmount) : 'var(--background-primary)')
+            .attr('fill', (d: DayData) => d.totalAmount > 0 ? colorScale(d.totalAmount) : 'transparent')
             .attr('stroke', (d: DayData) => {
                 // Highlight today's date with a special border
                 if (isCurrentMonth && d.date.getDate() === todayDate) {
@@ -476,6 +469,7 @@ export class CalendarHeatmap {
             .attr('dominant-baseline', 'middle')
             .attr('font-size', '13px')
             .attr('font-weight', (d: DayData) => d.totalAmount > 0 ? '500' : '400')
+            .attr('pointer-events', 'none')
             .attr('fill', (d: DayData) => {
                 if (d.totalAmount > 0) {
                     return this.getTextColor(d.totalAmount, colorScale);
@@ -492,6 +486,7 @@ export class CalendarHeatmap {
             .attr('text-anchor', 'middle')
             .attr('font-size', '10px')
             .attr('font-weight', '500')
+            .attr('pointer-events', 'none')
             .attr('fill', (d: DayData) => this.getTextColor(d.totalAmount, colorScale))
             .text((d: DayData) => {
                 const currency = this.plugin.settings.defaultCurrency;
@@ -510,6 +505,7 @@ export class CalendarHeatmap {
             .attr('cy', 10)
             .attr('r', 3.5)
             .attr('fill', 'var(--expensica-success)')
+            .attr('pointer-events', 'none')
             .attr('opacity', 0.8);
         
         // Add color legend
@@ -562,11 +558,15 @@ export class CalendarHeatmap {
     private getTextColor(amount: number, colorScale: any): string {
         if (amount === 0) return 'var(--text-muted)';
         
-        // For darker background colors, use white text
+        // Transparent/low-opacity heatmap cells visually sit on the Obsidian background.
         const color = d3.rgb(colorScale(amount));
+        if (color.opacity < 0.55) {
+            return 'var(--text-normal)';
+        }
+
         const luminance = 0.299 * color.r + 0.587 * color.g + 0.114 * color.b;
         
-        return luminance > 160 ? 'var(--text-normal)' : 'white';
+        return luminance > 160 ? 'var(--text-normal)' : 'var(--text-on-accent)';
     }
 
     private renderColorLegend(colorScale: any, weekNumbersOffset: number, calendarHeight: number) {
@@ -789,7 +789,7 @@ export class CalendarHeatmap {
                         
                         // Create the color bar
                         const colorBar = categoryBar.createDiv('expensica-bar-fill color-bar-fill color-bar-hue');
-                        colorBar.setAttribute('style', `--color-bar-percentage: ${percentage}%; --color-bar-hue: ${this.stringToHue(categoryName)}`);
+                        colorBar.setAttribute('style', `--color-bar-percentage: ${percentage}%; --category-color: ${getCategoryColor(categoryName)}`);
 
                         // Label with amount and percentage
                         const labelEl = categoryBar.createDiv('expensica-bar-label');
@@ -892,15 +892,6 @@ export class CalendarHeatmap {
         });
     }
     
-    // Helper function to generate deterministic color from string
-    private stringToHue(str: string): number {
-        let hash = 0;
-        for (let i = 0; i < str.length; i++) {
-            hash = str.charCodeAt(i) + ((hash << 5) - hash);
-        }
-        return hash % 360;
-    }
-
     public updateMonth(newDate: Date, transactions: Transaction[]) {
         this.currentDate = newDate;
         this.transactions = transactions;
