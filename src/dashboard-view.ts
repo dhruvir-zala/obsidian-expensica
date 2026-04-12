@@ -1,5 +1,5 @@
 import { 
-    App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, WorkspaceLeaf, ItemView
+    App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, WorkspaceLeaf, ItemView, ViewStateResult
 } from 'obsidian';
 import Chart from 'chart.js/auto';
 import { 
@@ -39,6 +39,29 @@ export interface DateRange {
     label: string;
 }
 
+interface DashboardViewState {
+    currentTab?: DashboardTab;
+    dateRangeType?: DateRangeType;
+    dateRangeStart?: string;
+    dateRangeEnd?: string;
+    customStartDate?: string | null;
+    customEndDate?: string | null;
+    currentDate?: string;
+    selectedCalendarDate?: string | null;
+    expenseChartPeriod?: 'category' | 'weekly' | 'monthly';
+    incomeExpenseVisibility?: IncomeExpenseVisibility;
+    scrollTop?: number;
+}
+
+interface IncomeExpenseVisibility {
+    income: boolean;
+    expenses: boolean;
+}
+
+function hasDashboardStateKey(state: DashboardViewState, key: keyof DashboardViewState): boolean {
+    return Object.prototype.hasOwnProperty.call(state, key);
+}
+
 // Dashboard tab options
 export enum DashboardTab {
     OVERVIEW = 'overview',
@@ -50,6 +73,7 @@ export class ExpensicaDashboardView extends ItemView {
     transactions: Transaction[] = [];
     filteredTransactions: Transaction[] = [];
     currentDate: Date = new Date();
+    selectedCalendarDate: Date | null = null;
     expensesChart: Chart | null = null;
     incomeExpenseChart: Chart | null = null;
     
@@ -58,6 +82,10 @@ export class ExpensicaDashboardView extends ItemView {
     
     // Chart period for expenses (weekly, monthly, yearly)
     expenseChartPeriod: 'category' | 'weekly' | 'monthly' = 'category';
+    incomeExpenseVisibility: IncomeExpenseVisibility = {
+        income: true,
+        expenses: true
+    };
     
     // Premium visualizations
     premiumVisualizations: PremiumVisualizations | null = null;
@@ -71,6 +99,9 @@ export class ExpensicaDashboardView extends ItemView {
     currentTab: DashboardTab = DashboardTab.OVERVIEW;
     private themeObserver: MutationObserver | null = null;
     private themeRefreshTimeout: number | null = null;
+    private calendarResizeTimeout: number | null = null;
+    private scrollTop: number = 0;
+    private readonly boundHandleResize = this.handleResize.bind(this);
 
     constructor(leaf: WorkspaceLeaf, plugin: ExpensicaPlugin) {
         super(leaf);
@@ -100,7 +131,13 @@ export class ExpensicaDashboardView extends ItemView {
         this.renderDashboard();
 
         // Add resize event listener
-        window.addEventListener('resize', this.handleResize.bind(this));
+        window.addEventListener('resize', this.boundHandleResize);
+        this.registerEvent(this.app.workspace.on('active-leaf-change', () => {
+            this.scheduleCalendarResize();
+        }));
+        this.registerEvent(this.app.workspace.on('layout-change', () => {
+            this.scheduleCalendarResize();
+        }));
 
         this.setupThemeObserver();
     }
@@ -120,7 +157,7 @@ export class ExpensicaDashboardView extends ItemView {
         this.premiumVisualizations = null;
 
         // Remove resize event listener
-        window.removeEventListener('resize', this.handleResize.bind(this));
+        window.removeEventListener('resize', this.boundHandleResize);
 
         if (this.themeObserver) {
             this.themeObserver.disconnect();
@@ -131,10 +168,107 @@ export class ExpensicaDashboardView extends ItemView {
             window.clearTimeout(this.themeRefreshTimeout);
             this.themeRefreshTimeout = null;
         }
+
+        if (this.calendarResizeTimeout !== null) {
+            window.clearTimeout(this.calendarResizeTimeout);
+            this.calendarResizeTimeout = null;
+        }
+    }
+
+    getState(): Record<string, unknown> {
+        this.rememberScrollPosition();
+        return {
+            ...super.getState(),
+            currentTab: this.currentTab,
+            dateRangeType: this.dateRange.type,
+            dateRangeStart: formatDate(this.dateRange.startDate),
+            dateRangeEnd: formatDate(this.dateRange.endDate),
+            customStartDate: this.customStartDate ? formatDate(this.customStartDate) : null,
+            customEndDate: this.customEndDate ? formatDate(this.customEndDate) : null,
+            currentDate: formatDate(this.currentDate),
+            selectedCalendarDate: this.selectedCalendarDate ? formatDate(this.selectedCalendarDate) : null,
+            expenseChartPeriod: this.expenseChartPeriod,
+            incomeExpenseVisibility: this.incomeExpenseVisibility,
+            scrollTop: this.scrollTop
+        };
+    }
+
+    async setState(state: unknown, result: ViewStateResult): Promise<void> {
+        await super.setState(state, result);
+
+        if (!state || typeof state !== 'object') {
+            return;
+        }
+
+        const dashboardState = state as DashboardViewState;
+
+        if (dashboardState.currentTab && Object.values(DashboardTab).includes(dashboardState.currentTab)) {
+            this.currentTab = dashboardState.currentTab;
+        }
+
+        if (
+            dashboardState.expenseChartPeriod === 'category'
+            || dashboardState.expenseChartPeriod === 'weekly'
+            || dashboardState.expenseChartPeriod === 'monthly'
+        ) {
+            this.expenseChartPeriod = dashboardState.expenseChartPeriod;
+        }
+
+        if (dashboardState.incomeExpenseVisibility) {
+            this.incomeExpenseVisibility = {
+                income: dashboardState.incomeExpenseVisibility.income !== false,
+                expenses: dashboardState.incomeExpenseVisibility.expenses !== false
+            };
+        }
+
+        if (dashboardState.currentDate) {
+            this.currentDate = parseLocalDate(dashboardState.currentDate);
+        }
+
+        if (hasDashboardStateKey(dashboardState, 'selectedCalendarDate')) {
+            this.selectedCalendarDate = dashboardState.selectedCalendarDate
+                ? parseLocalDate(dashboardState.selectedCalendarDate)
+                : null;
+        }
+
+        if (hasDashboardStateKey(dashboardState, 'customStartDate')) {
+            this.customStartDate = dashboardState.customStartDate
+                ? parseLocalDate(dashboardState.customStartDate)
+                : null;
+        }
+
+        if (hasDashboardStateKey(dashboardState, 'customEndDate')) {
+            this.customEndDate = dashboardState.customEndDate
+                ? parseLocalDate(dashboardState.customEndDate)
+                : null;
+        }
+
+        if (dashboardState.dateRangeType) {
+            const startDate = dashboardState.dateRangeStart ? parseLocalDate(dashboardState.dateRangeStart) : undefined;
+            const endDate = dashboardState.dateRangeEnd ? parseLocalDate(dashboardState.dateRangeEnd) : undefined;
+            this.dateRange = this.createDateRangeFromState(dashboardState.dateRangeType, startDate, endDate);
+
+            if (dashboardState.dateRangeType === DateRangeType.CUSTOM && startDate && endDate) {
+                this.customStartDate = startDate;
+                this.customEndDate = endDate;
+            }
+        }
+
+        if (typeof dashboardState.scrollTop === 'number') {
+            this.scrollTop = dashboardState.scrollTop;
+        }
+
+        const container = this.containerEl.children[1] as HTMLElement | undefined;
+        if (container && container.childElementCount > 0) {
+            await this.loadTransactionsData();
+            this.renderDashboard();
+        }
     }
 
     // Handler for window resize events
     private handleResize() {
+        this.scheduleCalendarResize();
+
         // Update premium visualizations
         if (this.premiumVisualizations) {
             this.premiumVisualizations.resize();
@@ -147,6 +281,19 @@ export class ExpensicaDashboardView extends ItemView {
         if (this.incomeExpenseChart) {
             this.incomeExpenseChart.resize();
         }
+    }
+
+    private scheduleCalendarResize() {
+        if (this.calendarResizeTimeout !== null) {
+            window.clearTimeout(this.calendarResizeTimeout);
+        }
+
+        this.calendarResizeTimeout = window.setTimeout(() => {
+            requestAnimationFrame(() => {
+                this.premiumVisualizations?.resize();
+            });
+            this.calendarResizeTimeout = null;
+        }, 100);
     }
 
     // Helper method to get a date range based on type
@@ -247,9 +394,11 @@ export class ExpensicaDashboardView extends ItemView {
         
         this.filteredTransactions = [...this.transactions];
         
-        // If this is this month, also update the currentDate for calendar view
-        if (this.dateRange.type === DateRangeType.THIS_MONTH) {
-            this.currentDate = new Date();
+        // For first-load defaults, align the calendar to the selected range end, but do not overwrite restored calendar state.
+        if (this.dateRange.type === DateRangeType.THIS_MONTH && !this.selectedCalendarDate) {
+            const selectionDate = this.getDateRangeSelectionDate(this.dateRange);
+            this.currentDate = selectionDate;
+            this.selectedCalendarDate = selectionDate;
         }
     }
 
@@ -288,6 +437,7 @@ export class ExpensicaDashboardView extends ItemView {
 
     renderDashboard() {
         const container = this.containerEl.children[1] as HTMLElement;
+        this.rememberScrollPosition();
         container.empty();
         container.addClass('expensica-dashboard');
 
@@ -311,6 +461,80 @@ export class ExpensicaDashboardView extends ItemView {
                 this.renderBudgetTab(container);
                 break;
         }
+
+        this.restoreScrollPosition();
+    }
+
+    rememberScrollPosition() {
+        const container = this.containerEl.children[1] as HTMLElement | undefined;
+        if (container && container.childElementCount > 0) {
+            this.scrollTop = container.scrollTop;
+        }
+    }
+
+    restoreScrollPosition() {
+        const container = this.containerEl.children[1] as HTMLElement | undefined;
+        if (!container) return;
+
+        requestAnimationFrame(() => {
+            container.scrollTop = this.scrollTop;
+        });
+    }
+
+    persistDashboardState() {
+        this.rememberScrollPosition();
+        this.app.workspace.requestSaveLayout();
+    }
+
+    createDateRangeFromState(type: DateRangeType, startDate?: Date, endDate?: Date): DateRange {
+        if (type === DateRangeType.CUSTOM && startDate && endDate) {
+            return this.getDateRange(DateRangeType.CUSTOM, startDate, endDate);
+        }
+
+        if (startDate && endDate) {
+            const dateRange = this.getDateRange(type);
+            dateRange.startDate = startDate;
+            dateRange.endDate = endDate;
+            dateRange.endDate.setHours(23, 59, 59, 999);
+            return dateRange;
+        }
+
+        return this.getDateRange(type);
+    }
+
+    getDateRangeSelectionDate(dateRange: DateRange): Date {
+        const today = new Date();
+        const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+
+        if (dateRange.startDate <= todayEnd && dateRange.endDate >= todayStart) {
+            return todayStart;
+        }
+
+        const selectionDate = dateRange.endDate < todayStart
+            ? new Date(dateRange.endDate)
+            : new Date(dateRange.startDate);
+        selectionDate.setHours(0, 0, 0, 0);
+        return selectionDate;
+    }
+
+    async handleCalendarTodayClick() {
+        const today = new Date();
+        const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+        if (this.dateRange.endDate < todayStart) {
+            this.dateRange = this.getDateRange(DateRangeType.THIS_MONTH);
+            const selectionDate = this.getDateRangeSelectionDate(this.dateRange);
+            this.currentDate = selectionDate;
+            this.selectedCalendarDate = selectionDate;
+        } else {
+            this.currentDate = todayStart;
+            this.selectedCalendarDate = todayStart;
+        }
+
+        await this.loadTransactionsData();
+        this.persistDashboardState();
+        this.renderDashboard();
     }
 
     // Render the tab navigation
@@ -333,6 +557,7 @@ export class ExpensicaDashboardView extends ItemView {
             // Add event listener
             budgetTab.addEventListener('click', () => {
                 this.currentTab = DashboardTab.BUDGET;
+                this.persistDashboardState();
                 this.renderDashboard();
             });
         }
@@ -340,6 +565,7 @@ export class ExpensicaDashboardView extends ItemView {
         // Add event listeners
         overviewTab.addEventListener('click', () => {
             this.currentTab = DashboardTab.OVERVIEW;
+            this.persistDashboardState();
             this.renderDashboard();
         });
     }
@@ -1124,17 +1350,16 @@ export class ExpensicaDashboardView extends ItemView {
                             this.customStartDate = startDate;
                             this.customEndDate = endDate;
                             this.dateRange = this.getDateRange(DateRangeType.CUSTOM, startDate, endDate);
+                            const selectionDate = this.getDateRangeSelectionDate(this.dateRange);
+                            this.currentDate = selectionDate;
+                            this.selectedCalendarDate = selectionDate;
                             
                             // Update dateRangeText
                             dateRangeText.textContent = this.dateRange.label;
                             
-                            // Reset the calendar view date if needed
-                            if (this.dateRange.type === DateRangeType.THIS_MONTH) {
-                                this.currentDate = new Date(this.dateRange.startDate);
-                            }
-                            
                             // Reload transactions and update dashboard
                             await this.loadTransactionsData();
+                            this.persistDashboardState();
                             this.renderDashboard();
                         }
                     });
@@ -1142,17 +1367,16 @@ export class ExpensicaDashboardView extends ItemView {
                 } else {
                     // Set the new date range
                     this.dateRange = this.getDateRange(option.type);
+                    const selectionDate = this.getDateRangeSelectionDate(this.dateRange);
+                    this.currentDate = selectionDate;
+                    this.selectedCalendarDate = selectionDate;
                     
                     // Update dateRangeText
                     dateRangeText.textContent = this.dateRange.label;
                     
-                    // Reset the calendar view date if needed
-                    if (option.type === DateRangeType.THIS_MONTH) {
-                        this.currentDate = new Date(this.dateRange.startDate);
-                    }
-                    
                     // Reload transactions and update dashboard
                     await this.loadTransactionsData();
+                    this.persistDashboardState();
                     this.renderDashboard();
                 }
                 
@@ -1291,14 +1515,17 @@ export class ExpensicaDashboardView extends ItemView {
         // Attach events to buttons
         categoryBtn.addEventListener('click', () => {
             this.expenseChartPeriod = 'category';
+            this.persistDashboardState();
             this.renderDashboard();
         });
         weeklyBtn.addEventListener('click', () => {
             this.expenseChartPeriod = 'weekly';
+            this.persistDashboardState();
             this.renderDashboard();
         });
         monthlyBtn.addEventListener('click', () => {
             this.expenseChartPeriod = 'monthly';
+            this.persistDashboardState();
             this.renderDashboard();
         });
 
@@ -1699,6 +1926,7 @@ export class ExpensicaDashboardView extends ItemView {
                     {
                         label: 'Income',
                         data: incomeData,
+                        hidden: !this.incomeExpenseVisibility.income,
                         borderColor: incomeColor,
                         backgroundColor: incomeFillColor,
                         fill: true,
@@ -1710,6 +1938,7 @@ export class ExpensicaDashboardView extends ItemView {
                     {
                         label: 'Expenses',
                         data: expenseData,
+                        hidden: !this.incomeExpenseVisibility.expenses,
                         borderColor: expenseColor,
                         backgroundColor: expenseFillColor,
                         fill: true,
@@ -1747,6 +1976,20 @@ export class ExpensicaDashboardView extends ItemView {
                 },
                 plugins: {
                     legend: {
+                        onClick: (_event, legendItem, legend) => {
+                            if (legendItem.datasetIndex === undefined) return;
+
+                            const chart = legend.chart;
+                            const datasetIndex = legendItem.datasetIndex;
+                            chart.setDatasetVisibility(datasetIndex, !chart.isDatasetVisible(datasetIndex));
+                            chart.update();
+
+                            this.incomeExpenseVisibility = {
+                                income: chart.isDatasetVisible(0),
+                                expenses: chart.isDatasetVisible(1)
+                            };
+                            this.persistDashboardState();
+                        },
                         labels: {
                             color: this.getTextColor(),
                             usePointStyle: true,
@@ -2052,12 +2295,38 @@ export class ExpensicaDashboardView extends ItemView {
 
         // Initialize or update premium visualizations
         if (!this.premiumVisualizations) {
-            this.premiumVisualizations = new PremiumVisualizations(vizContainer, this.plugin, this.currentDate);
+            this.premiumVisualizations = new PremiumVisualizations(
+                vizContainer,
+                this.plugin,
+                this.currentDate,
+                this.selectedCalendarDate,
+                (selectedDate) => {
+                    this.selectedCalendarDate = selectedDate;
+                    this.currentDate = selectedDate;
+                    this.persistDashboardState();
+                },
+                () => {
+                    this.handleCalendarTodayClick();
+                }
+            );
             this.premiumVisualizations.render();
         } else {
             this.premiumVisualizations.updateDate(this.currentDate);
             vizContainer.empty();
-            this.premiumVisualizations = new PremiumVisualizations(vizContainer, this.plugin, this.currentDate);
+            this.premiumVisualizations = new PremiumVisualizations(
+                vizContainer,
+                this.plugin,
+                this.currentDate,
+                this.selectedCalendarDate,
+                (selectedDate) => {
+                    this.selectedCalendarDate = selectedDate;
+                    this.currentDate = selectedDate;
+                    this.persistDashboardState();
+                },
+                () => {
+                    this.handleCalendarTodayClick();
+                }
+            );
             this.premiumVisualizations.render();
         }
     }
@@ -2067,10 +2336,12 @@ export class ExpensicaDashboardView extends ItemView {
         // Only switch to budget tab if budgeting is enabled
         if (this.plugin.settings.enableBudgeting) {
             this.currentTab = DashboardTab.BUDGET;
+            this.persistDashboardState();
             this.renderDashboard();
         } else {
             // If budgeting is disabled, stay on overview tab
             this.currentTab = DashboardTab.OVERVIEW;
+            this.persistDashboardState();
             this.renderDashboard();
             
             // Show a notice that budgeting is disabled
@@ -2170,8 +2441,8 @@ export class DateRangePickerModal extends Modal {
             const endDateValue = endDateInput.value;
             
             if (startDateValue && endDateValue) {
-                const start = new Date(startDateValue);
-                const end = new Date(endDateValue);
+                const start = parseLocalDate(startDateValue);
+                const end = parseLocalDate(endDateValue);
                 
                 // Validate dates
                 if (start > end) {
