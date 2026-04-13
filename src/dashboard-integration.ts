@@ -6,12 +6,25 @@ export class PremiumVisualizations {
     private container: HTMLElement;
     private plugin: ExpensicaPlugin;
     private currentDate: Date;
+    private selectedDate: Date | null;
+    private onSelectedDateChange?: (date: Date) => void;
+    private onTodayClick?: () => void;
     private calendarHeatmap: CalendarHeatmap | null = null;
 
-    constructor(container: HTMLElement, plugin: ExpensicaPlugin, currentDate: Date) {
+    constructor(
+        container: HTMLElement,
+        plugin: ExpensicaPlugin,
+        currentDate: Date,
+        selectedDate: Date | null = null,
+        onSelectedDateChange?: (date: Date) => void,
+        onTodayClick?: () => void
+    ) {
         this.container = container;
         this.plugin = plugin;
         this.currentDate = currentDate;
+        this.selectedDate = selectedDate;
+        this.onSelectedDateChange = onSelectedDateChange;
+        this.onTodayClick = onTodayClick;
     }
 
     render() {
@@ -45,7 +58,11 @@ export class PremiumVisualizations {
             text: 'Today'
         });
         todayButton.onclick = () => {
-            this.updateDate(new Date());
+            if (this.onTodayClick) {
+                this.onTodayClick();
+            } else {
+                this.updateDate(new Date());
+            }
         };
         
         // Next month button
@@ -72,7 +89,12 @@ export class PremiumVisualizations {
             calendarContainer, 
             this.plugin, 
             transactions, 
-            this.currentDate
+            this.currentDate,
+            this.selectedDate,
+            (selectedDate) => {
+                this.selectedDate = selectedDate;
+                this.onSelectedDateChange?.(selectedDate);
+            }
         );
         this.calendarHeatmap.render();
     }

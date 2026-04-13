@@ -20,16 +20,28 @@ export class CalendarHeatmap {
     private height: number = 0;
     private tooltipDiv: any;
     private detailsContainer: HTMLElement;
+    private calendarContainer: HTMLElement;
     private cellSize: number = 48;
     private cellGap: number = 8;
     private maxAmount: number = 0;
     private weekNumberWidth: number = 30; // Width of week number column
+    private selectedDate: Date | null;
+    private onSelectedDateChange?: (date: Date) => void;
 
-    constructor(container: HTMLElement, plugin: ExpensicaPlugin, transactions: Transaction[], currentDate: Date) {
+    constructor(
+        container: HTMLElement,
+        plugin: ExpensicaPlugin,
+        transactions: Transaction[],
+        currentDate: Date,
+        selectedDate: Date | null = null,
+        onSelectedDateChange?: (date: Date) => void
+    ) {
         this.container = container;
         this.plugin = plugin;
         this.transactions = transactions;
         this.currentDate = currentDate;
+        this.selectedDate = selectedDate;
+        this.onSelectedDateChange = onSelectedDateChange;
         this.setupContainers();
         this.createTooltip();
     }
@@ -44,6 +56,7 @@ export class CalendarHeatmap {
         
         // Create the calendar container
         const calendarContainer = flexContainer.createDiv('expensica-calendar-grid-container');
+        this.calendarContainer = calendarContainer;
         
         // Create the details container for transaction details
         this.detailsContainer = flexContainer.createDiv('expensica-calendar-details-container');
@@ -53,8 +66,7 @@ export class CalendarHeatmap {
         });
 
         // Get the width and height of the calendar container
-        const rect = calendarContainer.getBoundingClientRect();
-        this.width = rect.width;
+        this.width = this.getRenderableWidth(calendarContainer) ?? 700;
         
         // Calculate additional width for week numbers if enabled
         const weekNumbersOffset = this.plugin.settings.showWeekNumbers ? this.weekNumberWidth : 0;
@@ -456,6 +468,8 @@ export class CalendarHeatmap {
                 selectedCell
                     .attr('stroke', 'var(--interactive-accent)')
                     .attr('stroke-width', 2.5); // Increased thickness for better visibility
+                this.selectedDate = d.date;
+                this.onSelectedDateChange?.(d.date);
                 
                 // Show transaction details with a nice transition
                 this.showDayDetails(d);
@@ -525,8 +539,18 @@ export class CalendarHeatmap {
             })
             .style('opacity', 1);
         
-        // If nothing is currently selected, show the details for today or the first day with expenses
-        if (isCurrentMonth) {
+        const selectedData = this.selectedDate
+            ? this.calendarData.find(d => this.isSameDate(d.date, this.selectedDate!))
+            : null;
+
+        if (selectedData) {
+            this.showDayDetails(selectedData);
+            const selectedDateCell = this.svg.selectAll('.day-cell rect')
+                .filter((d: any) => this.isSameDate(d.date, selectedData.date));
+            selectedDateCell.attr('stroke', 'var(--interactive-accent)')
+                .attr('stroke-width', 2.5);
+            selectedCell = selectedDateCell;
+        } else if (isCurrentMonth) {
             const todayData = this.calendarData.find(d => d.date.getDate() === todayDate);
             if (todayData) {
                 this.showDayDetails(todayData);
@@ -553,6 +577,12 @@ export class CalendarHeatmap {
                 this.showDayDetails(this.calendarData[0]);
             }
         }
+    }
+
+    private isSameDate(left: Date, right: Date): boolean {
+        return left.getFullYear() === right.getFullYear()
+            && left.getMonth() === right.getMonth()
+            && left.getDate() === right.getDate();
     }
 
     private getTextColor(amount: number, colorScale: any): string {
@@ -899,17 +929,40 @@ export class CalendarHeatmap {
     }
 
     public resize() {
-        // Get new width
-        const rect = this.container.querySelector('.expensica-calendar-grid-container')?.getBoundingClientRect();
-        if (rect) {
-            this.width = rect.width;
-            // Update SVG width
-            d3.select(this.container).select('svg')
-                .attr('width', this.width)
-                .attr('viewBox', `0 0 ${this.width} ${this.height}`);
-            
-            // Re-render the calendar
-            this.renderCalendar();
+        const width = this.getRenderableWidth(this.calendarContainer);
+        if (!width) {
+            return;
         }
+
+        this.width = width;
+
+        if (this.width < 500) {
+            this.cellGap = 4;
+        } else if (this.width < 700) {
+            this.cellGap = 6;
+        } else {
+            this.cellGap = 8;
+        }
+
+        const weekNumbersOffset = this.plugin.settings.showWeekNumbers ? this.weekNumberWidth : 0;
+        const weeksInMonth = this.getWeeksInMonth(this.currentDate.getFullYear(), this.currentDate.getMonth());
+        const calendarHeight = (weeksInMonth + 1) * (this.cellSize + this.cellGap) + 50;
+        this.height = calendarHeight + 90;
+
+        d3.select(this.container).select('svg')
+            .attr('width', this.width + weekNumbersOffset)
+            .attr('height', this.height)
+            .attr('viewBox', `0 0 ${this.width + weekNumbersOffset} ${this.height}`);
+        
+        this.renderCalendar();
+    }
+
+    private getRenderableWidth(calendarContainer: HTMLElement | null | undefined): number | null {
+        if (!calendarContainer) {
+            return null;
+        }
+
+        const width = calendarContainer.getBoundingClientRect().width;
+        return width >= 250 ? width : null;
     }
 }

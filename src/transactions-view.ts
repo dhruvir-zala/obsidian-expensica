@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, Notice, setIcon, debounce } from 'obsidian';
+import { ItemView, WorkspaceLeaf, Notice, setIcon, debounce, ViewStateResult } from 'obsidian';
 import {
     Transaction,
     TransactionType,
@@ -14,6 +14,7 @@ import {
     calculateBudgetStatus
 } from './models';
 import ExpensicaPlugin from '../main';
+import type { SharedDateRangeState } from '../main';
 import { ExpenseModal, IncomeModal, DateRangeType, DateRange, DateRangePickerModal } from './dashboard-view';
 import { ConfirmationModal } from './confirmation-modal';
 
@@ -34,6 +35,19 @@ export interface TransactionView {
     deleteTransaction(id: string): Promise<void>;
 }
 
+interface TransactionsViewState {
+    dateRangeType?: DateRangeType;
+    dateRangeStart?: string;
+    dateRangeEnd?: string;
+    customStartDate?: string | null;
+    customEndDate?: string | null;
+    dateRangeUpdatedAt?: number;
+    searchQuery?: string;
+    currentPage?: number;
+    pageSize?: number;
+    scrollTop?: number;
+}
+
 export class ExpensicaTransactionsView extends ItemView implements TransactionView {
     plugin: ExpensicaPlugin;
     transactions: Transaction[] = [];
@@ -45,11 +59,13 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
     currentPage: number = 1;
     pageSize: number = 20;
     totalPages: number = 1;
+    private scrollTop: number = 0;
 
     // Date range properties
     dateRange: DateRange;
     customStartDate: Date | null = null;
     customEndDate: Date | null = null;
+    dateRangeUpdatedAt: number = 0;
 
     constructor(leaf: WorkspaceLeaf, plugin: ExpensicaPlugin) {
         super(leaf);
@@ -72,6 +88,11 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
     }
 
     async onOpen() {
+        const sharedDateRangeState = this.plugin.getSharedDateRangeState();
+        if (sharedDateRangeState) {
+            this.applySharedDateRangeStateValues(sharedDateRangeState);
+        }
+
         // Load transactions data
         await this.loadTransactionsData();
         
@@ -93,8 +114,88 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         // Cleanup
     }
 
+    getState(): Record<string, unknown> {
+        this.rememberScrollPosition();
+        return {
+            ...super.getState(),
+            dateRangeType: this.dateRange.type,
+            dateRangeStart: formatDate(this.dateRange.startDate),
+            dateRangeEnd: formatDate(this.dateRange.endDate),
+            customStartDate: this.customStartDate ? formatDate(this.customStartDate) : null,
+            customEndDate: this.customEndDate ? formatDate(this.customEndDate) : null,
+            dateRangeUpdatedAt: this.dateRangeUpdatedAt,
+            searchQuery: this.searchQuery,
+            currentPage: this.currentPage,
+            pageSize: this.pageSize,
+            scrollTop: this.scrollTop
+        };
+    }
+
+    async setState(state: unknown, result: ViewStateResult): Promise<void> {
+        await super.setState(state, result);
+
+        if (!state || typeof state !== 'object') {
+            return;
+        }
+
+        const transactionsState = state as TransactionsViewState;
+
+        if (typeof transactionsState.searchQuery === 'string') {
+            this.searchQuery = transactionsState.searchQuery;
+        }
+
+        if (typeof transactionsState.pageSize === 'number' && [10, 20, 50, 100].includes(transactionsState.pageSize)) {
+            this.pageSize = transactionsState.pageSize;
+        }
+
+        if (typeof transactionsState.currentPage === 'number' && transactionsState.currentPage > 0) {
+            this.currentPage = transactionsState.currentPage;
+        }
+
+        if (transactionsState.customStartDate) {
+            this.customStartDate = parseLocalDate(transactionsState.customStartDate);
+        } else if (Object.prototype.hasOwnProperty.call(transactionsState, 'customStartDate')) {
+            this.customStartDate = null;
+        }
+
+        if (transactionsState.customEndDate) {
+            this.customEndDate = parseLocalDate(transactionsState.customEndDate);
+        } else if (Object.prototype.hasOwnProperty.call(transactionsState, 'customEndDate')) {
+            this.customEndDate = null;
+        }
+
+        if (transactionsState.dateRangeType) {
+            const startDate = transactionsState.dateRangeStart ? parseLocalDate(transactionsState.dateRangeStart) : undefined;
+            const endDate = transactionsState.dateRangeEnd ? parseLocalDate(transactionsState.dateRangeEnd) : undefined;
+            this.dateRange = this.createDateRangeFromState(transactionsState.dateRangeType, startDate, endDate);
+            this.dateRangeUpdatedAt = transactionsState.dateRangeUpdatedAt ?? 0;
+
+            if (transactionsState.dateRangeType === DateRangeType.CUSTOM && startDate && endDate) {
+                this.customStartDate = startDate;
+                this.customEndDate = endDate;
+            }
+        }
+
+        const sharedDateRangeState = this.plugin.getSharedDateRangeState();
+        if (sharedDateRangeState && sharedDateRangeState.updatedAt >= this.dateRangeUpdatedAt) {
+            this.applySharedDateRangeStateValues(sharedDateRangeState);
+        } else if (transactionsState.dateRangeType) {
+            await this.plugin.setSharedDateRangeState(this.createSharedDateRangeState(), this);
+        }
+
+        if (typeof transactionsState.scrollTop === 'number') {
+            this.scrollTop = transactionsState.scrollTop;
+        }
+
+        if (this.contentEl.childElementCount > 0) {
+            await this.loadTransactionsData(false);
+            this.renderView();
+        }
+    }
+
     renderView(preserveFocus = false) {
         const container = this.contentEl;
+        this.rememberScrollPosition();
         container.empty();
         container.addClass('expensica-container');
         container.addClass('transactions-container');
@@ -129,6 +230,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
             const target = e.target as HTMLInputElement;
             this.searchQuery = target.value;
             this.inputFocused = true;
+            this.currentPage = 1;
             this.updateSearchResults();
         });
         
@@ -152,6 +254,8 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         
         // Pagination (at the bottom)
         this.renderPagination(container);
+
+        this.restoreScrollPosition();
     }
 
     renderHeader(container: HTMLElement) {
@@ -251,12 +355,14 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
                             this.customStartDate = startDate;
                             this.customEndDate = endDate;
                             this.dateRange = this.getDateRange(DateRangeType.CUSTOM, startDate, endDate);
+                            await this.updateSharedDateRange();
                             
                             // Update dateRangeText
                             dateRangeText.textContent = this.dateRange.label;
                             
                             // Reload transactions and update view
-                            await this.loadTransactionsData();
+                            await this.loadTransactionsData(true);
+                            this.persistTransactionsState();
                             this.renderView();
                         }
                     });
@@ -264,12 +370,14 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
                 } else {
                     // Set the new date range
                     this.dateRange = this.getDateRange(option.type);
+                    await this.updateSharedDateRange();
                     
                     // Update dateRangeText
                     dateRangeText.textContent = this.dateRange.label;
                     
                     // Reload transactions and update view
-                    await this.loadTransactionsData();
+                    await this.loadTransactionsData(true);
+                    this.persistTransactionsState();
                     this.renderView();
                 }
                 
@@ -293,13 +401,76 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         });
     }
 
-    async loadTransactionsData() {
+    rememberScrollPosition() {
+        this.scrollTop = this.contentEl.scrollTop;
+    }
+
+    restoreScrollPosition() {
+        requestAnimationFrame(() => {
+            this.contentEl.scrollTop = this.scrollTop;
+        });
+    }
+
+    persistTransactionsState() {
+        this.rememberScrollPosition();
+        this.app.workspace.requestSaveLayout();
+    }
+
+    createSharedDateRangeState(): SharedDateRangeState {
+        return {
+            type: this.dateRange.type,
+            startDate: formatDate(this.dateRange.startDate),
+            endDate: formatDate(this.dateRange.endDate),
+            customStartDate: this.customStartDate ? formatDate(this.customStartDate) : null,
+            customEndDate: this.customEndDate ? formatDate(this.customEndDate) : null,
+            updatedAt: this.dateRangeUpdatedAt
+        };
+    }
+
+    applySharedDateRangeStateValues(state: SharedDateRangeState) {
+        const startDate = parseLocalDate(state.startDate);
+        const endDate = parseLocalDate(state.endDate);
+        this.dateRange = this.createDateRangeFromState(state.type, startDate, endDate);
+        this.customStartDate = state.customStartDate ? parseLocalDate(state.customStartDate) : null;
+        this.customEndDate = state.customEndDate ? parseLocalDate(state.customEndDate) : null;
+        this.dateRangeUpdatedAt = state.updatedAt;
+    }
+
+    async applySharedDateRangeState(state: SharedDateRangeState) {
+        if (state.updatedAt < this.dateRangeUpdatedAt) {
+            return;
+        }
+
+        this.applySharedDateRangeStateValues(state);
+        await this.loadTransactionsData(true);
+        this.persistTransactionsState();
+        this.renderView();
+    }
+
+    async updateSharedDateRange() {
+        this.dateRangeUpdatedAt = Date.now();
+        await this.plugin.setSharedDateRangeState(this.createSharedDateRangeState(), this);
+    }
+
+    createDateRangeFromState(type: DateRangeType, startDate?: Date, endDate?: Date): DateRange {
+        if (type === DateRangeType.CUSTOM && startDate && endDate) {
+            return this.getDateRange(DateRangeType.CUSTOM, startDate, endDate);
+        }
+
+        return this.getDateRange(type);
+    }
+
+    async loadTransactionsData(resetPage = false) {
         // Load all transactions
         this.transactions = this.plugin.getAllTransactions();
         
-        // Sort transactions by date and creation time (latest first)
+        // Sort transactions by date and time (latest first)
         this.transactions = sortTransactionsByDateTimeDesc(this.transactions);
         
+        this.applyFilters(resetPage);
+    }
+
+    applyFilters(resetPage = false) {
         // Filter transactions based on the date range
         this.filteredTransactions = this.transactions.filter(transaction => {
             const transactionDate = parseLocalDate(transaction.date);
@@ -317,8 +488,12 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         }
         
         // Update pagination
-        this.totalPages = Math.ceil(this.filteredTransactions.length / this.pageSize);
-        this.currentPage = 1; // Reset to first page when changing date range
+        this.totalPages = Math.max(1, Math.ceil(this.filteredTransactions.length / this.pageSize));
+        if (resetPage) {
+            this.currentPage = 1;
+        } else if (this.currentPage > this.totalPages) {
+            this.currentPage = this.totalPages;
+        }
     }
 
     renderTransactionsList(container: HTMLElement) {
@@ -465,6 +640,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         firstBtn.addEventListener('click', () => {
             if (this.currentPage !== 1) {
                 this.currentPage = 1;
+                this.persistTransactionsState();
                 this.renderView();
             }
         });
@@ -477,6 +653,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         prevBtn.addEventListener('click', () => {
             if (this.currentPage > 1) {
                 this.currentPage--;
+                this.persistTransactionsState();
                 this.renderView();
             }
         });
@@ -495,6 +672,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         nextBtn.addEventListener('click', () => {
             if (this.currentPage < this.totalPages) {
                 this.currentPage++;
+                this.persistTransactionsState();
                 this.renderView();
             }
         });
@@ -507,6 +685,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         lastBtn.addEventListener('click', () => {
             if (this.currentPage !== this.totalPages) {
                 this.currentPage = this.totalPages;
+                this.persistTransactionsState();
                 this.renderView();
             }
         });
@@ -532,38 +711,27 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         
         pageSizeSelect.addEventListener('change', () => {
             this.pageSize = parseInt(pageSizeSelect.value);
-            this.totalPages = Math.ceil(this.filteredTransactions.length / this.pageSize);
-            this.currentPage = 1; // Reset to first page when changing page size
+            this.applyFilters(true);
+            this.persistTransactionsState();
             this.renderView();
         });
-    }
-
-    applyFilters() {
-        // No filtering needed anymore
-        this.filteredTransactions = [...this.transactions];
-        
-        // Update pagination
-        this.totalPages = Math.ceil(this.filteredTransactions.length / this.pageSize);
-        if (this.currentPage > this.totalPages) {
-            this.currentPage = this.totalPages;
-        }
     }
 
     async addTransaction(transaction: Transaction) {
         await this.plugin.addTransaction(transaction);
         
-        // Refresh transactions
-        this.transactions = this.plugin.getAllTransactions();
-        this.applyFilters();
+        // Refresh transactions without resetting the user's current filter/page context.
+        await this.loadTransactionsData(false);
+        this.persistTransactionsState();
         this.renderView();
     }
 
     async updateTransaction(transaction: Transaction) {
         await this.plugin.updateTransaction(transaction);
         
-        // Refresh transactions
-        this.transactions = this.plugin.getAllTransactions();
-        this.applyFilters();
+        // Refresh transactions without resetting the user's current filter/page context.
+        await this.loadTransactionsData(false);
+        this.persistTransactionsState();
         this.renderView();
     }
 
@@ -578,9 +746,9 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
             async (confirmed) => {
                 if (confirmed) {
                     await this.plugin.deleteTransaction(id);
-                    // Refresh transactions
-                    this.transactions = this.plugin.getAllTransactions();
-                    this.applyFilters();
+                    // Refresh transactions without resetting the user's current filter/page context.
+                    await this.loadTransactionsData(false);
+                    this.persistTransactionsState();
                     this.renderView();
                     new Notice('Transaction deleted successfully');
                 }
@@ -672,7 +840,8 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         }
         
         this._debounceTimeout = setTimeout(() => {
-            this.loadTransactionsData();
+            this.loadTransactionsData(true);
+            this.persistTransactionsState();
             
             // Update only transaction count without full re-render
             const countEl = this.contentEl.querySelector('.expensica-transaction-count');
