@@ -472,6 +472,10 @@ export class ExpensicaDashboardView extends ItemView {
         ).open();
     }
 
+    getDefaultTransactionDate(): Date {
+        return this.selectedCalendarDate ? new Date(this.selectedCalendarDate) : new Date();
+    }
+
     renderDashboard() {
         const container = this.containerEl.children[1] as HTMLElement;
         this.rememberScrollPosition();
@@ -2841,8 +2845,8 @@ class TransactionModal extends Modal {
             dateInput.value = this.transaction.date.substring(0, 10); // YYYY-MM-DD
             notesInput.value = this.transaction.notes || '';
         } else {
-            // Set default date to today
-            dateInput.value = formatDate(new Date());
+            // Set default date to the selected calendar day when available
+            dateInput.value = formatDate(this.dashboardView.getDefaultTransactionDate?.() || new Date());
         }
 
         // Event listeners
