@@ -398,6 +398,26 @@ export class ExpensicaDashboardView extends ItemView {
         );
     }
 
+    getCumulativeBalanceThrough(endDate: Date): number {
+        const normalizedEndDate = new Date(endDate);
+        normalizedEndDate.setHours(23, 59, 59, 999);
+
+        return this.plugin.getAllTransactions().reduce((balance, transaction) => {
+            const transactionDate = parseLocalDate(transaction.date);
+            if (transactionDate > normalizedEndDate) {
+                return balance;
+            }
+
+            return transaction.type === TransactionType.INCOME
+                ? balance + transaction.amount
+                : balance - transaction.amount;
+        }, 0);
+    }
+
+    getPreviousMonthEndDate(): Date {
+        return new Date(this.currentDate.getFullYear(), this.currentDate.getMonth(), 0, 23, 59, 59, 999);
+    }
+
     loadTransactionsForDateRange() {
         // Get all transactions
         const allTransactions = this.plugin.getAllTransactions();
@@ -1466,11 +1486,11 @@ export class ExpensicaDashboardView extends ItemView {
         // Get data for current and previous month
         const totalIncome = TransactionAggregator.getTotalIncome(this.transactions);
         const totalExpenses = TransactionAggregator.getTotalExpenses(this.transactions);
-        const balance = totalIncome - totalExpenses;
+        const balance = this.getCumulativeBalanceThrough(this.dateRange.endDate);
 
         const prevTotalIncome = TransactionAggregator.getTotalIncome(this.previousMonthTransactions);
         const prevTotalExpenses = TransactionAggregator.getTotalExpenses(this.previousMonthTransactions);
-        const prevBalance = prevTotalIncome - prevTotalExpenses;
+        const prevBalance = this.getCumulativeBalanceThrough(this.getPreviousMonthEndDate());
 
         // Calculate trends (percentage change from previous month)
         const incomeTrend = prevTotalIncome === 0 ? 100 : ((totalIncome - prevTotalIncome) / prevTotalIncome) * 100;
