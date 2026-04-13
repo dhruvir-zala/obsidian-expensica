@@ -24,7 +24,8 @@ import {
     BudgetPeriod,
     TransactionAggregator,
     formatCurrency,
-    calculateBudgetStatus
+    calculateBudgetStatus,
+    sortTransactionsByDateTimeDesc
 } from './src/models';
 
 import { ExportModal } from './src/export-modal';
@@ -736,10 +737,8 @@ export default class ExpensicaPlugin extends Plugin {
                 noteContent += `| Description | Category | Amount | Notes |\n`;
                 noteContent += `| ----------- | -------- | ------ | ----- |\n`;
                 
-                // Sort transactions by time (newest first)
-                const sortedTransactions = [...todaysTransactions].sort((a, b) => 
-                    new Date(b.date).getTime() - new Date(a.date).getTime()
-                );
+                // Sort transactions by date and creation time (newest first)
+                const sortedTransactions = sortTransactionsByDateTimeDesc(todaysTransactions);
                 
                 // Add each transaction to the table
                 for (const transaction of sortedTransactions) {
@@ -870,10 +869,8 @@ export default class ExpensicaPlugin extends Plugin {
                     noteContent += `| Description | Category | Amount | Notes |\n`;
                     noteContent += `| ----------- | -------- | ------ | ----- |\n`;
                     
-                    // Sort transactions by time (newest first)
-                    const sortedTransactions = [...dateTransactions].sort((a, b) => 
-                        new Date(b.date).getTime() - new Date(a.date).getTime()
-                    );
+                    // Sort transactions by date and creation time (newest first)
+                    const sortedTransactions = sortTransactionsByDateTimeDesc(dateTransactions);
                     
                     // Add each transaction to the table
                     for (const transaction of sortedTransactions) {
