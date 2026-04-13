@@ -1,6 +1,6 @@
 import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, WorkspaceLeaf, TFile } from 'obsidian';
 
-import { ExpensicaDashboardView, EXPENSICA_VIEW_TYPE, ExpenseModal, IncomeModal } from './src/dashboard-view';
+import { ExpensicaDashboardView, EXPENSICA_VIEW_TYPE, ExpenseModal, IncomeModal, DateRangeType } from './src/dashboard-view';
 import { ExpensicaTransactionsView, EXPENSICA_TRANSACTIONS_VIEW_TYPE } from './src/transactions-view';
 
 import {
@@ -58,12 +58,22 @@ interface ExpensicaSettings {
     enableDailyFinanceReview: boolean;
     enableDailyFinanceReviewForAnyDate: boolean;
     dailyReviewFolder: string;
+    sharedDateRangeState: SharedDateRangeState | null;
 }
 
 // Define a separate interface for our transactions data
 interface TransactionsData {
     transactions: Transaction[];
     lastUpdated: string; // ISO timestamp
+}
+
+export interface SharedDateRangeState {
+    type: DateRangeType;
+    startDate: string;
+    endDate: string;
+    customStartDate: string | null;
+    customEndDate: string | null;
+    updatedAt: number;
 }
 
 // Define default settings
@@ -76,7 +86,8 @@ const DEFAULT_SETTINGS: ExpensicaSettings = {
     enableBudgeting: true,
     enableDailyFinanceReview: true,
     enableDailyFinanceReviewForAnyDate: true,
-    dailyReviewFolder: ''
+    dailyReviewFolder: '',
+    sharedDateRangeState: null
 };
 
 // Default transactions data
@@ -422,12 +433,78 @@ export default class ExpensicaPlugin extends Plugin {
         // This handles migration from old format
         if (!this.settings.categories[0]?.emoji) {
             this.settings.categories = DEFAULT_CATEGORIES;
-            await this.saveSettings();
+            await this.saveSettings(false);
         }
     }
 
-    async saveSettings() {
+    async saveSettings(refreshViews = true) {
         await this.saveData(this.settings);
+
+        if (refreshViews) {
+            await this.refreshExpensicaViews();
+        }
+    }
+
+    getSharedDateRangeState(): SharedDateRangeState | null {
+        return this.settings.sharedDateRangeState;
+    }
+
+    async setSharedDateRangeState(state: SharedDateRangeState, sourceView?: unknown) {
+        const currentState = this.settings.sharedDateRangeState;
+        if (currentState && currentState.updatedAt > state.updatedAt) {
+            return;
+        }
+
+        this.settings.sharedDateRangeState = { ...state };
+        await this.saveSettings(false);
+        await this.syncDateRangeViews(sourceView);
+    }
+
+    async refreshExpensicaViews() {
+        const leaves = [
+            ...this.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE),
+            ...this.app.workspace.getLeavesOfType(EXPENSICA_TRANSACTIONS_VIEW_TYPE)
+        ];
+
+        for (const leaf of leaves) {
+            const view = leaf.view;
+
+            if (view instanceof ExpensicaDashboardView) {
+                await view.loadTransactionsData();
+                view.renderDashboard();
+            } else if (view instanceof ExpensicaTransactionsView) {
+                await view.loadTransactionsData(false);
+                view.renderView();
+            }
+        }
+    }
+
+    async syncDateRangeViews(sourceView?: unknown) {
+        const sharedState = this.getSharedDateRangeState();
+        if (!sharedState) {
+            return;
+        }
+
+        const leaves = [
+            ...this.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE),
+            ...this.app.workspace.getLeavesOfType(EXPENSICA_TRANSACTIONS_VIEW_TYPE)
+        ];
+
+        for (const leaf of leaves) {
+            const view = leaf.view as unknown;
+            if (view === sourceView) {
+                continue;
+            }
+
+            if (
+                view
+                && typeof view === 'object'
+                && 'applySharedDateRangeState' in view
+                && typeof (view as { applySharedDateRangeState: (state: SharedDateRangeState) => Promise<void> }).applySharedDateRangeState === 'function'
+            ) {
+                await (view as { applySharedDateRangeState: (state: SharedDateRangeState) => Promise<void> }).applySharedDateRangeState(sharedState);
+            }
+        }
     }
 
     // Get categories filtered by type
