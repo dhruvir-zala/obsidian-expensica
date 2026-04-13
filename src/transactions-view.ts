@@ -13,6 +13,7 @@ import {
     calculateBudgetStatus
 } from './models';
 import ExpensicaPlugin from '../main';
+import type { SharedDateRangeState } from '../main';
 import { ExpenseModal, IncomeModal, DateRangeType, DateRange, DateRangePickerModal } from './dashboard-view';
 import { ConfirmationModal } from './confirmation-modal';
 
@@ -39,6 +40,7 @@ interface TransactionsViewState {
     dateRangeEnd?: string;
     customStartDate?: string | null;
     customEndDate?: string | null;
+    dateRangeUpdatedAt?: number;
     searchQuery?: string;
     currentPage?: number;
     pageSize?: number;
@@ -62,6 +64,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
     dateRange: DateRange;
     customStartDate: Date | null = null;
     customEndDate: Date | null = null;
+    dateRangeUpdatedAt: number = 0;
 
     constructor(leaf: WorkspaceLeaf, plugin: ExpensicaPlugin) {
         super(leaf);
@@ -84,6 +87,11 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
     }
 
     async onOpen() {
+        const sharedDateRangeState = this.plugin.getSharedDateRangeState();
+        if (sharedDateRangeState) {
+            this.applySharedDateRangeStateValues(sharedDateRangeState);
+        }
+
         // Load transactions data
         await this.loadTransactionsData();
         
@@ -114,6 +122,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
             dateRangeEnd: formatDate(this.dateRange.endDate),
             customStartDate: this.customStartDate ? formatDate(this.customStartDate) : null,
             customEndDate: this.customEndDate ? formatDate(this.customEndDate) : null,
+            dateRangeUpdatedAt: this.dateRangeUpdatedAt,
             searchQuery: this.searchQuery,
             currentPage: this.currentPage,
             pageSize: this.pageSize,
@@ -158,11 +167,19 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
             const startDate = transactionsState.dateRangeStart ? parseLocalDate(transactionsState.dateRangeStart) : undefined;
             const endDate = transactionsState.dateRangeEnd ? parseLocalDate(transactionsState.dateRangeEnd) : undefined;
             this.dateRange = this.createDateRangeFromState(transactionsState.dateRangeType, startDate, endDate);
+            this.dateRangeUpdatedAt = transactionsState.dateRangeUpdatedAt ?? 0;
 
             if (transactionsState.dateRangeType === DateRangeType.CUSTOM && startDate && endDate) {
                 this.customStartDate = startDate;
                 this.customEndDate = endDate;
             }
+        }
+
+        const sharedDateRangeState = this.plugin.getSharedDateRangeState();
+        if (sharedDateRangeState && sharedDateRangeState.updatedAt >= this.dateRangeUpdatedAt) {
+            this.applySharedDateRangeStateValues(sharedDateRangeState);
+        } else if (transactionsState.dateRangeType) {
+            await this.plugin.setSharedDateRangeState(this.createSharedDateRangeState(), this);
         }
 
         if (typeof transactionsState.scrollTop === 'number') {
@@ -337,6 +354,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
                             this.customStartDate = startDate;
                             this.customEndDate = endDate;
                             this.dateRange = this.getDateRange(DateRangeType.CUSTOM, startDate, endDate);
+                            await this.updateSharedDateRange();
                             
                             // Update dateRangeText
                             dateRangeText.textContent = this.dateRange.label;
@@ -351,6 +369,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
                 } else {
                     // Set the new date range
                     this.dateRange = this.getDateRange(option.type);
+                    await this.updateSharedDateRange();
                     
                     // Update dateRangeText
                     dateRangeText.textContent = this.dateRange.label;
@@ -396,17 +415,45 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         this.app.workspace.requestSaveLayout();
     }
 
+    createSharedDateRangeState(): SharedDateRangeState {
+        return {
+            type: this.dateRange.type,
+            startDate: formatDate(this.dateRange.startDate),
+            endDate: formatDate(this.dateRange.endDate),
+            customStartDate: this.customStartDate ? formatDate(this.customStartDate) : null,
+            customEndDate: this.customEndDate ? formatDate(this.customEndDate) : null,
+            updatedAt: this.dateRangeUpdatedAt
+        };
+    }
+
+    applySharedDateRangeStateValues(state: SharedDateRangeState) {
+        const startDate = parseLocalDate(state.startDate);
+        const endDate = parseLocalDate(state.endDate);
+        this.dateRange = this.createDateRangeFromState(state.type, startDate, endDate);
+        this.customStartDate = state.customStartDate ? parseLocalDate(state.customStartDate) : null;
+        this.customEndDate = state.customEndDate ? parseLocalDate(state.customEndDate) : null;
+        this.dateRangeUpdatedAt = state.updatedAt;
+    }
+
+    async applySharedDateRangeState(state: SharedDateRangeState) {
+        if (state.updatedAt < this.dateRangeUpdatedAt) {
+            return;
+        }
+
+        this.applySharedDateRangeStateValues(state);
+        await this.loadTransactionsData(true);
+        this.persistTransactionsState();
+        this.renderView();
+    }
+
+    async updateSharedDateRange() {
+        this.dateRangeUpdatedAt = Date.now();
+        await this.plugin.setSharedDateRangeState(this.createSharedDateRangeState(), this);
+    }
+
     createDateRangeFromState(type: DateRangeType, startDate?: Date, endDate?: Date): DateRange {
         if (type === DateRangeType.CUSTOM && startDate && endDate) {
             return this.getDateRange(DateRangeType.CUSTOM, startDate, endDate);
-        }
-
-        if (startDate && endDate) {
-            const dateRange = this.getDateRange(type);
-            dateRange.startDate = startDate;
-            dateRange.endDate = endDate;
-            dateRange.endDate.setHours(23, 59, 59, 999);
-            return dateRange;
         }
 
         return this.getDateRange(type);
