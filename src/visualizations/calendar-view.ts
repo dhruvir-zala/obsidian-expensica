@@ -1,4 +1,4 @@
-import { Transaction, TransactionType, formatCurrency, ColorScheme, parseLocalDate, getCategoryColor } from '../models';
+import { Transaction, TransactionType, formatCurrency, ColorScheme, parseLocalDate, getCategoryColor, sortTransactionsByDateTimeDesc } from '../models';
 import ExpensicaPlugin from '../../main';
 import * as d3 from 'd3';
 
@@ -860,10 +860,8 @@ export class CalendarHeatmap {
         
         const transactionList = this.detailsContainer.createDiv('expensica-calendar-transaction-list');
         
-        // Sort transactions by amount (descending)
-        const sortedTransactions = [...expenseTransactions].sort((a, b) => {
-            return b.amount - a.amount;
-        });
+        // Sort transactions by creation time (newest first), with legacy ID/JSON-order fallbacks.
+        const sortedTransactions = sortTransactionsByDateTimeDesc(expenseTransactions);
         
         // Add each transaction
         sortedTransactions.forEach((transaction, index) => {
