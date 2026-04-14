@@ -60,6 +60,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
     pageSize: number = 20;
     totalPages: number = 1;
     private scrollTop: number = 0;
+    private hasRenderedView = false;
 
     // Date range properties
     dateRange: DateRange;
@@ -195,10 +196,12 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
 
     renderView(preserveFocus = false) {
         const container = this.contentEl;
+        const isRoutineRender = this.hasRenderedView;
         this.rememberScrollPosition();
         container.empty();
         container.addClass('expensica-container');
         container.addClass('transactions-container');
+        container.toggleClass('expensica-suppress-motion', isRoutineRender);
 
         // Header section (always visible at the top)
         this.renderHeader(container);
@@ -248,18 +251,22 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
                 searchInput.focus();
             }, 0);
         }
+
+        // Pagination (near the filters for mobile reachability)
+        this.renderPagination(container, 'top');
         
         // Transactions list (takes available space)
         this.renderTransactionsList(container);
         
         // Pagination (at the bottom)
-        this.renderPagination(container);
+        this.renderPagination(container, 'bottom');
 
         this.restoreScrollPosition();
+        this.hasRenderedView = true;
     }
 
     renderHeader(container: HTMLElement) {
-        const header = container.createDiv('expensica-header');
+        const header = container.createDiv('expensica-header expensica-transactions-view-header');
         
         // Title section with count 
         const titleSection = header.createDiv('expensica-title-section');
@@ -278,16 +285,16 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         });
         
         // Actions
-        const actionsSection = header.createDiv('expensica-actions-section');
+        const actionsSection = header.createDiv('shadcn-actions');
         
         // Add date range selector
         this.renderDateRangeSelector(actionsSection);
         
         // Add expense button
         const addExpenseBtn = actionsSection.createEl('button', { 
-            cls: 'expensica-btn expensica-btn-danger' 
+            cls: 'shadcn-btn shadcn-btn-danger'
         });
-        addExpenseBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg> Add Expense';
+        addExpenseBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Add Expense';
         addExpenseBtn.addEventListener('click', () => {
             const modal = new ExpenseModal(this.app, this.plugin, this as any);
             modal.open();
@@ -295,9 +302,9 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         
         // Add income button
         const addIncomeBtn = actionsSection.createEl('button', { 
-            cls: 'expensica-btn expensica-btn-success' 
+            cls: 'shadcn-btn shadcn-btn-success'
         });
-        addIncomeBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg> Add Income';
+        addIncomeBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Add Income';
         addIncomeBtn.addEventListener('click', () => {
             const modal = new IncomeModal(this.app, this.plugin, this as any);
             modal.open();
@@ -306,26 +313,26 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
 
     // New method to render the date range selector
     private renderDateRangeSelector(container: HTMLElement) {
-        const dateRangeContainer = container.createDiv('expensica-date-range-container');
+        const dateRangeContainer = container.createDiv('shadcn-date-range-container');
 
         // Create the date range selector dropdown
-        const dateRangeSelector = dateRangeContainer.createDiv('expensica-date-range-selector');
+        const dateRangeSelector = dateRangeContainer.createDiv('shadcn-date-range-selector');
         
         // Current selection display
-        const currentSelection = dateRangeSelector.createDiv('expensica-date-range-current');
+        const currentSelection = dateRangeSelector.createDiv('shadcn-date-range-current');
         currentSelection.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`;
         
         const dateRangeText = currentSelection.createSpan({ 
             text: this.dateRange.label,
-            cls: 'expensica-date-range-text'
+            cls: 'shadcn-date-range-text'
         });
         
-        const dropdownIcon = currentSelection.createSpan({ cls: 'expensica-date-range-icon' });
+        const dropdownIcon = currentSelection.createSpan({ cls: 'shadcn-date-range-icon' });
         dropdownIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
 
         // Dropdown options container
-        const optionsContainer = dateRangeSelector.createDiv('expensica-date-range-options');
-        optionsContainer.addClass('expensica-date-range-hidden');
+        const optionsContainer = dateRangeSelector.createDiv('shadcn-date-range-options');
+        optionsContainer.addClass('shadcn-date-range-hidden');
 
         // Add dropdown options
         const options: { type: DateRangeType, label: string }[] = [
@@ -338,12 +345,12 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         ];
 
         options.forEach(option => {
-            const optionItem = optionsContainer.createDiv('expensica-date-range-option');
+            const optionItem = optionsContainer.createDiv('shadcn-date-range-option');
             optionItem.textContent = option.label;
             
             // Highlight the active option
             if (this.dateRange.type === option.type) {
-                optionItem.addClass('expensica-date-range-option-active');
+                optionItem.addClass('shadcn-date-range-option-active');
             }
             
             // Handle option selection
@@ -382,21 +389,24 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
                 }
                 
                 // Hide the dropdown
-                optionsContainer.addClass('expensica-date-range-hidden');
+                optionsContainer.addClass('shadcn-date-range-hidden');
+                dropdownIcon.removeClass('dropdown-icon-open');
             });
         });
 
         // Toggle dropdown on click
         currentSelection.addEventListener('click', () => {
-            const isHidden = optionsContainer.hasClass('expensica-date-range-hidden');
-            optionsContainer.toggleClass('expensica-date-range-hidden', !isHidden);
+            const isHidden = optionsContainer.hasClass('shadcn-date-range-hidden');
+            optionsContainer.toggleClass('shadcn-date-range-hidden', !isHidden);
+            dropdownIcon.toggleClass('dropdown-icon-open', isHidden);
         });
 
         // Close dropdown when clicking outside
         document.addEventListener('click', (event) => {
             const target = event.target as HTMLElement;
             if (!dateRangeSelector.contains(target)) {
-                optionsContainer.addClass('expensica-date-range-hidden');
+                optionsContainer.addClass('shadcn-date-range-hidden');
+                dropdownIcon.removeClass('dropdown-icon-open');
             }
         });
     }
@@ -618,103 +628,178 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         });
     }
 
-    renderPagination(container: HTMLElement) {
+    getPaginationWindow(): number[] {
+        const visiblePageCount = Math.min(3, this.totalPages);
+        const maxStartPage = this.totalPages - visiblePageCount + 1;
+        const startPage = Math.max(1, Math.min(this.currentPage - 1, maxStartPage));
+
+        return Array.from({ length: visiblePageCount }, (_, index) => startPage + index);
+    }
+
+    setCurrentPage(page: number) {
+        const nextPage = Math.max(1, Math.min(page, this.totalPages));
+
+        if (nextPage === this.currentPage) return;
+
+        this.currentPage = nextPage;
+        this.persistTransactionsState();
+        this.refreshTransactionsListOnly();
+    }
+
+    renderPaginationButton(
+        container: HTMLElement,
+        label: string,
+        ariaLabel: string,
+        isDisabled: boolean,
+        onClick: () => void,
+        extraClass = ''
+    ) {
+        const button = container.createEl('button', {
+            cls: `expensica-pagination-btn ${extraClass} ${isDisabled ? 'disabled' : ''}`.trim(),
+            text: label,
+            attr: {
+                'aria-label': ariaLabel,
+                title: ariaLabel
+            }
+        });
+
+        button.addEventListener('click', () => {
+            if (!isDisabled) {
+                onClick();
+            }
+        });
+
+        return button;
+    }
+
+    renderPageSizeSelector(container: HTMLElement) {
+        const selector = container.createDiv('expensica-page-size-selector expensica-date-range-selector');
+        const currentSelection = selector.createDiv('expensica-page-size-current expensica-date-range-current');
+        currentSelection.createSpan({
+            text: String(this.pageSize),
+            cls: 'expensica-date-range-text'
+        });
+
+        const dropdownIcon = currentSelection.createSpan({ cls: 'expensica-date-range-icon' });
+        dropdownIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+
+        const optionsContainer = selector.createDiv('expensica-date-range-options expensica-date-range-hidden');
+
+        [10, 20, 50, 100].forEach(size => {
+            const optionItem = optionsContainer.createDiv('expensica-date-range-option');
+            optionItem.textContent = String(size);
+
+            if (size === this.pageSize) {
+                optionItem.addClass('expensica-date-range-option-active');
+            }
+
+            optionItem.addEventListener('click', (event) => {
+                event.stopPropagation();
+                this.pageSize = size;
+                this.applyFilters(true);
+                this.persistTransactionsState();
+                this.refreshTransactionsListOnly();
+            });
+        });
+
+        currentSelection.addEventListener('click', (event) => {
+            event.stopPropagation();
+            const isHidden = optionsContainer.hasClass('expensica-date-range-hidden');
+            optionsContainer.toggleClass('expensica-date-range-hidden', !isHidden);
+
+            if (isHidden) {
+                setTimeout(() => {
+                    document.addEventListener('click', () => {
+                        optionsContainer.addClass('expensica-date-range-hidden');
+                    }, { once: true });
+                }, 0);
+            }
+        });
+    }
+
+    renderPagination(container: HTMLElement, placement: 'top' | 'bottom') {
         if (this.filteredTransactions.length === 0) return;
 
-        // Check for existing pagination and remove it
-        const existingPagination = container.querySelector('.expensica-pagination');
+        // Check for existing pagination in this placement and remove it
+        const existingPagination = container.querySelector(`.expensica-pagination-${placement}`);
         if (existingPagination) {
             existingPagination.remove();
         }
 
-        const paginationSection = container.createDiv('expensica-pagination');
+        const paginationSection = container.createDiv(`expensica-pagination expensica-pagination-${placement}`);
         
         // Navigation buttons container
         const navigationContainer = paginationSection.createDiv('expensica-pagination-nav');
         
         // First page button
-        const firstBtn = navigationContainer.createEl('button', {
-            cls: `expensica-pagination-btn ${this.currentPage === 1 ? 'disabled' : ''}`,
-            text: 'First'
-        });
-        firstBtn.addEventListener('click', () => {
-            if (this.currentPage !== 1) {
-                this.currentPage = 1;
-                this.persistTransactionsState();
-                this.renderView();
-            }
-        });
+        this.renderPaginationButton(
+            navigationContainer,
+            '<<',
+            'First page',
+            this.currentPage === 1,
+            () => this.setCurrentPage(1)
+        );
 
         // Previous page button
-        const prevBtn = navigationContainer.createEl('button', {
-            cls: `expensica-pagination-btn ${this.currentPage === 1 ? 'disabled' : ''}`,
-            text: 'Previous'
-        });
-        prevBtn.addEventListener('click', () => {
-            if (this.currentPage > 1) {
-                this.currentPage--;
-                this.persistTransactionsState();
-                this.renderView();
-            }
-        });
+        this.renderPaginationButton(
+            navigationContainer,
+            '<',
+            'Previous page',
+            this.currentPage === 1,
+            () => this.setCurrentPage(this.currentPage - 1)
+        );
 
-        // Page indicator
-        const pageIndicator = navigationContainer.createEl('span', {
-            cls: 'expensica-pagination-info',
-            text: `Page ${this.currentPage} of ${this.totalPages}`
+        // Sliding page buttons
+        this.getPaginationWindow().forEach(page => {
+            this.renderPaginationButton(
+                navigationContainer,
+                String(page),
+                `Page ${page} of ${this.totalPages}`,
+                false,
+                () => this.setCurrentPage(page),
+                page === this.currentPage ? 'active' : ''
+            );
         });
 
         // Next page button
-        const nextBtn = navigationContainer.createEl('button', {
-            cls: `expensica-pagination-btn ${this.currentPage === this.totalPages ? 'disabled' : ''}`,
-            text: 'Next'
-        });
-        nextBtn.addEventListener('click', () => {
-            if (this.currentPage < this.totalPages) {
-                this.currentPage++;
-                this.persistTransactionsState();
-                this.renderView();
-            }
-        });
+        this.renderPaginationButton(
+            navigationContainer,
+            '>',
+            'Next page',
+            this.currentPage === this.totalPages,
+            () => this.setCurrentPage(this.currentPage + 1)
+        );
 
         // Last page button
-        const lastBtn = navigationContainer.createEl('button', {
-            cls: `expensica-pagination-btn ${this.currentPage === this.totalPages ? 'disabled' : ''}`,
-            text: 'Last'
-        });
-        lastBtn.addEventListener('click', () => {
-            if (this.currentPage !== this.totalPages) {
-                this.currentPage = this.totalPages;
-                this.persistTransactionsState();
-                this.renderView();
-            }
-        });
+        this.renderPaginationButton(
+            navigationContainer,
+            '>>',
+            'Last page',
+            this.currentPage === this.totalPages,
+            () => this.setCurrentPage(this.totalPages)
+        );
 
         // Items per page selector container
         const itemsPerPageContainer = paginationSection.createDiv('expensica-items-per-page');
-        itemsPerPageContainer.createEl('span', { text: 'Items per page:' });
-        
-        const pageSizeSelect = itemsPerPageContainer.createEl('select', {
-            cls: 'expensica-page-size-select'
-        });
-        
-        [10, 20, 50, 100].forEach(size => {
-            const option = pageSizeSelect.createEl('option', {
-                text: String(size),
-                value: String(size)
-            });
-            
-            if (size === this.pageSize) {
-                option.selected = true;
-            }
-        });
-        
-        pageSizeSelect.addEventListener('change', () => {
-            this.pageSize = parseInt(pageSizeSelect.value);
-            this.applyFilters(true);
-            this.persistTransactionsState();
-            this.renderView();
-        });
+        itemsPerPageContainer.createEl('span', { text: 'Items Per Page:' });
+        this.renderPageSizeSelector(itemsPerPageContainer);
+    }
+
+    refreshTransactionsListOnly() {
+        this.contentEl.addClass('expensica-suppress-motion');
+
+        const countEl = this.contentEl.querySelector('.expensica-transaction-count');
+        if (countEl) {
+            countEl.textContent = `${this.filteredTransactions.length} transactions`;
+        }
+
+        this.contentEl.querySelector('.expensica-transactions-section')?.remove();
+        this.contentEl.querySelectorAll('.expensica-pagination').forEach(section => section.remove());
+
+        this.renderPagination(this.contentEl, 'top');
+        this.renderTransactionsList(this.contentEl);
+        this.renderPagination(this.contentEl, 'bottom');
+        this.restoreScrollPosition();
     }
 
     async addTransaction(transaction: Transaction) {
@@ -723,7 +808,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         // Refresh transactions without resetting the user's current filter/page context.
         await this.loadTransactionsData(false);
         this.persistTransactionsState();
-        this.renderView();
+        this.refreshTransactionsListOnly();
     }
 
     async updateTransaction(transaction: Transaction) {
@@ -732,7 +817,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         // Refresh transactions without resetting the user's current filter/page context.
         await this.loadTransactionsData(false);
         this.persistTransactionsState();
-        this.renderView();
+        this.refreshTransactionsListOnly();
     }
 
     async deleteTransaction(id: string) {
@@ -749,7 +834,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
                     // Refresh transactions without resetting the user's current filter/page context.
                     await this.loadTransactionsData(false);
                     this.persistTransactionsState();
-                    this.renderView();
+                    this.refreshTransactionsListOnly();
                     new Notice('Transaction deleted successfully');
                 }
             }
@@ -842,57 +927,8 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         this._debounceTimeout = setTimeout(() => {
             this.loadTransactionsData(true);
             this.persistTransactionsState();
-            
-            // Update only transaction count without full re-render
-            const countEl = this.contentEl.querySelector('.expensica-transaction-count');
-            if (countEl) {
-                countEl.textContent = `${this.filteredTransactions.length} transactions`;
-            }
-            
-            // Update transactions list
-            const transactionsSection = this.contentEl.querySelector('.expensica-transactions-section');
-            if (transactionsSection) {
-                // Clear the transactions section
-                transactionsSection.innerHTML = '';
-                
-                // Re-render transactions
-                if (this.filteredTransactions.length === 0) {
-                    // No transactions found
-                    const emptyState = createDiv({ cls: 'expensica-empty-state', parent: transactionsSection });
-                    createDiv({ text: '📋', cls: 'expensica-empty-state-icon', parent: emptyState });
-                    createEl('p', {
-                        text: 'No transactions found matching your filters.',
-                        cls: 'expensica-empty-state-message',
-                        parent: emptyState
-                    });
-                } else {
-                    // Transactions container
-                    const transactionsContainer = createDiv({ 
-                        cls: 'expensica-transactions', 
-                        parent: transactionsSection 
-                    });
-                    
-                    // Calculate pagination
-                    const startIdx = (this.currentPage - 1) * this.pageSize;
-                    const endIdx = Math.min(startIdx + this.pageSize, this.filteredTransactions.length);
-                    
-                    // Get current page transactions
-                    const pageTransactions = this.filteredTransactions.slice(startIdx, endIdx);
-                    
-                    // Render each transaction
-                    this.renderTransactionsToContainer(transactionsContainer, pageTransactions);
-                }
-            }
-            
-            // Remove all existing pagination sections first
-            const existingPaginationSections = this.contentEl.querySelectorAll('.expensica-pagination');
-            existingPaginationSections.forEach(section => section.remove());
-            
-            // Now render a single pagination section at the bottom
-            if (this.filteredTransactions.length > 0) {
-                this.renderPagination(this.contentEl);
-            }
-            
+            this.refreshTransactionsListOnly();
+
             // Restore focus to search input if it was previously focused
             if (wasFocused) {
                 const searchInput = this.contentEl.querySelector('#expensica-search-input') as HTMLInputElement;
@@ -900,7 +936,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
                     searchInput.focus();
                 }
             }
-            
+
             this._debounceTimeout = null;
         }, 300);
     }

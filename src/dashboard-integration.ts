@@ -115,10 +115,12 @@ export class PremiumVisualizations {
         }
     }
 
-    public resize() {
+    public resize(): boolean {
         // Resize the calendar heatmap
         if (this.calendarHeatmap) {
-            this.calendarHeatmap.resize();
+            return this.calendarHeatmap.resize();
         }
+
+        return false;
     }
 }
