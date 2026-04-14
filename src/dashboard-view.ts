@@ -4,8 +4,8 @@ import {
 import Chart from 'chart.js/auto';
 import { 
     Transaction, Category, TransactionType, CategoryType, Currency, ColorScheme,
-    formatCurrency, formatDate, parseLocalDate, getMonthName, getYear, generateId, TransactionAggregator,
-    Budget, BudgetPeriod, calculateBudgetStatus, getCurrencyByCode, getCategoryColor
+    formatCurrency, formatDate, formatTime, parseLocalDate, getMonthName, getYear, generateId, TransactionAggregator,
+    Budget, BudgetPeriod, calculateBudgetStatus, getCurrencyByCode, getCategoryColor, sortTransactionsByDateTimeDesc
 } from './models';
 import ExpensicaPlugin from '../main';
 import type { SharedDateRangeState } from '../main';
@@ -470,6 +470,10 @@ export class ExpensicaDashboardView extends ItemView {
                 }
             }
         ).open();
+    }
+
+    getDefaultTransactionDate(): Date {
+        return this.selectedCalendarDate ? new Date(this.selectedCalendarDate) : new Date();
     }
 
     renderDashboard() {
@@ -2157,10 +2161,8 @@ export class ExpensicaDashboardView extends ItemView {
         // Transactions container
         const transactionsContainer = transactionsSection.createDiv('expensica-transactions');
 
-        // Sort transactions by date (most recent first)
-        const sortedTransactions = [...this.transactions].sort((a, b) => {
-            return new Date(b.date).getTime() - new Date(a.date).getTime();
-        });
+        // Sort transactions by date and creation time (most recent first)
+        const sortedTransactions = sortTransactionsByDateTimeDesc(this.transactions);
 
         // Limit to 10 most recent transactions
         const recentTransactions = sortedTransactions.slice(0, 10);
@@ -2843,8 +2845,8 @@ class TransactionModal extends Modal {
             dateInput.value = this.transaction.date.substring(0, 10); // YYYY-MM-DD
             notesInput.value = this.transaction.notes || '';
         } else {
-            // Set default date to today
-            dateInput.value = formatDate(new Date());
+            // Set default date to the selected calendar day when available
+            dateInput.value = formatDate(this.dashboardView.getDefaultTransactionDate?.() || new Date());
         }
 
         // Event listeners
@@ -2858,6 +2860,7 @@ class TransactionModal extends Modal {
             const transaction: Transaction = {
                 id: this.transaction ? this.transaction.id : generateId(),
                 date: formData.get('date') as string,
+                time: this.transaction ? this.transaction.time : formatTime(),
                 type: this.getTransactionType(),
                 amount: parseFloat(formData.get('amount') as string),
                 description: formData.get('description') as string,

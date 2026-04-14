@@ -37,6 +37,7 @@ export enum TransactionType {
 export interface Transaction {
   id: string;
   date: string; // ISO date string
+  time?: string; // HH:mm:ss local creation time
   type: TransactionType;
   amount: number;
     description: string;
@@ -70,6 +71,70 @@ function fallbackRandomIdPart(): string {
 
   return Math.random().toString(36).slice(2, 10).padEnd(8, '0');
 }
+
+  // Helper function to format a time
+  export function formatTime(date: Date = new Date()): string {
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${hours}:${minutes}:${seconds}`;
+  }
+
+  function getTimeInSeconds(time: string | undefined): number | null {
+    if (!time) {
+      return null;
+    }
+
+    const match = time.match(/^(\d{2}):(\d{2}):(\d{2})$/);
+    if (!match) {
+      return null;
+    }
+
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    const seconds = Number(match[3]);
+
+    if (hours > 23 || minutes > 59 || seconds > 59) {
+      return null;
+    }
+
+    return hours * 3600 + minutes * 60 + seconds;
+  }
+
+  export function getTransactionTime(transaction: Transaction): string | null {
+    if (getTimeInSeconds(transaction.time) !== null) {
+      return transaction.time!;
+    }
+
+    const idTimeMatch = transaction.id.match(/^\d{8}-(\d{2})(\d{2})(\d{2})-/);
+    if (!idTimeMatch) {
+      return null;
+    }
+
+    const time = `${idTimeMatch[1]}:${idTimeMatch[2]}:${idTimeMatch[3]}`;
+    return getTimeInSeconds(time) !== null ? time : null;
+  }
+
+  export function sortTransactionsByDateTimeDesc<T extends Transaction>(transactions: T[]): T[] {
+    return transactions
+      .map((transaction, index) => ({ transaction, index }))
+      .sort((a, b) => {
+        const dateDiff = parseLocalDate(b.transaction.date).getTime() - parseLocalDate(a.transaction.date).getTime();
+        if (dateDiff !== 0) {
+          return dateDiff;
+        }
+
+        const aTime = getTimeInSeconds(getTransactionTime(a.transaction) || undefined);
+        const bTime = getTimeInSeconds(getTransactionTime(b.transaction) || undefined);
+
+        if (aTime !== null && bTime !== null && aTime !== bTime) {
+          return bTime - aTime;
+        }
+
+        return b.index - a.index;
+      })
+      .map(({ transaction }) => transaction);
+  }
   
   // Helper function to format a date
   export function formatDate(date: Date): string {

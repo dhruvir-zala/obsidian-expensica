@@ -6,6 +6,7 @@ import {
     formatCurrency,
     formatDate,
     parseLocalDate,
+    sortTransactionsByDateTimeDesc,
     CategoryType,
     Category,
     getMonthYearString,
@@ -463,8 +464,8 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         // Load all transactions
         this.transactions = this.plugin.getAllTransactions();
         
-        // Sort transactions by date (latest first)
-        this.transactions.sort((a, b) => parseLocalDate(b.date).getTime() - parseLocalDate(a.date).getTime());
+        // Sort transactions by date and time (latest first)
+        this.transactions = sortTransactionsByDateTimeDesc(this.transactions);
         
         this.applyFilters(resetPage);
     }
