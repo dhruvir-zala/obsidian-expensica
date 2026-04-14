@@ -5,7 +5,8 @@ import Chart from 'chart.js/auto';
 import { 
     Transaction, Category, TransactionType, CategoryType, Currency, ColorScheme,
     formatCurrency, formatDate, formatTime, parseLocalDate, getMonthName, getYear, generateId, TransactionAggregator,
-    Budget, BudgetPeriod, calculateBudgetStatus, getCurrencyByCode, getCategoryColor, sortTransactionsByDateTimeDesc
+    Budget, BudgetPeriod, calculateBudgetStatus, getCurrencyByCode, getCategoryColor, sortTransactionsByDateTimeDesc,
+    getRunningBalanceByTransactionId
 } from './models';
 import ExpensicaPlugin from '../main';
 import type { SharedDateRangeState } from '../main';
@@ -2506,6 +2507,7 @@ export class ExpensicaDashboardView extends ItemView {
 
         // Sort transactions by date and creation time (most recent first)
         const sortedTransactions = sortTransactionsByDateTimeDesc(this.transactions);
+        const runningBalances = getRunningBalanceByTransactionId(this.plugin.getAllTransactions());
 
         // Limit to 10 most recent transactions
         const recentTransactions = sortedTransactions.slice(0, 10);
@@ -2572,6 +2574,7 @@ export class ExpensicaDashboardView extends ItemView {
                 // Transaction amount
                 const amountEl = transactionEl.createDiv('expensica-transaction-amount');
                 const formattedAmount = formatCurrency(transaction.amount, this.plugin.settings.defaultCurrency);
+                const formattedBalance = formatCurrency(runningBalances[transaction.id] ?? 0, this.plugin.settings.defaultCurrency);
                 if (transaction.type === TransactionType.INCOME) {
                     amountEl.createEl('span', {
                         text: `+${formattedAmount}`,
@@ -2583,6 +2586,10 @@ export class ExpensicaDashboardView extends ItemView {
                         cls: 'expensica-expense'
                     });
                 }
+                amountEl.createEl('span', {
+                    text: formattedBalance,
+                    cls: 'expensica-transaction-balance'
+                });
 
                 // Add edit and delete options
                 const actionsEl = transactionEl.createDiv('expensica-transaction-actions');

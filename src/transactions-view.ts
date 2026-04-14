@@ -7,6 +7,7 @@ import {
     formatDate,
     parseLocalDate,
     sortTransactionsByDateTimeDesc,
+    getRunningBalanceByTransactionId,
     CategoryType,
     Category,
     getMonthYearString,
@@ -529,6 +530,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         
         // Get current page transactions
         const pageTransactions = this.filteredTransactions.slice(startIdx, endIdx);
+        const runningBalances = getRunningBalanceByTransactionId(this.transactions);
         
         // Render each transaction
         pageTransactions.forEach(transaction => {
@@ -585,6 +587,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
             // Transaction amount
             const amountEl = transactionEl.createDiv('expensica-transaction-amount');
             const formattedAmount = formatCurrency(transaction.amount, this.plugin.settings.defaultCurrency);
+            const formattedBalance = formatCurrency(runningBalances[transaction.id] ?? 0, this.plugin.settings.defaultCurrency);
             if (transaction.type === TransactionType.INCOME) {
                 amountEl.createEl('span', {
                     text: `+${formattedAmount}`,
@@ -596,6 +599,10 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
                     cls: 'expensica-expense'
                 });
             }
+            amountEl.createEl('span', {
+                text: formattedBalance,
+                cls: 'expensica-transaction-balance'
+            });
 
             // Add edit and delete options
             const actionsEl = transactionEl.createDiv('expensica-transaction-actions');
@@ -943,6 +950,8 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
     
     // Helper method to render transactions to a container
     renderTransactionsToContainer(container: HTMLElement, transactions: Transaction[]) {
+        const runningBalances = getRunningBalanceByTransactionId(this.transactions);
+
         transactions.forEach(transaction => {
             const transactionEl = container.createDiv('expensica-transaction');
 
@@ -997,6 +1006,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
             // Transaction amount
             const amountEl = transactionEl.createDiv('expensica-transaction-amount');
             const formattedAmount = formatCurrency(transaction.amount, this.plugin.settings.defaultCurrency);
+            const formattedBalance = formatCurrency(runningBalances[transaction.id] ?? 0, this.plugin.settings.defaultCurrency);
             if (transaction.type === TransactionType.INCOME) {
                 amountEl.createEl('span', {
                     text: `+${formattedAmount}`,
@@ -1008,6 +1018,10 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
                     cls: 'expensica-expense'
                 });
             }
+            amountEl.createEl('span', {
+                text: formattedBalance,
+                cls: 'expensica-transaction-balance'
+            });
 
             // Add edit and delete options
             const actionsEl = transactionEl.createDiv('expensica-transaction-actions');

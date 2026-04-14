@@ -135,6 +135,21 @@ function fallbackRandomIdPart(): string {
       })
       .map(({ transaction }) => transaction);
   }
+
+  export function getRunningBalanceByTransactionId(transactions: Transaction[]): Record<string, number> {
+    let runningBalance = 0;
+
+    return sortTransactionsByDateTimeDesc(transactions)
+      .reverse()
+      .reduce((balances, transaction) => {
+        runningBalance += transaction.type === TransactionType.INCOME
+          ? transaction.amount
+          : -transaction.amount;
+
+        balances[transaction.id] = runningBalance;
+        return balances;
+      }, {} as Record<string, number>);
+  }
   
   // Helper function to format a date
   export function formatDate(date: Date): string {
