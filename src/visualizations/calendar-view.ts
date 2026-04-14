@@ -704,7 +704,7 @@ export class CalendarHeatmap {
         // Add title with day of week
         const dayOfWeek = dayData.date.toLocaleDateString('en-US', { weekday: 'long' });
         this.detailsContainer.createEl('h3', { 
-            text: `${dayOfWeek}, ${dayData.formattedDate}`, 
+            text: `${dayOfWeek}, ${dayData.formattedDate} Details`,
             cls: 'expensica-calendar-details-title' 
         });
         
