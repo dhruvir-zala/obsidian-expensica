@@ -2599,7 +2599,7 @@ to {
 
 .is-mobile .expensica-chart-html-legend {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 160px));
+  grid-template-columns: repeat(2, minmax(0, 112px));
   justify-content: center;
   column-gap: 6px;
   margin-top: 12px;
@@ -2615,11 +2615,21 @@ to {
 }
 
 .is-mobile .expensica-chart-legend-item {
+  height: auto;
+  min-height: 0;
   width: 100%;
   min-width: 0;
-  max-width: 160px;
+  max-width: 112px;
   justify-content: flex-start;
+  padding: 4px 6px;
   font-size: 12px;
+  line-height: 1.1;
+}
+
+.is-mobile .expensica-chart-legend-swatch {
+  flex-basis: 8px;
+  width: 8px;
+  height: 8px;
 }
 
 .is-mobile .expensica-chart-legend-label {
