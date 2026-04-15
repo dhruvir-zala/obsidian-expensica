@@ -5,7 +5,8 @@ import Chart from 'chart.js/auto';
 import { 
     Transaction, Category, TransactionType, CategoryType, Currency, ColorScheme,
     formatCurrency, formatDate, formatTime, parseLocalDate, getMonthName, getYear, generateId, TransactionAggregator,
-    Budget, BudgetPeriod, calculateBudgetStatus, getCurrencyByCode, getCategoryColor, sortTransactionsByDateTimeDesc
+    Budget, BudgetPeriod, calculateBudgetStatus, getCurrencyByCode, getCategoryColor, sortTransactionsByDateTimeDesc,
+    getRunningBalanceByTransactionId, getTransactionTime
 } from './models';
 import ExpensicaPlugin from '../main';
 import type { SharedDateRangeState } from '../main';
@@ -103,10 +104,12 @@ export class ExpensicaDashboardView extends ItemView {
     currentTab: DashboardTab = DashboardTab.OVERVIEW;
     private themeObserver: MutationObserver | null = null;
     private themeRefreshTimeout: number | null = null;
+    private pendingThemeRefresh = false;
     private calendarResizeTimeout: number | null = null;
     private resizeRefreshTimeout: number | null = null;
     private chartAnimationResetTimeout: number | null = null;
     private incomeExpenseToggleAnimationFrame: number | null = null;
+    private incomeExpenseHoverAnimationFrame: number | null = null;
     private shouldAnimateExpensesChartOnNextRender = true;
     private shouldAnimateIncomeExpenseChartOnNextRender = true;
     private animateExpensesChartThisRender = false;
@@ -150,10 +153,10 @@ export class ExpensicaDashboardView extends ItemView {
         // Add resize event listener
         window.addEventListener('resize', this.boundHandleResize);
         this.registerEvent(this.app.workspace.on('active-leaf-change', () => {
-            this.scheduleCalendarResize();
+            this.handleWorkspaceVisibilityChange();
         }));
         this.registerEvent(this.app.workspace.on('layout-change', () => {
-            this.scheduleCalendarResize();
+            this.handleWorkspaceVisibilityChange();
         }));
 
         this.setupThemeObserver();
@@ -204,6 +207,11 @@ export class ExpensicaDashboardView extends ItemView {
         if (this.incomeExpenseToggleAnimationFrame !== null) {
             window.cancelAnimationFrame(this.incomeExpenseToggleAnimationFrame);
             this.incomeExpenseToggleAnimationFrame = null;
+        }
+
+        if (this.incomeExpenseHoverAnimationFrame !== null) {
+            window.cancelAnimationFrame(this.incomeExpenseHoverAnimationFrame);
+            this.incomeExpenseHoverAnimationFrame = null;
         }
     }
 
@@ -339,6 +347,31 @@ export class ExpensicaDashboardView extends ItemView {
         }, this.getChartResizeDelay());
     }
 
+    private isDashboardVisible(): boolean {
+        const container = this.containerEl.children[1] as HTMLElement | undefined;
+        if (!container || !container.isConnected) {
+            return false;
+        }
+
+        const bounds = container.getBoundingClientRect();
+        return bounds.width > 0 && bounds.height > 0;
+    }
+
+    private handleWorkspaceVisibilityChange() {
+        if (this.pendingThemeRefresh && this.isDashboardVisible()) {
+            this.pendingThemeRefresh = false;
+            this.renderDashboard();
+            return;
+        }
+
+        this.scheduleCalendarResize();
+        window.requestAnimationFrame(() => {
+            this.resizeChartsToContainers();
+            this.expensesChart?.update('none');
+            this.incomeExpenseChart?.update('none');
+        });
+    }
+
     private setRefreshing(isRefreshing: boolean) {
         const container = this.containerEl.children[1] as HTMLElement | undefined;
         container?.toggleClass('expensica-is-refreshing', isRefreshing);
@@ -449,6 +482,23 @@ export class ExpensicaDashboardView extends ItemView {
             window.cancelAnimationFrame(this.incomeExpenseToggleAnimationFrame);
             this.incomeExpenseToggleAnimationFrame = null;
         }
+    }
+
+    private cancelIncomeExpenseHoverAnimation() {
+        if (this.incomeExpenseHoverAnimationFrame !== null) {
+            window.cancelAnimationFrame(this.incomeExpenseHoverAnimationFrame);
+            this.incomeExpenseHoverAnimationFrame = null;
+        }
+    }
+
+    private restoreIncomeExpenseAnimationData(chart: Chart) {
+        chart.data.datasets.forEach(dataset => {
+            const pendingData = (dataset as any).__expensicaPendingAnimationData as number[] | undefined;
+            if (pendingData) {
+                dataset.data = pendingData;
+                delete (dataset as any).__expensicaPendingAnimationData;
+            }
+        });
     }
 
     // Helper method to get a date range based on type
@@ -1719,7 +1769,7 @@ export class ExpensicaDashboardView extends ItemView {
         // Header with title and view options
         const chartHeader = container.createDiv('expensica-chart-header');
         const chartTitle = chartHeader.createEl('h3', { cls: 'expensica-chart-title' });
-        chartTitle.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expensica-chart-icon"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg> Expenses';
+        chartTitle.setText('Expenses');
 
         // View options
         const chartOptions = chartHeader.createDiv('expensica-chart-options');
@@ -1959,8 +2009,7 @@ export class ExpensicaDashboardView extends ItemView {
             const legendItem = column.createEl('button', {
                 cls: 'expensica-chart-legend-item',
                 attr: {
-                    type: 'button',
-                    'aria-label': `Toggle ${category}`
+                    type: 'button'
                 }
             });
             legendItem.setAttribute('data-category-index', String(index));
@@ -1977,6 +2026,33 @@ export class ExpensicaDashboardView extends ItemView {
                 chart.update();
                 legendItem.toggleClass('is-hidden', !chart.getDataVisibility(index));
             });
+
+            const activateLegendSlice = () => {
+                if (!chart.getDataVisibility(index)) {
+                    return;
+                }
+
+                const chartElement = chart.getDatasetMeta(0).data[index] as any;
+                const tooltipPosition = chartElement?.tooltipPosition?.() ?? {
+                    x: chart.chartArea.left + chart.chartArea.width / 2,
+                    y: chart.chartArea.top + chart.chartArea.height / 2
+                };
+
+                chart.setActiveElements([{ datasetIndex: 0, index }]);
+                chart.tooltip?.setActiveElements([{ datasetIndex: 0, index }], tooltipPosition);
+                chart.update();
+            };
+
+            const clearLegendSlice = () => {
+                chart.setActiveElements([]);
+                chart.tooltip?.setActiveElements([], { x: 0, y: 0 });
+                chart.update();
+            };
+
+            legendItem.addEventListener('mouseenter', activateLegendSlice);
+            legendItem.addEventListener('focus', activateLegendSlice);
+            legendItem.addEventListener('mouseleave', clearLegendSlice);
+            legendItem.addEventListener('blur', clearLegendSlice);
         });
     }
 
@@ -2261,7 +2337,7 @@ export class ExpensicaDashboardView extends ItemView {
         // Header with title
         const chartHeader = container.createDiv('expensica-chart-header');
         const chartTitle = chartHeader.createEl('h3', { cls: 'expensica-chart-title' });
-        chartTitle.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expensica-chart-icon"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg> Income vs Expenses';
+        chartTitle.setText('Transactions');
 
         // Canvas container
         const canvasContainer = container.createDiv('expensica-canvas-container');
@@ -2431,9 +2507,11 @@ export class ExpensicaDashboardView extends ItemView {
 
     toggleIncomeExpenseDataset(chart: Chart, datasetIndex: number) {
         const dataset = chart.data.datasets[datasetIndex];
+        this.restoreIncomeExpenseAnimationData(chart);
         const currentData = [...(dataset.data as number[])];
         chart.stop();
         this.cancelIncomeExpenseToggleAnimation();
+        this.cancelIncomeExpenseHoverAnimation();
 
         if (chart.isDatasetVisible(datasetIndex)) {
             dataset.data = currentData;
@@ -2457,6 +2535,33 @@ export class ExpensicaDashboardView extends ItemView {
             expenses: chart.isDatasetVisible(1)
         };
         this.persistDashboardState();
+    }
+
+    replayIncomeExpenseDatasetAnimation(chart: Chart, datasetIndex: number) {
+        if (!chart.isDatasetVisible(datasetIndex)) {
+            return;
+        }
+
+        const dataset = chart.data.datasets[datasetIndex];
+        this.restoreIncomeExpenseAnimationData(chart);
+        const currentData = [...(dataset.data as number[])];
+        if (currentData.every(value => Number(value) === 0)) {
+            return;
+        }
+
+        chart.stop();
+        this.cancelIncomeExpenseHoverAnimation();
+        (dataset as any).__expensicaPendingAnimationData = currentData;
+        dataset.data = currentData.map(() => 0);
+        chart.update('none');
+
+        this.incomeExpenseHoverAnimationFrame = window.requestAnimationFrame(() => {
+            this.incomeExpenseHoverAnimationFrame = null;
+            dataset.data = currentData;
+            delete (dataset as any).__expensicaPendingAnimationData;
+            this.temporarilyEnableChartAnimations();
+            chart.update();
+        });
     }
 
     renderIncomeExpenseLegend(container: HTMLElement, chart: Chart, colors: string[]) {
@@ -2489,6 +2594,12 @@ export class ExpensicaDashboardView extends ItemView {
                 this.toggleIncomeExpenseDataset(chart, index);
                 legendItem.toggleClass('is-hidden', !chart.isDatasetVisible(index));
             });
+
+            legendItem.addEventListener('pointerenter', (event) => {
+                if (event.pointerType === 'mouse') {
+                    this.replayIncomeExpenseDatasetAnimation(chart, index);
+                }
+            });
         });
     }
 
@@ -2497,20 +2608,10 @@ export class ExpensicaDashboardView extends ItemView {
 
         // Section header
         const sectionHeader = transactionsSection.createDiv('expensica-section-header');
-        const sectionTitle = sectionHeader.createEl('h2', { cls: 'expensica-section-title expensica-transactions-title' });
-        
-        // Add transaction icon with Notion-like styling (similar to calendar icon in Spending Heatmap)
-        const transactionIcon = document.createElement('span');
-        transactionIcon.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M19.3 7.92001H4.7C4.31 7.92001 4 7.61001 4 7.22001C4 6.83001 4.31 6.52001 4.7 6.52001H19.3C19.69 6.52001 20 6.83001 20 7.22001C20 7.61001 19.69 7.92001 19.3 7.92001Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M17.3 11.92H6.7C6.31 11.92 6 11.61 6 11.22C6 10.83 6.31 10.52 6.7 10.52H17.3C17.69 10.52 18 10.83 18 11.22C18 11.61 17.69 11.92 17.3 11.92Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M15.3 15.92H8.7C8.31 15.92 8 15.61 8 15.22C8 14.83 8.31 14.52 8.7 14.52H15.3C15.69 14.52 16 14.83 16 15.22C16 15.61 15.69 15.92 15.3 15.92Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M13.3 19.92H10.7C10.31 19.92 10 19.61 10 19.22C10 18.83 10.31 18.52 10.7 18.52H13.3C13.69 18.52 14 18.83 14 19.22C14 19.61 13.69 19.92 13.3 19.92Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>`;
-        transactionIcon.className = 'notion-icon';
-        
-        sectionTitle.prepend(transactionIcon);
-        sectionTitle.appendChild(document.createTextNode('Recent Transactions'));
+        sectionHeader.createEl('h2', {
+            text: 'Recent Transactions',
+            cls: 'expensica-section-title expensica-transactions-title'
+        });
         
         // Add "View All" button
         const viewAllBtn = sectionHeader.createEl('button', { 
@@ -2527,6 +2628,7 @@ export class ExpensicaDashboardView extends ItemView {
 
         // Sort transactions by date and creation time (most recent first)
         const sortedTransactions = sortTransactionsByDateTimeDesc(this.transactions);
+        const runningBalances = getRunningBalanceByTransactionId(this.plugin.getAllTransactions());
 
         // Limit to 10 most recent transactions
         const recentTransactions = sortedTransactions.slice(0, 10);
@@ -2578,7 +2680,8 @@ export class ExpensicaDashboardView extends ItemView {
                 });
 
                 const dateEl = metaEl.createEl('span', { cls: 'expensica-transaction-date' });
-                dateEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg> ${formattedDate}`;
+                const transactionTime = getTransactionTime(transaction);
+                dateEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg> ${formattedDate}${transactionTime ? ` ${transactionTime}` : ''}`;
 
                 const categorySpan = metaEl.createEl('span', {
                     text: categoryDisplay.name,
@@ -2593,6 +2696,7 @@ export class ExpensicaDashboardView extends ItemView {
                 // Transaction amount
                 const amountEl = transactionEl.createDiv('expensica-transaction-amount');
                 const formattedAmount = formatCurrency(transaction.amount, this.plugin.settings.defaultCurrency);
+                const formattedBalance = formatCurrency(runningBalances[transaction.id] ?? 0, this.plugin.settings.defaultCurrency);
                 if (transaction.type === TransactionType.INCOME) {
                     amountEl.createEl('span', {
                         text: `+${formattedAmount}`,
@@ -2604,6 +2708,10 @@ export class ExpensicaDashboardView extends ItemView {
                         cls: 'expensica-expense'
                     });
                 }
+                amountEl.createEl('span', {
+                    text: formattedBalance,
+                    cls: 'expensica-transaction-balance'
+                });
 
                 // Add edit and delete options
                 const actionsEl = transactionEl.createDiv('expensica-transaction-actions');
@@ -2679,8 +2787,13 @@ export class ExpensicaDashboardView extends ItemView {
 
             this.themeRefreshTimeout = window.setTimeout(() => {
                 this.themeRefreshTimeout = null;
-                this.renderDashboard();
-            }, 50);
+                this.pendingThemeRefresh = true;
+
+                if (this.isDashboardVisible()) {
+                    this.pendingThemeRefresh = false;
+                    this.renderDashboard();
+                }
+            }, 120);
         });
 
         this.themeObserver.observe(document.body, {
@@ -2771,20 +2884,6 @@ export class ExpensicaDashboardView extends ItemView {
     private renderPremiumVisualizations(container: HTMLElement) {
         // Add section title
         const premiumSection = container.createDiv('expensica-section expensica-animate');
-        const sectionHeader = premiumSection.createDiv('expensica-section-header');
-        const sectionTitle = sectionHeader.createEl('h2', { cls: 'expensica-section-title expensica-calendar-title' });
-        
-        // Add calendar icon with Notion-like styling
-        const calendarIcon = document.createElement('span');
-        calendarIcon.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M8 2V5M16 2V5M3.5 9.09H20.5M21 8.5V17C21 20 19.5 22 16 22H8C4.5 22 3 20 3 17V8.5C3 5.5 4.5 3.5 8 3.5H16C19.5 3.5 21 5.5 21 8.5Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M11.995 13.7H12.005M8.294 13.7H8.304M8.294 16.7H8.304" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M11.995 16.7H12.005M15.695 13.7H15.705M15.695 16.7H15.705" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>`;
-        calendarIcon.className = 'notion-icon';
-        
-        sectionTitle.prepend(calendarIcon);
-        sectionTitle.appendChild(document.createTextNode('Spending Heatmap Calendar'));
 
         // Container for premium visualizations
         const vizContainer = premiumSection.createDiv('expensica-premium-visualizations');

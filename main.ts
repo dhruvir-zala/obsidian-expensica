@@ -40,6 +40,10 @@ import './src/visualizations/calendar-view';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 
+function formatTransactionDescriptionForBanking(description: string): string {
+    return description.trim().replace(/\s+/g, ' ').toUpperCase();
+}
+
 // Define the global window interface to include jspdf
 declare global {
     interface Window {
@@ -604,7 +608,10 @@ export default class ExpensicaPlugin extends Plugin {
 
     // Methods for transaction management
     async addTransaction(transaction: Transaction) {
-        this.transactionsData.transactions.push(transaction);
+        this.transactionsData.transactions.push({
+            ...transaction,
+            description: formatTransactionDescriptionForBanking(transaction.description)
+        });
         await this.saveTransactionsData();
     }
 

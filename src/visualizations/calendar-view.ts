@@ -1,4 +1,4 @@
-import { Transaction, TransactionType, formatCurrency, ColorScheme, parseLocalDate, getCategoryColor, sortTransactionsByDateTimeDesc } from '../models';
+import { Transaction, TransactionType, formatCurrency, ColorScheme, parseLocalDate, getCategoryColor, sortTransactionsByDateTimeDesc, getRunningBalanceByTransactionId, getTransactionTime } from '../models';
 import ExpensicaPlugin from '../../main';
 import * as d3 from 'd3';
 
@@ -704,7 +704,7 @@ export class CalendarHeatmap {
         // Add title with day of week
         const dayOfWeek = dayData.date.toLocaleDateString('en-US', { weekday: 'long' });
         this.detailsContainer.createEl('h3', { 
-            text: `${dayOfWeek}, ${dayData.formattedDate}`, 
+            text: `${dayOfWeek}, ${dayData.formattedDate} Details`,
             cls: 'expensica-calendar-details-title' 
         });
         
@@ -862,6 +862,7 @@ export class CalendarHeatmap {
         
         // Sort transactions by creation time (newest first), with legacy ID/JSON-order fallbacks.
         const sortedTransactions = sortTransactionsByDateTimeDesc(expenseTransactions);
+        const runningBalances = getRunningBalanceByTransactionId(this.plugin.getAllTransactions());
         
         // Add each transaction
         sortedTransactions.forEach((transaction, index) => {
@@ -887,6 +888,13 @@ export class CalendarHeatmap {
             });
             
             const metaEl = detailsEl.createDiv('expensica-calendar-transaction-meta');
+            const transactionTime = getTransactionTime(transaction);
+            if (transactionTime) {
+                metaEl.createSpan({
+                    text: transactionTime,
+                    cls: 'expensica-transaction-date'
+                });
+            }
             metaEl.createSpan({
                 text: categoryName,
                 cls: 'expensica-calendar-transaction-category'
@@ -902,6 +910,7 @@ export class CalendarHeatmap {
             // Amount
             const amountEl = transactionEl.createDiv('expensica-calendar-transaction-amount');
             const formattedAmount = formatCurrency(transaction.amount, this.plugin.settings.defaultCurrency);
+            const formattedBalance = formatCurrency(runningBalances[transaction.id] ?? 0, this.plugin.settings.defaultCurrency);
             
             // Calculate percentage of day's total
             const percentOfDay = ((transaction.amount / totalExpenses) * 100).toFixed(0);
@@ -910,6 +919,10 @@ export class CalendarHeatmap {
             amountContainer.createSpan({
                 text: `-${formattedAmount}`,
                 cls: 'expensica-expense'
+            });
+            amountContainer.createSpan({
+                text: formattedBalance,
+                cls: 'expensica-transaction-balance'
             });
             
             // Only show percentage if there are multiple transactions
