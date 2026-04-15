@@ -100,6 +100,17 @@
   --expensica-header-action-gap: 16px;
 }
 
+.notice:has(.expensica-notice-content) {
+  background-color: var(--background-secondary);
+  color: var(--text-normal);
+  border: 1px solid var(--background-modifier-border);
+  box-shadow: var(--shadow-s);
+}
+
+.expensica-notice-content {
+  color: var(--text-normal);
+}
+
 /* Dashboard Layout */
 .expensica-dashboard {
   padding: var(--expensica-spacing-xl);
@@ -409,19 +420,31 @@
 }
 
 .expensica-income {
-  color: rgb(68, 131, 97);
+  color: var(--expensica-success);
 }
 
 .expensica-expense {
-  color: rgb(212, 76, 71);
+  color: var(--expensica-error);
 }
 
-.expensica-balance {
-  color: rgb(11, 110, 153);
+.expensica-card-value.expensica-income {
+  color: var(--text-success);
 }
 
-.theme-dark .expensica-balance {
-  color: rgb(77, 171, 211);
+.expensica-card-value.expensica-expense {
+  color: var(--text-error);
+}
+
+.expensica-card-value.expensica-balance {
+  color: var(--text-accent);
+}
+
+.expensica-card-value.expensica-budget {
+  color: var(--text-accent);
+}
+
+.expensica-card-value.expensica-budget-remaining {
+  color: var(--expensica-success);
 }
 
 /* Charts Section */
@@ -3327,7 +3350,7 @@ to {
     align-items: center;
     gap: 12px;
     box-shadow: none;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    font-family: var(--font-interface);
 }
 
 .expensica-transactions-title::before {
@@ -5347,7 +5370,7 @@ to {
   align-items: center;
   gap: 12px;
   box-shadow: none;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  font-family: var(--font-interface);
 }
 
 .expensica-calendar-title::before {
@@ -5640,7 +5663,7 @@ to {
 
 /* Week number styling */
 .week-label, .week-number {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  font-family: var(--font-interface);
   font-size: 11px;
   color: var(--text-faint);
   font-weight: 400;
@@ -5779,7 +5802,7 @@ to {
   justify-content: flex-start;
   margin-bottom: 20px;
   gap: 8px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+  font-family: var(--font-interface);
   position: relative;
 }
 

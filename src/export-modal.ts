@@ -1,4 +1,5 @@
-import { App, Modal, Setting, Notice } from 'obsidian';
+import { App, Modal, Setting } from 'obsidian';
+import { showExpensicaNotice } from './notice';
 import { ExportOptions, ExportService } from './export-service';
 import { Category, CategoryType, formatDate } from './models';
 import ExpensicaPlugin from '../main';
@@ -190,7 +191,7 @@ export class ExportModal extends Modal {
   private performExport() {
     // Validate export options
     if (!this.exportOptions.includeExpenses && !this.exportOptions.includeIncome) {
-      new Notice('Please include at least one transaction type (Expenses or Income)');
+      showExpensicaNotice('Please include at least one transaction type (Expenses or Income)');
       return;
     }
     
@@ -205,7 +206,7 @@ export class ExportModal extends Modal {
       });
       
       if (selectedCategories.length === 0) {
-        new Notice('Please select at least one category');
+        showExpensicaNotice('Please select at least one category');
         return;
       }
       
@@ -247,14 +248,14 @@ export class ExportModal extends Modal {
       this.downloadFile(exportData, this.exportOptions.filename, mimeType);
       
       // Show success message
-      new Notice(`Export completed successfully!`);
+      showExpensicaNotice(`Export completed successfully!`);
       
       // Close the modal
       this.close();
       
     } catch (error) {
       console.error('Export error:', error);
-      new Notice('Export failed. Please check the console for errors.');
+      showExpensicaNotice('Export failed. Please check the console for errors.');
     }
   }
   

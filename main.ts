@@ -1,4 +1,4 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, WorkspaceLeaf, TFile } from 'obsidian';
+import { App, Editor, MarkdownView, Modal, Plugin, PluginSettingTab, Setting, WorkspaceLeaf, TFile } from 'obsidian';
 
 import { ExpensicaDashboardView, EXPENSICA_VIEW_TYPE, ExpenseModal, IncomeModal, DateRangeType } from './src/dashboard-view';
 import { ExpensicaTransactionsView, EXPENSICA_TRANSACTIONS_VIEW_TYPE } from './src/transactions-view';
@@ -30,6 +30,7 @@ import {
 
 import { ExportModal } from './src/export-modal';
 import { ConfirmationModal as ExpensicaConfirmationModal } from './src/confirmation-modal';
+import { showExpensicaNotice } from './src/notice';
 
 // Import visualizations for bundling
 import './src/dashboard-integration';
@@ -194,7 +195,7 @@ export default class ExpensicaPlugin extends Plugin {
             name: 'Create Daily Finance Review (For Today)',
             callback: () => {
                 if (!this.settings.enableDailyFinanceReview) {
-                    new Notice('Daily Finance Review feature is disabled. Please enable it in settings.');
+                    showExpensicaNotice('Daily Finance Review feature is disabled. Please enable it in settings.');
                     return;
                 }
                 this.createDailyFinanceReview();
@@ -207,7 +208,7 @@ export default class ExpensicaPlugin extends Plugin {
             name: 'Create/Update Daily Finance Review for Any Date',
             callback: () => {
                 if (!this.settings.enableDailyFinanceReviewForAnyDate) {
-                    new Notice('Daily Finance Review for Any Date feature is disabled. Please enable it in settings.');
+                    showExpensicaNotice('Daily Finance Review for Any Date feature is disabled. Please enable it in settings.');
                     return;
                 }
                 this.createDailyFinanceReviewForDate();
@@ -268,7 +269,7 @@ export default class ExpensicaPlugin extends Plugin {
         } catch (error) {
             // If there's an error, initialize with default data
             console.error('Expensica: Error loading transactions data', error);
-            new Notice('Error loading transactions data. Using default data.');
+            showExpensicaNotice('Error loading transactions data. Using default data.');
             this.transactionsData = DEFAULT_TRANSACTIONS_DATA;
             await this.saveTransactionsData();
         }
@@ -284,7 +285,7 @@ export default class ExpensicaPlugin extends Plugin {
             );
         } catch (error) {
             console.error('Failed to save transactions data:', error);
-            new Notice('Failed to save transactions data');
+            showExpensicaNotice('Failed to save transactions data');
         }
     }
 
@@ -318,7 +319,7 @@ export default class ExpensicaPlugin extends Plugin {
         } catch (error) {
             // If there's an error, initialize with default data
             console.error('Expensica: Error loading budget data', error);
-            new Notice('Error loading budget data. Using default data.');
+            showExpensicaNotice('Error loading budget data. Using default data.');
             this.budgetData = DEFAULT_BUDGET_DATA;
             await this.saveBudgetData();
         }
@@ -338,7 +339,7 @@ export default class ExpensicaPlugin extends Plugin {
             console.log('Expensica: Budgets saved successfully');
         } catch (error) {
             console.error('Expensica: Error saving budget data', error);
-            new Notice('Error saving budget data. See console for details.');
+            showExpensicaNotice('Error saving budget data. See console for details.');
         }
     }
 
@@ -641,11 +642,11 @@ export default class ExpensicaPlugin extends Plugin {
         try {
             const jsonData = JSON.stringify(this.transactionsData.transactions, null, 2);
             await this.app.vault.adapter.write(filePath, jsonData);
-            new Notice('Transactions exported successfully');
+            showExpensicaNotice('Transactions exported successfully');
             return true;
         } catch (error) {
             console.error('Error exporting transactions:', error);
-            new Notice('Error exporting transactions');
+            showExpensicaNotice('Error exporting transactions');
             return false;
         }
     }
@@ -667,15 +668,15 @@ export default class ExpensicaPlugin extends Plugin {
                     ...validTransactions
                 ];
                 await this.saveTransactionsData();
-                new Notice(`Imported ${validTransactions.length} transactions successfully`);
+                showExpensicaNotice(`Imported ${validTransactions.length} transactions successfully`);
                 return true;
             } else {
-                new Notice('Invalid file format for import');
+                showExpensicaNotice('Invalid file format for import');
                 return false;
             }
         } catch (error) {
             console.error('Error importing transactions:', error);
-            new Notice('Error importing transactions');
+            showExpensicaNotice('Error importing transactions');
             return false;
         }
     }
@@ -882,16 +883,16 @@ export default class ExpensicaPlugin extends Plugin {
             
             if (existingNote) {
                 await this.app.vault.modify(existingNote, noteContent);
-                new Notice(`Updated note: ${noteTitle}`);
+                showExpensicaNotice(`Updated note: ${noteTitle}`);
                 this.app.workspace.getLeaf().openFile(existingNote);
             } else {
                 const newNote = await this.app.vault.create(notePath, noteContent);
-                new Notice(`Created note: ${noteTitle}`);
+                showExpensicaNotice(`Created note: ${noteTitle}`);
                 this.app.workspace.getLeaf().openFile(newNote);
             }
         } catch (error) {
             console.error('Failed to create daily finance review:', error);
-            new Notice('Failed to create daily finance review');
+            showExpensicaNotice('Failed to create daily finance review');
         }
     }
 
@@ -1015,18 +1016,18 @@ export default class ExpensicaPlugin extends Plugin {
                 
                 if (existingNote) {
                     await this.app.vault.modify(existingNote, noteContent);
-                    new Notice(`Updated note: ${noteTitle}`);
+                    showExpensicaNotice(`Updated note: ${noteTitle}`);
                     this.app.workspace.getLeaf().openFile(existingNote);
                 } else {
                     const newNote = await this.app.vault.create(notePath, noteContent);
-                    new Notice(`Created note: ${noteTitle}`);
+                    showExpensicaNotice(`Created note: ${noteTitle}`);
                     this.app.workspace.getLeaf().openFile(newNote);
                 }
             });
             modal.open();
         } catch (error) {
             console.error('Failed to create daily finance review:', error);
-            new Notice('Failed to create daily finance review');
+            showExpensicaNotice('Failed to create daily finance review');
         }
     }
 }
@@ -1596,7 +1597,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
                 // Don't delete if this was the last category of this type
                 const typeCategories = this.plugin.getCategories(type);
                 if (typeCategories.length <= 1) {
-                    new Notice(`You must have at least one ${type} category`);
+                    showExpensicaNotice(`You must have at least one ${type} category`);
                     return;
                 }
                 
@@ -1612,7 +1613,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
                             if (confirmed) {
                                 await this.plugin.deleteCategory(category.id);
                                 this.renderCategoriesList(container, type);
-                                new Notice(`Category "${category.name}" has been deleted.`);
+                                showExpensicaNotice(`Category "${category.name}" has been deleted.`);
                             }
                         }
                     ).open();
@@ -1729,10 +1730,10 @@ class ImportModal extends Modal {
                     await this.plugin.importTransactionsFromJSON(filePath);
                     this.close();
                 } else {
-                    new Notice(`File not found: ${filePath}`);
+                    showExpensicaNotice(`File not found: ${filePath}`);
                 }
             } else {
-                new Notice('Please enter a file path');
+                showExpensicaNotice('Please enter a file path');
             }
         });
     }
@@ -1914,14 +1915,14 @@ class FolderSuggestionModal extends Modal {
                     try {
                         // Create the folder
                         await this.plugin.app.vault.createFolder(folderName);
-                        new Notice(`Created folder: ${folderName}`);
+                        showExpensicaNotice(`Created folder: ${folderName}`);
                         this.onSelect(folderName);
                         this.close();
                     } catch (error) {
-                        new Notice(`Error creating folder: ${error.message}`);
+                        showExpensicaNotice(`Error creating folder: ${error.message}`);
                     }
                 } else {
-                    new Notice('Please enter a folder name');
+                    showExpensicaNotice('Please enter a folder name');
                 }
             });
         });
