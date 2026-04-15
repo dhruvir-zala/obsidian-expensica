@@ -1,5 +1,5 @@
 import { 
-    App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, WorkspaceLeaf, ItemView, ViewStateResult
+    App, Editor, MarkdownView, Modal, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, WorkspaceLeaf, ItemView, ViewStateResult
 } from 'obsidian';
 import Chart from 'chart.js/auto';
 import { 
@@ -12,6 +12,7 @@ import ExpensicaPlugin from '../main';
 import type { SharedDateRangeState } from '../main';
 import { PremiumVisualizations } from './dashboard-integration';
 import { ConfirmationModal } from './confirmation-modal';
+import { showExpensicaNotice } from './notice';
 
 // Extend the plugin interface to include the new method
 declare module '../main' {
@@ -631,7 +632,7 @@ export class ExpensicaDashboardView extends ItemView {
         await this.loadTransactionsData();
         this.requestAllChartAnimations();
         this.renderDashboard();
-        new Notice('Transaction added successfully');
+        showExpensicaNotice('Transaction added successfully');
     }
 
     async updateTransaction(transaction: Transaction) {
@@ -639,7 +640,7 @@ export class ExpensicaDashboardView extends ItemView {
         await this.loadTransactionsData();
         this.requestAllChartAnimations();
         this.renderDashboard();
-        new Notice('Transaction updated successfully');
+        showExpensicaNotice('Transaction updated successfully');
     }
 
     async deleteTransaction(id: string) {
@@ -656,7 +657,7 @@ export class ExpensicaDashboardView extends ItemView {
                     await this.loadTransactionsData();
                     this.requestAllChartAnimations();
                     this.renderDashboard();
-                    new Notice('Transaction deleted successfully');
+                    showExpensicaNotice('Transaction deleted successfully');
                 }
             }
         ).open();
@@ -999,7 +1000,7 @@ export class ExpensicaDashboardView extends ItemView {
             budgetedCardTitle.appendChild(document.createTextNode(' Total Budgeted'));
             budgetedCard.createEl('p', {
                 text: formatCurrency(0, this.plugin.settings.defaultCurrency),
-                cls: 'expensica-card-value'
+                cls: 'expensica-card-value expensica-budget'
             });
             budgetedCard.createEl('div', { text: '💰', cls: 'expensica-card-bg-icon' });
             
@@ -1035,7 +1036,7 @@ export class ExpensicaDashboardView extends ItemView {
             remainingCardTitle.appendChild(document.createTextNode(' Remaining'));
             remainingCard.createEl('p', {
                 text: formatCurrency(0, this.plugin.settings.defaultCurrency),
-                cls: 'expensica-card-value'
+                cls: 'expensica-card-value expensica-budget-remaining'
             });
             remainingCard.createEl('div', { text: '💵', cls: 'expensica-card-bg-icon' });
             
@@ -1061,7 +1062,7 @@ export class ExpensicaDashboardView extends ItemView {
         budgetedCardTitle.innerHTML = '<span class="emoji">💰</span> Total Budgeted';
         budgetedCard.createEl('p', {
             text: formatCurrency(totalBudgeted, this.plugin.settings.defaultCurrency),
-            cls: 'expensica-card-value'
+            cls: 'expensica-card-value expensica-budget'
         });
         budgetedCard.createEl('div', { text: '💰', cls: 'expensica-card-bg-icon' });
         
@@ -1097,7 +1098,7 @@ export class ExpensicaDashboardView extends ItemView {
         remainingCardTitle.appendChild(document.createTextNode(' Remaining'));
         remainingCard.createEl('p', {
             text: formatCurrency(remainingAmount, this.plugin.settings.defaultCurrency),
-            cls: 'expensica-card-value'
+            cls: 'expensica-card-value expensica-budget-remaining'
         });
         remainingCard.createEl('div', { text: '💵', cls: 'expensica-card-bg-icon' });
         
@@ -1956,6 +1957,11 @@ export class ExpensicaDashboardView extends ItemView {
                         display: false
                     },
                     tooltip: {
+                        backgroundColor: this.getTooltipBackgroundColor(),
+                        titleColor: this.getTooltipTitleColor(),
+                        bodyColor: this.getTooltipBodyColor(),
+                        borderColor: this.getTooltipBorderColor(),
+                        borderWidth: 1,
                         callbacks: {
                             label: (context) => {
                                 const label = context.label || '';
@@ -2182,6 +2188,11 @@ export class ExpensicaDashboardView extends ItemView {
                         display: false
                     },
                     tooltip: {
+                        backgroundColor: this.getTooltipBackgroundColor(),
+                        titleColor: this.getTooltipTitleColor(),
+                        bodyColor: this.getTooltipBodyColor(),
+                        borderColor: this.getTooltipBorderColor(),
+                        borderWidth: 1,
                         callbacks: {
                             label: (context) => {
                                 const value = context.raw as number;
@@ -2301,6 +2312,11 @@ export class ExpensicaDashboardView extends ItemView {
                         display: false
                     },
                     tooltip: {
+                        backgroundColor: this.getTooltipBackgroundColor(),
+                        titleColor: this.getTooltipTitleColor(),
+                        bodyColor: this.getTooltipBodyColor(),
+                        borderColor: this.getTooltipBorderColor(),
+                        borderWidth: 1,
                         callbacks: {
                             label: (context) => {
                                 const value = context.raw as number;
@@ -2463,6 +2479,11 @@ export class ExpensicaDashboardView extends ItemView {
                         display: false
                     },
                     tooltip: {
+                        backgroundColor: this.getTooltipBackgroundColor(),
+                        titleColor: this.getTooltipTitleColor(),
+                        bodyColor: this.getTooltipBodyColor(),
+                        borderColor: this.getTooltipBorderColor(),
+                        borderWidth: 1,
                         callbacks: {
                             label: (context) => {
                                 const label = context.dataset.label || '';
@@ -2738,6 +2759,22 @@ export class ExpensicaDashboardView extends ItemView {
         return this.getThemeColorWithAlpha('--text-normal', fallback, 0.14);
     }
 
+    getTooltipBackgroundColor(): string {
+        return this.getThemeColor('--background-secondary', getComputedStyle(document.body).backgroundColor);
+    }
+
+    getTooltipTitleColor(): string {
+        return this.getThemeColor('--text-normal', getComputedStyle(document.body).color);
+    }
+
+    getTooltipBodyColor(): string {
+        return this.getThemeColor('--text-muted', this.getTooltipTitleColor());
+    }
+
+    getTooltipBorderColor(): string {
+        return this.getThemeColor('--background-modifier-border', this.getGridColor());
+    }
+
     setupThemeObserver() {
         if (this.themeObserver) {
             this.themeObserver.disconnect();
@@ -2902,7 +2939,7 @@ export class ExpensicaDashboardView extends ItemView {
             this.renderDashboard();
             
             // Show a notice that budgeting is disabled
-            new Notice('Budgeting is disabled. Enable it in settings to use budget features.');
+            showExpensicaNotice('Budgeting is disabled. Enable it in settings to use budget features.');
         }
     }
 }
@@ -2948,7 +2985,7 @@ export class DateRangePickerModal extends Modal {
                 id: 'start-date',
                 name: 'start-date',
                 required: 'required',
-                value: formatDate(this.startDate) // Format date as YYYY-MM-DD
+                value: formatDate(this.startDate)
             }
         });
         
@@ -2967,7 +3004,7 @@ export class DateRangePickerModal extends Modal {
                 id: 'end-date',
                 name: 'end-date',
                 required: 'required',
-                value: formatDate(this.endDate) // Format date as YYYY-MM-DD
+                value: formatDate(this.endDate)
             }
         });
         
@@ -3003,14 +3040,14 @@ export class DateRangePickerModal extends Modal {
                 
                 // Validate dates
                 if (start > end) {
-                    new Notice('Start date cannot be after end date');
+                    showExpensicaNotice('Start date cannot be after end date');
                     return;
                 }
                 
                 this.onConfirm(start, end);
                 this.close();
             } else {
-                new Notice('Please select both start and end dates');
+                showExpensicaNotice('Please select both start and end dates');
             }
         });
     }

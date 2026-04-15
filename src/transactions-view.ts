@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, Notice, setIcon, debounce, ViewStateResult } from 'obsidian';
+import { ItemView, WorkspaceLeaf, setIcon, debounce, ViewStateResult } from 'obsidian';
 import {
     Transaction,
     TransactionType,
@@ -19,6 +19,7 @@ import ExpensicaPlugin from '../main';
 import type { SharedDateRangeState } from '../main';
 import { ExpenseModal, IncomeModal, DateRangeType, DateRange, DateRangePickerModal } from './dashboard-view';
 import { ConfirmationModal } from './confirmation-modal';
+import { showExpensicaNotice } from './notice';
 
 // Extend the plugin interface to include the new method
 declare module '../main' {
@@ -844,7 +845,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
                     await this.loadTransactionsData(false);
                     this.persistTransactionsState();
                     this.refreshTransactionsListOnly();
-                    new Notice('Transaction deleted successfully');
+                    showExpensicaNotice('Transaction deleted successfully');
                 }
             }
         ).open();

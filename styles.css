@@ -25,20 +25,20 @@
   --expensica-bg-tertiary: var(--background-modifier-hover);
   
   /* Notion-inspired colors and styling */
-  --notion-text: rgba(55, 53, 47, 0.85);
-  --notion-text-light: rgba(55, 53, 47, 0.65);
-  --notion-text-lighter: rgba(55, 53, 47, 0.45);
-  --notion-border: rgba(55, 53, 47, 0.09);
-  --notion-bg-hover: rgba(55, 53, 47, 0.03);
-  --notion-bg-active: rgba(55, 53, 47, 0.06);
+  --notion-text: var(--text-normal);
+  --notion-text-light: var(--text-muted);
+  --notion-text-lighter: var(--text-faint);
+  --notion-border: var(--background-modifier-border);
+  --notion-bg-hover: var(--background-modifier-hover);
+  --notion-bg-active: var(--background-modifier-active);
   
   /* Dark mode Notion-inspired colors */
-  --notion-dark-text: rgba(255, 255, 255, 0.85);
-  --notion-dark-text-light: rgba(255, 255, 255, 0.65);
-  --notion-dark-text-lighter: rgba(255, 255, 255, 0.45);
-  --notion-dark-border: rgba(255, 255, 255, 0.09);
-  --notion-dark-bg-hover: rgba(255, 255, 255, 0.03);
-  --notion-dark-bg-active: rgba(255, 255, 255, 0.06);
+  --notion-dark-text: var(--text-normal);
+  --notion-dark-text-light: var(--text-muted);
+  --notion-dark-text-lighter: var(--text-faint);
+  --notion-dark-border: var(--background-modifier-border);
+  --notion-dark-bg-hover: var(--background-modifier-hover);
+  --notion-dark-bg-active: var(--background-modifier-active);
   
   /* Border Colors */
   --expensica-border-primary: var(--background-modifier-border);
@@ -116,6 +116,17 @@
   --expensica-calendar-panel-spacing: var(--expensica-panel-gap);
   --expensica-calendar-panel-gap: var(--expensica-panel-gap);
   --expensica-header-action-gap: var(--expensica-control-gap);
+}
+
+.notice:has(.expensica-notice-content) {
+  background-color: var(--background-secondary);
+  color: var(--text-normal);
+  border: 1px solid var(--background-modifier-border);
+  box-shadow: var(--shadow-s);
+}
+
+.expensica-notice-content {
+  color: var(--text-normal);
 }
 
 /* Dashboard Layout */
@@ -406,11 +417,11 @@
 }
 
 .expensica-trend-up {
-  color: rgb(68, 131, 97);
+  color: var(--text-success);
 }
 
 .expensica-trend-down {
-  color: rgb(212, 76, 71);
+  color: var(--text-error);
 }
 
 .expensica-card-bg-icon {
@@ -427,19 +438,31 @@
 }
 
 .expensica-income {
-  color: rgb(68, 131, 97);
+  color: var(--expensica-success);
 }
 
 .expensica-expense {
-  color: rgb(212, 76, 71);
+  color: var(--expensica-error);
 }
 
-.expensica-balance {
-  color: rgb(11, 110, 153);
+.expensica-card-value.expensica-income {
+  color: var(--text-success);
 }
 
-.theme-dark .expensica-balance {
-  color: rgb(77, 171, 211);
+.expensica-card-value.expensica-expense {
+  color: var(--text-error);
+}
+
+.expensica-card-value.expensica-balance {
+  color: var(--text-accent);
+}
+
+.expensica-card-value.expensica-budget {
+  color: var(--text-accent);
+}
+
+.expensica-card-value.expensica-budget-remaining {
+  color: var(--expensica-success);
 }
 
 /* Charts Section */
@@ -2439,12 +2462,12 @@ to {
 
 /* Dark mode support for View All button */
 .theme-dark .expensica-view-all-btn {
-    background-color: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.8);
+    background-color: var(--background-modifier-hover);
+    color: var(--text-muted);
 }
 
 .theme-dark .expensica-view-all-btn:hover {
-    background-color: rgba(255, 255, 255, 0.12);
+    background-color: var(--background-modifier-active);
 }
 
 /* Section header styling */
@@ -2942,7 +2965,7 @@ to {
     top: 2px;
     width: 4px;
     height: 8px;
-    border: solid white;
+    border: solid var(--text-on-accent);
     border-width: 0 2px 2px 0;
     transform: rotate(45deg);
 }
@@ -3860,7 +3883,7 @@ to {
 }
 
 .expensica-summary-icon-blue {
-    background: linear-gradient(135deg, #2196f3, #1976d2);
+    background: linear-gradient(135deg, var(--text-accent), var(--interactive-accent));
 }
 
 .expensica-summary-icon-red {
@@ -4488,7 +4511,7 @@ to {
 /* Enhanced Budget Progress Bar */
 .expensica-budget-bar {
     height: 8px;
-    background: rgba(0, 0, 0, 0.05);
+    background: var(--background-modifier-border);
     border-radius: 4px;
     overflow: hidden;
     margin-bottom: 8px;
@@ -4692,9 +4715,9 @@ to {
     right: 0;
     bottom: 0;
     background: linear-gradient(90deg, 
-        rgba(255, 255, 255, 0) 0%, 
-        rgba(255, 255, 255, 0.1) 50%, 
-        rgba(255, 255, 255, 0) 100%);
+        transparent 0%, 
+        color-mix(in srgb, var(--text-on-accent) 10%, transparent) 50%, 
+        transparent 100%);
     animation: shine 2s infinite;
 }
 
@@ -4844,9 +4867,9 @@ to {
     right: 0;
     bottom: 0;
     background: linear-gradient(90deg, 
-        rgba(255, 255, 255, 0) 0%, 
-        rgba(255, 255, 255, 0.1) 50%, 
-        rgba(255, 255, 255, 0) 100%);
+        transparent 0%, 
+        color-mix(in srgb, var(--text-on-accent) 10%, transparent) 50%, 
+        transparent 100%);
     animation: shine 2.5s infinite;
 }
 
@@ -5585,7 +5608,7 @@ h4.expensica-transactions-title {
 
 /* Week number styling */
 .week-label, .week-number {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  font-family: var(--font-interface);
   font-size: 11px;
   color: var(--text-faint);
   font-weight: 400;
@@ -5729,7 +5752,7 @@ h4.expensica-transactions-title {
   justify-content: center;
   font-size: 16px;
   color: var(--text-normal);
-  background-color: rgba(55, 53, 47, 0.08);
+  background-color: var(--background-modifier-hover);
   height: 24px;
   width: 24px;
   border-radius: 4px;
@@ -5737,7 +5760,7 @@ h4.expensica-transactions-title {
 }
 
 .theme-dark .expensica-calendar-details-icon {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--background-modifier-hover);
 }
 
 .expensica-calendar-details-text {
@@ -5850,7 +5873,7 @@ h4.expensica-transactions-title {
     display: grid;
     grid-template-columns: 25% 15% 15% 15% 20% 10%;
     padding: 12px 16px;
-    border-bottom: 1px solid rgba(55, 53, 47, 0.09);
+    border-bottom: 1px solid var(--notion-border);
     transition: background 0.2s ease;
     position: relative;
 }
@@ -5860,7 +5883,7 @@ h4.expensica-transactions-title {
 }
 
 .notion-budget-item:hover {
-    background: rgba(55, 53, 47, 0.03);
+    background: var(--notion-bg-hover);
 }
 
 .notion-category-container {
@@ -5931,7 +5954,7 @@ h4.expensica-transactions-title {
 }
 
 .notion-budget-action:hover {
-    background-color: rgba(55, 53, 47, 0.08);
+    background-color: var(--notion-bg-active);
     opacity: 1;
 }
 
@@ -5965,7 +5988,7 @@ h4.expensica-transactions-title {
 }
 
 .notion-budget-items-wrapper::-webkit-scrollbar-thumb {
-    background-color: rgba(55, 53, 47, 0.2);
+    background-color: var(--background-modifier-border-hover);
     border-radius: 3px;
 }
 
