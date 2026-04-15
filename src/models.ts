@@ -131,6 +131,10 @@ function fallbackRandomIdPart(): string {
           return bTime - aTime;
         }
 
+        if (aTime !== null && bTime !== null) {
+          return a.index - b.index;
+        }
+
         return b.index - a.index;
       })
       .map(({ transaction }) => transaction);

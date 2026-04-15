@@ -1,4 +1,4 @@
-import { Transaction, TransactionType, formatCurrency, ColorScheme, parseLocalDate, getCategoryColor, sortTransactionsByDateTimeDesc, getRunningBalanceByTransactionId } from '../models';
+import { Transaction, TransactionType, formatCurrency, ColorScheme, parseLocalDate, getCategoryColor, sortTransactionsByDateTimeDesc, getRunningBalanceByTransactionId, getTransactionTime } from '../models';
 import ExpensicaPlugin from '../../main';
 import * as d3 from 'd3';
 
@@ -888,6 +888,13 @@ export class CalendarHeatmap {
             });
             
             const metaEl = detailsEl.createDiv('expensica-calendar-transaction-meta');
+            const transactionTime = getTransactionTime(transaction);
+            if (transactionTime) {
+                metaEl.createSpan({
+                    text: transactionTime,
+                    cls: 'expensica-transaction-date'
+                });
+            }
             metaEl.createSpan({
                 text: categoryName,
                 cls: 'expensica-calendar-transaction-category'
