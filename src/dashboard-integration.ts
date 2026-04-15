@@ -37,6 +37,11 @@ export class PremiumVisualizations {
         
         // Create header content container
         const headerContent = header.createDiv('expensica-calendar-header-content');
+
+        headerContent.createEl('h2', {
+            text: 'Spending Heatmap Calendar',
+            cls: 'expensica-calendar-title'
+        });
         
         // Add navigation buttons
         const navContainer = headerContent.createDiv('expensica-calendar-nav');
@@ -44,7 +49,7 @@ export class PremiumVisualizations {
         // Previous month button
         const prevButton = navContainer.createEl('button', {
             cls: 'expensica-calendar-nav-button',
-            text: '←'
+            text: '<'
         });
         prevButton.onclick = () => {
             const newDate = new Date(this.currentDate);
@@ -68,7 +73,7 @@ export class PremiumVisualizations {
         // Next month button
         const nextButton = navContainer.createEl('button', {
             cls: 'expensica-calendar-nav-button',
-            text: '→'
+            text: '>'
         });
         nextButton.onclick = () => {
             const newDate = new Date(this.currentDate);
