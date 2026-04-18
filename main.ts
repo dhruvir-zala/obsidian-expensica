@@ -636,6 +636,10 @@ export default class ExpensicaPlugin extends Plugin {
     }
 
     async updateCategoryEmoji(categoryId: string, emoji: string): Promise<void> {
+        if (emoji === this.getCategoryEmoji(categoryId)) {
+            return;
+        }
+
         this.settings.categoryEmojis = {
             ...this.settings.categoryEmojis,
             [categoryId]: emoji

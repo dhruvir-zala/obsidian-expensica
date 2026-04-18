@@ -1,13 +1,14 @@
 import { Menu } from 'obsidian';
 import {
     CategoryType,
-    formatCurrency,
+    getCurrencyByCode,
     getTransactionDisplayTime,
     Transaction,
     TransactionType
 } from './models';
 import type ExpensicaPlugin from '../main';
 import { renderCategoryChip } from './category-chip';
+import { EmojiPickerModal } from './emoji-picker-modal';
 
 interface TransactionCardOptions {
     plugin: ExpensicaPlugin;
@@ -50,6 +51,26 @@ export function renderTransactionCard(container: HTMLElement, options: Transacti
     const iconEl = transactionEl.createDiv('expensica-transaction-icon');
     iconEl.setText(categoryDisplay.emoji);
     iconEl.addClass(transaction.type === TransactionType.INCOME ? 'expensica-income-icon' : 'expensica-expense-icon');
+    if (category) {
+        iconEl.addClass('expensica-transaction-icon-editable');
+        iconEl.setAttribute('role', 'button');
+        iconEl.setAttribute('tabindex', '0');
+        iconEl.setAttribute('title', `Change emoji for ${category.name}`);
+        iconEl.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            showCategoryEmojiPicker(plugin, category);
+        });
+        iconEl.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            showCategoryEmojiPicker(plugin, category);
+        });
+    }
 
     const detailsEl = transactionEl.createDiv('expensica-transaction-details');
     detailsEl.createEl('div', { text: transaction.description, cls: 'expensica-transaction-title' });
@@ -95,7 +116,7 @@ export function renderTransactionCard(container: HTMLElement, options: Transacti
     }
 
     const amountEl = transactionEl.createDiv('expensica-transaction-amount');
-    const formattedAmount = formatCurrency(transaction.amount, plugin.settings.defaultCurrency);
+    const formattedAmount = formatTransactionCardCurrency(transaction.amount, plugin.settings.defaultCurrency);
     const amountClass = transaction.type === TransactionType.INCOME ? 'expensica-income' : 'expensica-expense';
     const amountPrefix = transaction.type === TransactionType.INCOME ? '+' : '-';
     amountEl.createEl('span', {
@@ -103,11 +124,67 @@ export function renderTransactionCard(container: HTMLElement, options: Transacti
         cls: amountClass
     });
     amountEl.createEl('span', {
-        text: formatCurrency(runningBalance, plugin.settings.defaultCurrency),
+        text: formatTransactionCardCurrency(runningBalance, plugin.settings.defaultCurrency),
         cls: 'expensica-transaction-balance'
     });
 
     return transactionEl;
+}
+
+function formatTransactionCardCurrency(amount: number, currencyCode: string): string {
+    const currency = getCurrencyByCode(currencyCode) || getCurrencyByCode('USD');
+    const code = currency?.code || 'USD';
+    const symbol = getTransactionCardCurrencySymbol(code, currency?.symbol || '$');
+    const sign = amount < 0 ? '-' : '';
+    const absoluteAmount = Math.abs(amount);
+
+    let fractionDigits = 2;
+    try {
+        fractionDigits = new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: code
+        }).resolvedOptions().maximumFractionDigits;
+    } catch {
+        fractionDigits = 2;
+    }
+
+    const formattedNumber = new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: fractionDigits,
+        maximumFractionDigits: fractionDigits
+    }).format(absoluteAmount);
+
+    return `${sign}${symbol}${formattedNumber}`;
+}
+
+function getTransactionCardCurrencySymbol(currencyCode: string, fallbackSymbol: string): string {
+    try {
+        const currencyPart = new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: currencyCode,
+            currencyDisplay: 'narrowSymbol'
+        }).formatToParts(0).find(part => part.type === 'currency')?.value;
+
+        if (currencyPart) {
+            return stripCurrencyAbbreviation(currencyPart);
+        }
+    } catch {
+        // Fall back to the configured symbol below.
+    }
+
+    return stripCurrencyAbbreviation(fallbackSymbol);
+}
+
+function stripCurrencyAbbreviation(symbol: string): string {
+    return symbol.replace(/[A-Za-z]+/g, '').trim();
+}
+
+function showCategoryEmojiPicker(
+    plugin: ExpensicaPlugin,
+    category: { id: string; name: string; type: CategoryType }
+) {
+    new EmojiPickerModal(plugin.app, category, plugin.getCategoryEmoji(category.id), async (emoji) => {
+        await plugin.updateCategoryEmoji(category.id, emoji);
+    }).open();
 }
 
 function showTransactionCategoryMenu(

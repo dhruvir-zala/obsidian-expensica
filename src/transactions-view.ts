@@ -487,15 +487,14 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         });
         titleEl.textContent = 'Transactions';
         
-        // Transaction count
-        const countEl = titleContainer.createEl('span', { 
-            text: `${this.filteredTransactions.length} transactions`, 
-            cls: 'expensica-transaction-count'
-        });
-
         const totals = this.getFilteredTransactionTotals();
-        this.renderTransactionTotalChip(titleContainer, 'spent', totals.expenses);
-        this.renderTransactionTotalChip(titleContainer, 'income', totals.income);
+        const statChipsContainer = titleSection.createDiv('expensica-transaction-total-chips');
+        statChipsContainer.createEl('span', {
+            text: `${this.filteredTransactions.length} transactions`,
+            cls: 'expensica-transaction-count expensica-transaction-count-chip'
+        });
+        this.renderTransactionTotalChip(statChipsContainer, 'spent', totals.expenses);
+        this.renderTransactionTotalChip(statChipsContainer, 'income', totals.income);
         
         // Actions
         const actionsSection = header.createDiv('shadcn-actions');
@@ -1035,13 +1034,13 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
     refreshTransactionsListOnly() {
         this.contentEl.addClass('expensica-suppress-motion');
 
-        const countEl = this.contentEl.querySelector('.expensica-transaction-count');
+        const countEl = this.contentEl.querySelector('.expensica-transaction-count-chip');
         if (countEl) {
             countEl.textContent = `${this.filteredTransactions.length} transactions`;
         }
 
         const totals = this.getFilteredTransactionTotals();
-        const titleContainer = this.contentEl.querySelector('.expensica-transactions-view-header .expensica-transactions-header') as HTMLElement | null;
+        const titleContainer = this.contentEl.querySelector('.expensica-transactions-view-header .expensica-transaction-total-chips') as HTMLElement | null;
         if (titleContainer) {
             this.syncTransactionTotalChip(titleContainer, 'spent', totals.expenses);
             this.syncTransactionTotalChip(titleContainer, 'income', totals.income);
