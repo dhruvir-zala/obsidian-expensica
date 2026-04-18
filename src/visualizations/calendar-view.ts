@@ -1,6 +1,7 @@
-import { Transaction, TransactionType, formatCurrency, ColorScheme, parseLocalDate, getCategoryColor, sortTransactionsByDateTimeDesc, getRunningBalanceByTransactionId, getTransactionTime } from '../models';
+import { Transaction, TransactionType, formatCurrency, ColorScheme, parseLocalDate, getCategoryColor, sortTransactionsByDateTimeDesc, getRunningBalanceByTransactionId } from '../models';
 import ExpensicaPlugin from '../../main';
 import * as d3 from 'd3';
+import { renderTransactionCard } from '../transaction-card';
 
 interface DayData {
     date: Date;
@@ -22,16 +23,17 @@ export class CalendarHeatmap {
     private detailsContainer: HTMLElement;
     private calendarContainer: HTMLElement;
     private cellSize: number = 48;
-    private cellGap: number = 8;
+    private cellGap: number = 6;
     private maxAmount: number = 0;
     private readonly defaultCellSize: number = 48;
     private readonly minimumCellScale: number = 0.75;
-    private weekNumberWidth: number = 48; // Reserve one day-column width for week numbers.
-    private calendarHorizontalPadding: number = 16;
+    private weekNumberWidth: number = 32; // Reserve one day-column width for week numbers.
+    private calendarHorizontalPadding: number = 8;
     private lastRenderedLayoutKey: string = '';
     private lastMeasuredContainerSizeKey: string = '';
     private selectedDate: Date | null;
     private onSelectedDateChange?: (date: Date) => void;
+    private onTransactionEdit?: (transaction: Transaction) => void;
 
     constructor(
         container: HTMLElement,
@@ -39,7 +41,8 @@ export class CalendarHeatmap {
         transactions: Transaction[],
         currentDate: Date,
         selectedDate: Date | null = null,
-        onSelectedDateChange?: (date: Date) => void
+        onSelectedDateChange?: (date: Date) => void,
+        onTransactionEdit?: (transaction: Transaction) => void
     ) {
         this.container = container;
         this.plugin = plugin;
@@ -47,6 +50,7 @@ export class CalendarHeatmap {
         this.currentDate = currentDate;
         this.selectedDate = selectedDate;
         this.onSelectedDateChange = onSelectedDateChange;
+        this.onTransactionEdit = onTransactionEdit;
         this.setupContainers();
         this.createTooltip();
     }
@@ -700,19 +704,48 @@ export class CalendarHeatmap {
         
         // Get total expenses
         const totalExpenses = expenseTransactions.reduce((sum, t) => sum + t.amount, 0);
+        const selectedDayEnd = new Date(
+            dayData.date.getFullYear(),
+            dayData.date.getMonth(),
+            dayData.date.getDate(),
+            23,
+            59,
+            59,
+            999
+        );
+        const dayBalance = this.plugin.getAllTransactions()
+            .filter(t => parseLocalDate(t.date).getTime() <= selectedDayEnd.getTime())
+            .reduce((balance, transaction) => {
+                return transaction.type === TransactionType.INCOME
+                    ? balance + transaction.amount
+                    : balance - transaction.amount;
+            }, 0);
         
         // Add title with day of week
         const dayOfWeek = dayData.date.toLocaleDateString('en-US', { weekday: 'long' });
         this.detailsContainer.createEl('h3', { 
-            text: `${dayOfWeek}, ${dayData.formattedDate} Details`,
+            text: `${dayOfWeek}, ${dayData.formattedDate}`,
             cls: 'expensica-calendar-details-title' 
         });
+
+        // If no expense transactions, show message without the spending summary.
+        if (expenseTransactions.length === 0) {
+            const emptyStateEl = this.detailsContainer.createDiv('expensica-calendar-empty-state');
+            emptyStateEl.createEl('div', { text: '✨', cls: 'expensica-calendar-empty-icon' });
+            emptyStateEl.createEl('p', {
+                text: 'No expenses recorded for this day.',
+                cls: 'expensica-calendar-empty-message'
+            });
+            
+            return;
+        }
         
         // Create summary container
         const summaryContainer = this.detailsContainer.createDiv('expensica-calendar-summary');
+        const metricsContainer = summaryContainer.createDiv('expensica-calendar-details-metrics');
         
-        // Display total expenses
-        const totalEl = summaryContainer.createDiv('expensica-calendar-details-total');
+        // Display spending and balance
+        const totalEl = metricsContainer.createDiv('expensica-calendar-details-total');
         
         // Left side with label and icon
         const labelContainer = totalEl.createDiv('expensica-calendar-details-label');
@@ -723,7 +756,7 @@ export class CalendarHeatmap {
         });
         
         labelContainer.createSpan({
-            text: 'Total Expenses',
+            text: 'Total Spent',
             cls: 'expensica-calendar-details-text'
         });
         
@@ -731,6 +764,24 @@ export class CalendarHeatmap {
         totalEl.createSpan({
             text: formatCurrency(totalExpenses, this.plugin.settings.defaultCurrency),
             cls: 'expensica-calendar-details-amount expensica-expense'
+        });
+
+        const balanceEl = metricsContainer.createDiv('expensica-calendar-details-total');
+        const balanceLabelContainer = balanceEl.createDiv('expensica-calendar-details-label');
+
+        balanceLabelContainer.createSpan({
+            cls: 'expensica-calendar-details-icon',
+            text: '💸'
+        });
+
+        balanceLabelContainer.createSpan({
+            text: 'Running Balance',
+            cls: 'expensica-calendar-details-text'
+        });
+
+        balanceEl.createSpan({
+            text: formatCurrency(dayBalance, this.plugin.settings.defaultCurrency),
+            cls: 'expensica-calendar-details-amount expensica-calendar-details-balance-amount'
         });
         
         // Calculate and show additional insights if there are expenses
@@ -842,18 +893,6 @@ export class CalendarHeatmap {
             }
         }
         
-        // If no expense transactions, show message
-        if (expenseTransactions.length === 0) {
-            const emptyStateEl = this.detailsContainer.createDiv('expensica-calendar-empty-state');
-            emptyStateEl.createEl('div', { text: '✨', cls: 'expensica-calendar-empty-icon' });
-            emptyStateEl.createEl('p', {
-                text: 'No expenses recorded for this day.',
-                cls: 'expensica-calendar-empty-message'
-            });
-            
-            return;
-        }
-        
         // Create transaction list with header
         const transactionHeader = this.detailsContainer.createDiv('expensica-transactions-header');
         transactionHeader.createEl('h4', { text: 'Expenses', cls: 'expensica-transactions-title' });
@@ -866,76 +905,49 @@ export class CalendarHeatmap {
         
         // Add each transaction
         sortedTransactions.forEach((transaction, index) => {
-            const transactionEl = transactionList.createDiv('expensica-calendar-transaction-item transaction-animate-delay');
+            const transactionEl = renderTransactionCard(transactionList, {
+                plugin: this.plugin,
+                transaction,
+                runningBalance: runningBalances[transaction.id] ?? 0,
+                onEdit: this.onTransactionEdit,
+                onCategoryChange: async (transaction, categoryId) => {
+                    await this.updateTransactionCategory(transaction, categoryId);
+                }
+            });
+
+            transactionEl.addClass('expensica-calendar-transaction-item');
+            transactionEl.addClass('transaction-animate-delay');
             transactionEl.classList.add(`transaction-delay-${index * 50}`);
             transactionEl.classList.add('expensica-transaction-animate');
-            
-            // Get category
-            const category = this.plugin.getCategoryById(transaction.category);
-            const categoryName = category ? category.name : 'Unknown Category';
-            const categoryEmoji = category ? category.emoji : '❓';
-            
-            // Icon
-            const iconEl = transactionEl.createDiv('expensica-calendar-transaction-icon');
-            iconEl.setText(categoryEmoji);
-            iconEl.addClass('expense-icon');
-            
-            // Details
-            const detailsEl = transactionEl.createDiv('expensica-calendar-transaction-details');
-            detailsEl.createDiv({
-                text: transaction.description,
-                cls: 'expensica-calendar-transaction-title'
-            });
-            
-            const metaEl = detailsEl.createDiv('expensica-calendar-transaction-meta');
-            const transactionTime = getTransactionTime(transaction);
-            if (transactionTime) {
-                metaEl.createSpan({
-                    text: transactionTime,
-                    cls: 'expensica-transaction-date'
-                });
-            }
-            metaEl.createSpan({
-                text: categoryName,
-                cls: 'expensica-calendar-transaction-category'
-            });
-            
-            if (transaction.notes) {
-                metaEl.createSpan({
-                    text: transaction.notes,
-                    cls: 'expensica-calendar-transaction-notes'
-                });
-            }
-            
-            // Amount
-            const amountEl = transactionEl.createDiv('expensica-calendar-transaction-amount');
-            const formattedAmount = formatCurrency(transaction.amount, this.plugin.settings.defaultCurrency);
-            const formattedBalance = formatCurrency(runningBalances[transaction.id] ?? 0, this.plugin.settings.defaultCurrency);
-            
-            // Calculate percentage of day's total
-            const percentOfDay = ((transaction.amount / totalExpenses) * 100).toFixed(0);
-            
-            const amountContainer = amountEl.createDiv('expensica-amount-container');
-            amountContainer.createSpan({
-                text: `-${formattedAmount}`,
-                cls: 'expensica-expense'
-            });
-            amountContainer.createSpan({
-                text: formattedBalance,
-                cls: 'expensica-transaction-balance'
-            });
-            
-            // Only show percentage if there are multiple transactions
+
             if (sortedTransactions.length > 1) {
-                amountContainer.createSpan({
-                    text: `${percentOfDay}%`,
+                const amountEl = transactionEl.querySelector('.expensica-transaction-amount') as HTMLElement | null;
+                amountEl?.createSpan({
+                    text: `${((transaction.amount / totalExpenses) * 100).toFixed(0)}%`,
                     cls: 'expensica-percentage'
                 });
             }
-            
+
             // Add animation delay for staggered entrance
             transactionEl.setAttribute('style', `--transaction-delay: ${index * 50}ms`);
         });
+    }
+
+    private async updateTransactionCategory(transaction: Transaction, categoryId: string) {
+        await this.plugin.updateTransaction({
+            ...transaction,
+            category: categoryId
+        });
+
+        const year = this.currentDate.getFullYear();
+        const month = this.currentDate.getMonth();
+        this.transactions = this.plugin.getTransactionsForMonth(year, month);
+        this.prepareData();
+
+        const selectedDayData = this.calendarData.find(dayData => this.isSameDate(dayData.date, parseLocalDate(transaction.date)));
+        if (selectedDayData) {
+            this.showDayDetails(selectedDayData);
+        }
     }
     
     public updateMonth(newDate: Date, transactions: Transaction[]) {
@@ -978,6 +990,11 @@ export class CalendarHeatmap {
         const isStacked = this.isMobileLayout() || availableWidth < calendarWidth + detailsMinimumWidth + panelGap;
 
         this.container.toggleClass('expensica-calendar-stacked', isStacked);
+
+        if (isStacked && this.detailsContainer) {
+            this.detailsContainer.style.removeProperty('height');
+            this.detailsContainer.style.removeProperty('max-height');
+        }
     }
 
     private updateCalendarScaleBounds(svgWidth: number) {
@@ -995,7 +1012,9 @@ export class CalendarHeatmap {
     }
 
     private updateDetailsPanelHeight() {
-        if (!this.detailsContainer || this.isMobileLayout()) {
+        if (!this.detailsContainer || this.isMobileLayout() || this.container.hasClass('expensica-calendar-stacked')) {
+            this.detailsContainer?.style.removeProperty('height');
+            this.detailsContainer?.style.removeProperty('max-height');
             return;
         }
 

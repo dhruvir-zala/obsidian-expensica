@@ -309,7 +309,7 @@ export class ExportModal extends Modal {
       categoryContainer.createEl('label', {
         attr: { for: `category-${category.id}` },
         cls: 'expensica-category-checkbox-label'
-      }).innerHTML = `<span class="category-emoji">${category.emoji}</span> ${category.name}`;
+      }).innerHTML = `<span class="category-emoji">${this.plugin.getCategoryEmoji(category.id)}</span> ${category.name}`;
     });
   }
   

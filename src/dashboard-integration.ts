@@ -1,6 +1,6 @@
 import { CalendarHeatmap } from './visualizations/calendar-view';
 import ExpensicaPlugin from '../main';
-import { getMonthName } from './models';
+import { Transaction } from './models';
 
 export class PremiumVisualizations {
     private container: HTMLElement;
@@ -9,6 +9,7 @@ export class PremiumVisualizations {
     private selectedDate: Date | null;
     private onSelectedDateChange?: (date: Date) => void;
     private onTodayClick?: () => void;
+    private onTransactionEdit?: (transaction: Transaction) => void;
     private calendarHeatmap: CalendarHeatmap | null = null;
 
     constructor(
@@ -17,7 +18,8 @@ export class PremiumVisualizations {
         currentDate: Date,
         selectedDate: Date | null = null,
         onSelectedDateChange?: (date: Date) => void,
-        onTodayClick?: () => void
+        onTodayClick?: () => void,
+        onTransactionEdit?: (transaction: Transaction) => void
     ) {
         this.container = container;
         this.plugin = plugin;
@@ -25,6 +27,7 @@ export class PremiumVisualizations {
         this.selectedDate = selectedDate;
         this.onSelectedDateChange = onSelectedDateChange;
         this.onTodayClick = onTodayClick;
+        this.onTransactionEdit = onTransactionEdit;
     }
 
     render() {
@@ -99,7 +102,8 @@ export class PremiumVisualizations {
             (selectedDate) => {
                 this.selectedDate = selectedDate;
                 this.onSelectedDateChange?.(selectedDate);
-            }
+            },
+            this.onTransactionEdit
         );
         this.calendarHeatmap.render();
     }

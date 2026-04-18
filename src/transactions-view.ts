@@ -8,18 +8,19 @@ import {
     parseLocalDate,
     sortTransactionsByDateTimeDesc,
     getRunningBalanceByTransactionId,
-    getTransactionTime,
-    CategoryType,
     Category,
     getMonthYearString,
     generateId,
-    calculateBudgetStatus
+    calculateBudgetStatus,
+    getCurrencyByCode
 } from './models';
 import ExpensicaPlugin from '../main';
 import type { SharedDateRangeState } from '../main';
 import { ExpenseModal, IncomeModal, DateRangeType, DateRange, DateRangePickerModal } from './dashboard-view';
 import { ConfirmationModal } from './confirmation-modal';
 import { showExpensicaNotice } from './notice';
+import { renderTransactionCard } from './transaction-card';
+import { renderCategoryChip } from './category-chip';
 
 // Extend the plugin interface to include the new method
 declare module '../main' {
@@ -46,6 +47,8 @@ interface TransactionsViewState {
     customEndDate?: string | null;
     dateRangeUpdatedAt?: number;
     searchQuery?: string;
+    selectedCategoryId?: string;
+    selectedCategoryIds?: string[];
     currentPage?: number;
     pageSize?: number;
     scrollTop?: number;
@@ -56,6 +59,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
     transactions: Transaction[] = [];
     filteredTransactions: Transaction[] = [];
     searchQuery: string = '';
+    selectedCategoryIds: string[] = [];
     inputFocused: boolean = false;
     
     // Pagination
@@ -129,6 +133,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
             customEndDate: this.customEndDate ? formatDate(this.customEndDate) : null,
             dateRangeUpdatedAt: this.dateRangeUpdatedAt,
             searchQuery: this.searchQuery,
+            selectedCategoryIds: this.selectedCategoryIds,
             currentPage: this.currentPage,
             pageSize: this.pageSize,
             scrollTop: this.scrollTop
@@ -146,6 +151,17 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
 
         if (typeof transactionsState.searchQuery === 'string') {
             this.searchQuery = transactionsState.searchQuery;
+        }
+
+        if (Array.isArray(transactionsState.selectedCategoryIds)) {
+            this.selectedCategoryIds = transactionsState.selectedCategoryIds
+                .filter((categoryId): categoryId is string => typeof categoryId === 'string');
+        }
+
+        if (!Array.isArray(transactionsState.selectedCategoryIds) && typeof transactionsState.selectedCategoryId === 'string') {
+            this.selectedCategoryIds = transactionsState.selectedCategoryId
+                ? [transactionsState.selectedCategoryId]
+                : [];
         }
 
         if (typeof transactionsState.pageSize === 'number' && [10, 20, 50, 100].includes(transactionsState.pageSize)) {
@@ -211,7 +227,8 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         
         // Search bar section
         const searchSection = container.createDiv('expensica-search-section');
-        const searchContainer = searchSection.createDiv('expensica-search-container expensica-custom-search');
+        const searchControls = searchSection.createDiv('expensica-search-controls');
+        const searchContainer = searchControls.createDiv('expensica-search-container expensica-custom-search');
         const searchInput = searchContainer.createEl('input', {
             type: 'text',
             placeholder: 'Search transactions...',
@@ -225,6 +242,9 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         // Add search icon
         const searchIcon = searchContainer.createDiv('expensica-search-icon');
         searchIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>';
+
+        this.renderCategoryFilter(searchContainer);
+        this.renderSelectedFilterChips(searchSection);
         
         // Prevent default behavior that might cause focus loss
         searchInput.addEventListener('keydown', (e) => {
@@ -268,6 +288,192 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         this.hasRenderedView = true;
     }
 
+    renderCategoryFilter(container: HTMLElement) {
+        const filterContainer = container.createDiv('expensica-category-filter-container');
+        const filterButton = filterContainer.createEl('button', {
+            cls: 'expensica-category-filter-button',
+            attr: {
+                type: 'button',
+                'aria-label': 'Filter transactions',
+                title: 'Filter transactions'
+            }
+        });
+        filterButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>';
+
+        const filterMenu = filterContainer.createDiv('expensica-filter-menu');
+        filterMenu.addClass('is-hidden');
+
+        filterMenu.createDiv({
+            text: 'Filter by',
+            cls: 'expensica-filter-menu-title'
+        });
+
+        const categoryMenuItem = filterMenu.createDiv('expensica-filter-menu-item expensica-filter-menu-parent');
+        categoryMenuItem.setAttribute('tabindex', '0');
+        categoryMenuItem.createSpan({ text: 'Categories', cls: 'expensica-filter-menu-value' });
+        const categoryMenuArrow = categoryMenuItem.createSpan('expensica-filter-menu-arrow');
+        categoryMenuArrow.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>';
+
+        const categorySubmenu = categoryMenuItem.createDiv('expensica-filter-submenu');
+        this.renderCategoryFilterOptions(categorySubmenu);
+
+        categoryMenuItem.addEventListener('click', (event) => {
+            event.stopPropagation();
+            categoryMenuItem.toggleClass('is-open', !categoryMenuItem.hasClass('is-open'));
+        });
+
+        const closeMenu = () => {
+            filterContainer.removeClass('is-open');
+            filterMenu.addClass('is-hidden');
+        };
+
+        filterButton.addEventListener('click', (event) => {
+            event.stopPropagation();
+            const isHidden = filterMenu.hasClass('is-hidden');
+            filterContainer.toggleClass('is-open', isHidden);
+            filterMenu.toggleClass('is-hidden', !isHidden);
+
+            if (isHidden) {
+                setTimeout(() => {
+                    document.addEventListener('click', closeMenu, { once: true });
+                }, 0);
+            }
+        });
+
+        filterMenu.addEventListener('click', (event) => {
+            event.stopPropagation();
+        });
+    }
+
+    renderCategoryFilterOptions(container: HTMLElement) {
+        const categories = this.plugin.getCategories();
+
+        if (categories.length === 0) {
+            container.createDiv({
+                text: 'No categories',
+                cls: 'expensica-filter-menu-empty'
+            });
+            return;
+        }
+
+        categories.forEach(category => {
+            const isSelected = this.selectedCategoryIds.includes(category.id);
+            const categoryButton = container.createEl('button', {
+                cls: `expensica-filter-category-option ${isSelected ? 'is-selected' : ''}`.trim(),
+                attr: {
+                    type: 'button',
+                    'aria-pressed': String(isSelected),
+                    'data-category-id': category.id
+                }
+            });
+
+            categoryButton.createSpan({
+                text: this.plugin.getCategoryEmoji(category.id),
+                cls: 'expensica-filter-category-emoji'
+            });
+            categoryButton.createSpan({
+                text: category.name,
+                cls: 'expensica-filter-category-name'
+            });
+
+            categoryButton.addEventListener('click', (event) => {
+                event.stopPropagation();
+                this.toggleSelectedCategory(category.id);
+                categoryButton.toggleClass('is-selected', this.selectedCategoryIds.includes(category.id));
+                categoryButton.setAttribute('aria-pressed', String(this.selectedCategoryIds.includes(category.id)));
+            });
+        });
+    }
+
+    renderSelectedFilterChips(container: HTMLElement) {
+        const selectedFiltersContainer = container.createDiv('expensica-selected-filters');
+        selectedFiltersContainer.toggleClass('is-hidden', this.selectedCategoryIds.length === 0);
+
+        this.selectedCategoryIds.forEach(categoryId => {
+            const category = this.plugin.getCategoryById(categoryId);
+            if (!category) {
+                return;
+            }
+
+            const chip = renderCategoryChip(selectedFiltersContainer, {
+                emoji: this.plugin.getCategoryEmoji(category.id),
+                text: category.name,
+                colorName: category.name,
+                interactive: true
+            });
+            chip.addClass('expensica-selected-filter-chip');
+            chip.setAttribute('aria-label', `Remove ${category.name} filter`);
+
+            const removeIcon = chip.createSpan('expensica-selected-filter-remove');
+            removeIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+
+            chip.addEventListener('click', () => {
+                this.removeSelectedCategory(category.id);
+            });
+        });
+    }
+
+    refreshSelectedFilterChips() {
+        const searchSection = this.contentEl.querySelector('.expensica-search-section') as HTMLElement | null;
+        if (!searchSection) {
+            return;
+        }
+
+        searchSection.querySelector('.expensica-selected-filters')?.remove();
+        this.renderSelectedFilterChips(searchSection);
+    }
+
+    refreshCategoryFilterOptions() {
+        this.contentEl.querySelectorAll('.expensica-filter-category-option').forEach(option => {
+            const categoryId = option.getAttribute('data-category-id');
+            const isSelected = !!categoryId && this.selectedCategoryIds.includes(categoryId);
+
+            option.toggleClass('is-selected', isSelected);
+            option.setAttribute('aria-pressed', String(isSelected));
+        });
+    }
+
+    toggleSelectedCategory(categoryId: string) {
+        if (this.selectedCategoryIds.includes(categoryId)) {
+            this.selectedCategoryIds = this.selectedCategoryIds.filter(id => id !== categoryId);
+        } else {
+            this.selectedCategoryIds = [...this.selectedCategoryIds, categoryId];
+        }
+
+        this.applyFilters(true);
+        this.persistTransactionsState();
+        this.refreshTransactionsListOnly();
+        this.refreshSelectedFilterChips();
+        this.refreshCategoryFilterOptions();
+    }
+
+    removeSelectedCategory(categoryId: string) {
+        this.selectedCategoryIds = this.selectedCategoryIds.filter(id => id !== categoryId);
+        this.applyFilters(true);
+        this.persistTransactionsState();
+        this.refreshTransactionsListOnly();
+        this.refreshSelectedFilterChips();
+        this.refreshCategoryFilterOptions();
+    }
+
+    private formatTransactionStatCurrency(amount: number): string {
+        const currencyCode = this.plugin.settings.defaultCurrency;
+        const configuredSymbol = getCurrencyByCode(currencyCode)?.symbol || '$';
+        const displaySymbol = configuredSymbol.includes('$') ? '$' : configuredSymbol;
+
+        try {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: currencyCode,
+                currencyDisplay: 'symbol'
+            }).formatToParts(amount)
+                .map(part => part.type === 'currency' ? displaySymbol : part.value)
+                .join('');
+        } catch (error) {
+            return formatCurrency(amount, currencyCode).replace(/[A-Z]{1,3}(?=\$)/g, '');
+        }
+    }
+
     renderHeader(container: HTMLElement) {
         const header = container.createDiv('expensica-header expensica-transactions-view-header');
         
@@ -286,6 +492,10 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
             text: `${this.filteredTransactions.length} transactions`, 
             cls: 'expensica-transaction-count'
         });
+
+        const totals = this.getFilteredTransactionTotals();
+        this.renderTransactionTotalChip(titleContainer, 'spent', totals.expenses);
+        this.renderTransactionTotalChip(titleContainer, 'income', totals.income);
         
         // Actions
         const actionsSection = header.createDiv('shadcn-actions');
@@ -312,6 +522,32 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
             const modal = new IncomeModal(this.app, this.plugin, this as any);
             modal.open();
         });
+    }
+
+    private renderTransactionTotalChip(container: HTMLElement, type: 'spent' | 'income', amount: number) {
+        if (amount === 0) {
+            return null;
+        }
+
+        const label = type === 'spent' ? 'Spent' : 'Income';
+        const className = type === 'spent'
+            ? 'expensica-transaction-total-spent'
+            : 'expensica-transaction-total-income';
+
+        return container.createEl('span', {
+            text: `${label} ${this.formatTransactionStatCurrency(amount)}`,
+            cls: `expensica-transaction-count expensica-transaction-total-chip ${className}`
+        });
+    }
+
+    private syncTransactionTotalChip(container: HTMLElement, type: 'spent' | 'income', amount: number) {
+        const className = type === 'spent'
+            ? 'expensica-transaction-total-spent'
+            : 'expensica-transaction-total-income';
+        const existingChip = container.querySelector(`.${className}`);
+
+        existingChip?.remove();
+        this.renderTransactionTotalChip(container, type, amount);
     }
 
     // New method to render the date range selector
@@ -344,6 +580,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
             { type: DateRangeType.THIS_MONTH, label: 'This Month' },
             { type: DateRangeType.LAST_MONTH, label: 'Last Month' },
             { type: DateRangeType.THIS_YEAR, label: 'This Year' },
+            { type: DateRangeType.ALL_TIME, label: 'All Time' },
             { type: DateRangeType.CUSTOM, label: 'Custom Range' }
         ];
 
@@ -484,6 +721,10 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
     }
 
     applyFilters(resetPage = false) {
+        this.selectedCategoryIds = this.selectedCategoryIds.filter(categoryId =>
+            !!this.plugin.getCategoryById(categoryId)
+        );
+
         // Filter transactions based on the date range
         this.filteredTransactions = this.transactions.filter(transaction => {
             const transactionDate = parseLocalDate(transaction.date);
@@ -492,12 +733,26 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         });
         
         // Apply search filter if there's a search query
+        if (this.selectedCategoryIds.length > 0) {
+            this.filteredTransactions = this.filteredTransactions.filter(transaction =>
+                this.selectedCategoryIds.includes(transaction.category)
+            );
+        }
+
         if (this.searchQuery) {
             const query = this.searchQuery.toLowerCase();
-            this.filteredTransactions = this.filteredTransactions.filter(transaction => 
-                transaction.description.toLowerCase().includes(query) ||
-                transaction.category.toLowerCase().includes(query)
-            );
+            this.filteredTransactions = this.filteredTransactions.filter(transaction => {
+                const category = this.plugin.getCategoryById(transaction.category);
+                const searchableValues = [
+                    transaction.description,
+                    transaction.category,
+                    category?.name ?? '',
+                    category ? this.plugin.getCategoryEmoji(category.id) : '',
+                    transaction.notes ?? ''
+                ];
+
+                return searchableValues.some(value => value.toLowerCase().includes(query));
+            });
         }
         
         // Update pagination
@@ -507,6 +762,21 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         } else if (this.currentPage > this.totalPages) {
             this.currentPage = this.totalPages;
         }
+    }
+
+    getFilteredTransactionTotals() {
+        return this.filteredTransactions.reduce(
+            (totals, transaction) => {
+                if (transaction.type === TransactionType.INCOME) {
+                    totals.income += transaction.amount;
+                } else {
+                    totals.expenses += transaction.amount;
+                }
+
+                return totals;
+            },
+            { income: 0, expenses: 0 }
+        );
     }
 
     renderTransactionsList(container: HTMLElement) {
@@ -534,95 +804,60 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         const pageTransactions = this.filteredTransactions.slice(startIdx, endIdx);
         const runningBalances = getRunningBalanceByTransactionId(this.transactions);
         
-        // Render each transaction
-        pageTransactions.forEach(transaction => {
-            const transactionEl = transactionsContainer.createDiv('expensica-transaction');
+        this.renderTransactionsToContainer(transactionsContainer, pageTransactions, runningBalances);
+    }
 
-            // Get category details
-            const category = this.plugin.getCategoryById(transaction.category);
+    private renderTransactionGroupTitle(container: HTMLElement, text: string, level: 'month' | 'day') {
+        const headingLevel = level === 'month' ? 'h2' : 'h3';
+        const titleEl = container.createEl(headingLevel, {
+            cls: `expensica-transaction-group-title expensica-transaction-group-title-${level}`
+        });
 
-            // Handle unknown category (e.g., if category was deleted)
-            const categoryDisplay = category ?
-                { id: category.id, name: category.name, emoji: category.emoji, type: category.type } :
-                {
-                    id: 'unknown',
-                    name: 'Unknown Category',
-                    emoji: transaction.type === TransactionType.INCOME ? '❓' : '❓',
-                    type: transaction.type === TransactionType.INCOME ? CategoryType.INCOME : CategoryType.EXPENSE
-                };
+        if (level === 'day') {
+            const iconEl = titleEl.createSpan('expensica-transaction-group-title-icon');
+            iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
+        }
 
-            // Icon based on transaction type
-            const iconEl = transactionEl.createDiv('expensica-transaction-icon');
-            iconEl.setText(categoryDisplay.emoji);
-            if (transaction.type === TransactionType.INCOME) {
-                iconEl.addClass('expensica-income-icon');
-            } else {
-                iconEl.addClass('expensica-expense-icon');
-            }
+        titleEl.createSpan({
+            text,
+            cls: 'expensica-transaction-group-title-text'
+        });
+    }
 
-            // Transaction details
-            const detailsEl = transactionEl.createDiv('expensica-transaction-details');
-            detailsEl.createEl('div', { text: transaction.description, cls: 'expensica-transaction-title' });
-            const metaEl = detailsEl.createDiv('expensica-transaction-meta');
+    private getTransactionMonthKey(transaction: Transaction): string {
+        const date = parseLocalDate(transaction.date);
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    }
 
-            // Format date for display
-            const date = parseLocalDate(transaction.date);
-            const formattedDate = date.toLocaleDateString('en-US', {
-                day: 'numeric',
-                month: 'short',
-                year: 'numeric'
-            });
+    private getTransactionDayKey(transaction: Transaction): string {
+        const date = parseLocalDate(transaction.date);
+        return formatDate(date);
+    }
 
-            const dateEl = metaEl.createEl('span', { cls: 'expensica-transaction-date' });
-            const transactionTime = getTransactionTime(transaction);
-            dateEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg> ${formattedDate}${transactionTime ? ` ${transactionTime}` : ''}`;
+    private getTransactionMonthLabel(transaction: Transaction): string {
+        return parseLocalDate(transaction.date).toLocaleDateString('en-US', {
+            month: 'long'
+        });
+    }
 
-            const categorySpan = metaEl.createEl('span', {
-                text: categoryDisplay.name,
-                cls: `expensica-transaction-category ${!category ? 'category-unknown' : ''}`
-            });
+    private getTransactionDayLabel(transaction: Transaction): string {
+        return parseLocalDate(transaction.date).toLocaleDateString('en-US', {
+            month: 'long',
+            day: 'numeric',
+            year: 'numeric'
+        });
+    }
 
-            // Add warning if category doesn't exist
-            if (!category) {
-                categorySpan.setAttribute('title', 'This category was deleted. Edit the transaction to select a new category.');
-            }
-
-            // Transaction amount
-            const amountEl = transactionEl.createDiv('expensica-transaction-amount');
-            const formattedAmount = formatCurrency(transaction.amount, this.plugin.settings.defaultCurrency);
-            const formattedBalance = formatCurrency(runningBalances[transaction.id] ?? 0, this.plugin.settings.defaultCurrency);
-            if (transaction.type === TransactionType.INCOME) {
-                amountEl.createEl('span', {
-                    text: `+${formattedAmount}`,
-                    cls: 'expensica-income'
-                });
-            } else {
-                amountEl.createEl('span', {
-                    text: `-${formattedAmount}`,
-                    cls: 'expensica-expense'
-                });
-            }
-            amountEl.createEl('span', {
-                text: formattedBalance,
-                cls: 'expensica-transaction-balance'
-            });
-
-            // Add edit and delete options
-            const actionsEl = transactionEl.createDiv('expensica-transaction-actions');
-            const editBtn = actionsEl.createEl('button', {
-                cls: 'expensica-action-btn expensica-edit-btn',
-                attr: { 'aria-label': 'Edit transaction' }
-            });
-            editBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>';
-
-            const deleteBtn = actionsEl.createEl('button', {
-                cls: 'expensica-action-btn expensica-delete-btn',
-                attr: { 'aria-label': 'Delete transaction' }
-            });
-            deleteBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
-
-            // Add event listeners
-            editBtn.addEventListener('click', () => {
+    private renderTransactionCardWithEditHandler(
+        container: HTMLElement,
+        transaction: Transaction,
+        runningBalance: number
+    ) {
+        renderTransactionCard(container, {
+            plugin: this.plugin,
+            transaction,
+            runningBalance,
+            onEdit: (transaction) => {
                 if (transaction.type === TransactionType.EXPENSE) {
                     const modal = new ExpenseModal(this.app, this.plugin, this as any, transaction);
                     modal.open();
@@ -630,11 +865,13 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
                     const modal = new IncomeModal(this.app, this.plugin, this as any, transaction);
                     modal.open();
                 }
-            });
-
-            deleteBtn.addEventListener('click', () => {
-                this.deleteTransaction(transaction.id);
-            });
+            },
+            onCategoryChange: async (transaction, categoryId) => {
+                await this.updateTransaction({
+                    ...transaction,
+                    category: categoryId
+                });
+            }
         });
     }
 
@@ -744,7 +981,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         // First page button
         this.renderPaginationButton(
             navigationContainer,
-            '<<',
+            '1',
             'First page',
             this.currentPage === 1,
             () => this.setCurrentPage(1)
@@ -783,7 +1020,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         // Last page button
         this.renderPaginationButton(
             navigationContainer,
-            '>>',
+            String(this.totalPages),
             'Last page',
             this.currentPage === this.totalPages,
             () => this.setCurrentPage(this.totalPages)
@@ -801,6 +1038,13 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         const countEl = this.contentEl.querySelector('.expensica-transaction-count');
         if (countEl) {
             countEl.textContent = `${this.filteredTransactions.length} transactions`;
+        }
+
+        const totals = this.getFilteredTransactionTotals();
+        const titleContainer = this.contentEl.querySelector('.expensica-transactions-view-header .expensica-transactions-header') as HTMLElement | null;
+        if (titleContainer) {
+            this.syncTransactionTotalChip(titleContainer, 'spent', totals.expenses);
+            this.syncTransactionTotalChip(titleContainer, 'income', totals.income);
         }
 
         this.contentEl.querySelector('.expensica-transactions-section')?.remove();
@@ -890,6 +1134,11 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
                 end = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
                 label = 'This Year';
                 break;
+
+            case DateRangeType.ALL_TIME:
+                ({ start, end } = this.getAllTimeDateRangeBounds());
+                label = 'All Time';
+                break;
                 
             case DateRangeType.CUSTOM:
                 if (startDate && endDate) {
@@ -924,6 +1173,33 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         };
     }
 
+    getAllTimeDateRangeBounds(): { start: Date; end: Date } {
+        const today = new Date();
+        const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+
+        return this.plugin.getAllTransactions().reduce(
+            (bounds, transaction) => {
+                const transactionDate = parseLocalDate(transaction.date);
+                const transactionStart = new Date(transactionDate);
+                transactionStart.setHours(0, 0, 0, 0);
+                const transactionEnd = new Date(transactionDate);
+                transactionEnd.setHours(23, 59, 59, 999);
+
+                if (transactionStart < bounds.start) {
+                    bounds.start = transactionStart;
+                }
+
+                if (transactionEnd > bounds.end) {
+                    bounds.end = transactionEnd;
+                }
+
+                return bounds;
+            },
+            { start: todayStart, end: todayEnd }
+        );
+    }
+
     // New method to update search results without re-rendering the entire view
     updateSearchResults() {
         // Store current focus state
@@ -951,110 +1227,34 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         }, 300);
     }
     
-    // Helper method to render transactions to a container
-    renderTransactionsToContainer(container: HTMLElement, transactions: Transaction[]) {
-        const runningBalances = getRunningBalanceByTransactionId(this.transactions);
+    renderTransactionsToContainer(
+        container: HTMLElement,
+        transactions: Transaction[],
+        runningBalances: Record<string, number> = getRunningBalanceByTransactionId(this.transactions)
+    ) {
+        let currentMonthKey = '';
+        let currentDayKey = '';
 
         transactions.forEach(transaction => {
-            const transactionEl = container.createDiv('expensica-transaction');
+            const monthKey = this.getTransactionMonthKey(transaction);
+            const dayKey = this.getTransactionDayKey(transaction);
 
-            // Get category details
-            const category = this.plugin.getCategoryById(transaction.category);
-
-            // Handle unknown category (e.g., if category was deleted)
-            const categoryDisplay = category ?
-                { id: category.id, name: category.name, emoji: category.emoji, type: category.type } :
-                {
-                    id: 'unknown',
-                    name: 'Unknown Category',
-                    emoji: transaction.type === TransactionType.INCOME ? '❓' : '❓',
-                    type: transaction.type === TransactionType.INCOME ? CategoryType.INCOME : CategoryType.EXPENSE
-                };
-
-            // Icon based on transaction type
-            const iconEl = transactionEl.createDiv('expensica-transaction-icon');
-            iconEl.setText(categoryDisplay.emoji);
-            if (transaction.type === TransactionType.INCOME) {
-                iconEl.addClass('expensica-income-icon');
-            } else {
-                iconEl.addClass('expensica-expense-icon');
+            if (monthKey !== currentMonthKey) {
+                currentMonthKey = monthKey;
+                currentDayKey = '';
+                this.renderTransactionGroupTitle(container, this.getTransactionMonthLabel(transaction), 'month');
             }
 
-            // Transaction details
-            const detailsEl = transactionEl.createDiv('expensica-transaction-details');
-            detailsEl.createEl('div', { text: transaction.description, cls: 'expensica-transaction-title' });
-            const metaEl = detailsEl.createDiv('expensica-transaction-meta');
-
-            // Format date for display
-            const date = parseLocalDate(transaction.date);
-            const formattedDate = date.toLocaleDateString('en-US', {
-                day: 'numeric',
-                month: 'short',
-                year: 'numeric'
-            });
-
-            const dateEl = metaEl.createEl('span', { cls: 'expensica-transaction-date' });
-            const transactionTime = getTransactionTime(transaction);
-            dateEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg> ${formattedDate}${transactionTime ? ` ${transactionTime}` : ''}`;
-
-            const categorySpan = metaEl.createEl('span', {
-                text: categoryDisplay.name,
-                cls: `expensica-transaction-category ${!category ? 'category-unknown' : ''}`
-            });
-
-            // Add warning if category doesn't exist
-            if (!category) {
-                categorySpan.setAttribute('title', 'This category was deleted. Edit the transaction to select a new category.');
+            if (dayKey !== currentDayKey) {
+                currentDayKey = dayKey;
+                this.renderTransactionGroupTitle(container, this.getTransactionDayLabel(transaction), 'day');
             }
 
-            // Transaction amount
-            const amountEl = transactionEl.createDiv('expensica-transaction-amount');
-            const formattedAmount = formatCurrency(transaction.amount, this.plugin.settings.defaultCurrency);
-            const formattedBalance = formatCurrency(runningBalances[transaction.id] ?? 0, this.plugin.settings.defaultCurrency);
-            if (transaction.type === TransactionType.INCOME) {
-                amountEl.createEl('span', {
-                    text: `+${formattedAmount}`,
-                    cls: 'expensica-income'
-                });
-            } else {
-                amountEl.createEl('span', {
-                    text: `-${formattedAmount}`,
-                    cls: 'expensica-expense'
-                });
-            }
-            amountEl.createEl('span', {
-                text: formattedBalance,
-                cls: 'expensica-transaction-balance'
-            });
-
-            // Add edit and delete options
-            const actionsEl = transactionEl.createDiv('expensica-transaction-actions');
-            const editBtn = actionsEl.createEl('button', {
-                cls: 'expensica-action-btn expensica-edit-btn',
-                attr: { 'aria-label': 'Edit transaction' }
-            });
-            editBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>';
-
-            const deleteBtn = actionsEl.createEl('button', {
-                cls: 'expensica-action-btn expensica-delete-btn',
-                attr: { 'aria-label': 'Delete transaction' }
-            });
-            deleteBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
-
-            // Add event listeners
-            editBtn.addEventListener('click', () => {
-                if (transaction.type === TransactionType.EXPENSE) {
-                    const modal = new ExpenseModal(this.app, this.plugin, this as any, transaction);
-                    modal.open();
-                } else {
-                    const modal = new IncomeModal(this.app, this.plugin, this as any, transaction);
-                    modal.open();
-                }
-            });
-
-            deleteBtn.addEventListener('click', () => {
-                this.deleteTransaction(transaction.id);
-            });
+            this.renderTransactionCardWithEditHandler(
+                container,
+                transaction,
+                runningBalances[transaction.id] ?? 0
+            );
         });
     }
     

@@ -24,9 +24,10 @@ export enum TransactionType {
   export interface Category {
     id: string;
     name: string;
-    emoji: string;
     type: CategoryType;
   }
+
+  export type CategoryEmojiSettings = Record<string, string>;
   
   export interface Currency {
     code: string;  // ISO 4217 code (e.g. USD, EUR)
@@ -113,6 +114,10 @@ function fallbackRandomIdPart(): string {
 
     const time = `${idTimeMatch[1]}:${idTimeMatch[2]}:${idTimeMatch[3]}`;
     return getTimeInSeconds(time) !== null ? time : null;
+  }
+
+  export function getTransactionDisplayTime(transaction: Transaction): string | null {
+    return getTransactionTime(transaction)?.slice(0, 5) ?? null;
   }
 
   export function sortTransactionsByDateTimeDesc<T extends Transaction>(transactions: T[]): T[] {
@@ -401,40 +406,72 @@ function fallbackRandomIdPart(): string {
   
   // Default expense categories
   export const DEFAULT_EXPENSE_CATEGORIES: Category[] = [
-    { id: 'food', name: 'Food & Dining', emoji: '🍽️', type: CategoryType.EXPENSE },
-    { id: 'groceries', name: 'Groceries', emoji: '🛒', type: CategoryType.EXPENSE },
-    { id: 'transportation', name: 'Transportation', emoji: '🚗', type: CategoryType.EXPENSE },
-    { id: 'rent', name: 'Rent/Mortgage', emoji: '🏠', type: CategoryType.EXPENSE },
-    { id: 'utilities', name: 'Utilities', emoji: '💡', type: CategoryType.EXPENSE },
-    { id: 'internet', name: 'Internet & Phone', emoji: '📱', type: CategoryType.EXPENSE },
-    { id: 'entertainment', name: 'Entertainment', emoji: '🎬', type: CategoryType.EXPENSE },
-    { id: 'shopping', name: 'Shopping', emoji: '🛍️', type: CategoryType.EXPENSE },
-    { id: 'health', name: 'Healthcare', emoji: '🏥', type: CategoryType.EXPENSE },
-    { id: 'education', name: 'Education', emoji: '📚', type: CategoryType.EXPENSE },
-    { id: 'travel', name: 'Travel', emoji: '✈️', type: CategoryType.EXPENSE },
-    { id: 'fitness', name: 'Fitness', emoji: '🏋️', type: CategoryType.EXPENSE },
-    { id: 'pets', name: 'Pets', emoji: '🐾', type: CategoryType.EXPENSE },
-    { id: 'gifts', name: 'Gifts & Donations', emoji: '🎁', type: CategoryType.EXPENSE },
-    { id: 'personal', name: 'Personal Care', emoji: '💇', type: CategoryType.EXPENSE },
-    { id: 'childcare', name: 'Childcare', emoji: '👶', type: CategoryType.EXPENSE },
-    { id: 'subscriptions', name: 'Subscriptions', emoji: '📺', type: CategoryType.EXPENSE },
-    { id: 'insurance', name: 'Insurance', emoji: '🔒', type: CategoryType.EXPENSE },
-    { id: 'taxes', name: 'Taxes', emoji: '📝', type: CategoryType.EXPENSE },
-    { id: 'other_expense', name: 'Other Expenses', emoji: '💼', type: CategoryType.EXPENSE },
+    { id: 'food', name: 'Food & Dining', type: CategoryType.EXPENSE },
+    { id: 'groceries', name: 'Groceries', type: CategoryType.EXPENSE },
+    { id: 'transportation', name: 'Transportation', type: CategoryType.EXPENSE },
+    { id: 'rent', name: 'Rent/Mortgage', type: CategoryType.EXPENSE },
+    { id: 'utilities', name: 'Utilities', type: CategoryType.EXPENSE },
+    { id: 'internet', name: 'Internet & Phone', type: CategoryType.EXPENSE },
+    { id: 'entertainment', name: 'Entertainment', type: CategoryType.EXPENSE },
+    { id: 'shopping', name: 'Shopping', type: CategoryType.EXPENSE },
+    { id: 'health', name: 'Healthcare', type: CategoryType.EXPENSE },
+    { id: 'education', name: 'Education', type: CategoryType.EXPENSE },
+    { id: 'travel', name: 'Travel', type: CategoryType.EXPENSE },
+    { id: 'fitness', name: 'Fitness', type: CategoryType.EXPENSE },
+    { id: 'pets', name: 'Pets', type: CategoryType.EXPENSE },
+    { id: 'gifts', name: 'Gifts & Donations', type: CategoryType.EXPENSE },
+    { id: 'personal', name: 'Personal Care', type: CategoryType.EXPENSE },
+    { id: 'childcare', name: 'Childcare', type: CategoryType.EXPENSE },
+    { id: 'subscriptions', name: 'Subscriptions', type: CategoryType.EXPENSE },
+    { id: 'insurance', name: 'Insurance', type: CategoryType.EXPENSE },
+    { id: 'taxes', name: 'Taxes', type: CategoryType.EXPENSE },
+    { id: 'other_expense', name: 'Other Expenses', type: CategoryType.EXPENSE },
   ];
   
   // Default income categories
   export const DEFAULT_INCOME_CATEGORIES: Category[] = [
-    { id: 'salary', name: 'Salary', emoji: '💰', type: CategoryType.INCOME },
-    { id: 'freelance', name: 'Freelance', emoji: '💻', type: CategoryType.INCOME },
-    { id: 'business', name: 'Business', emoji: '🏢', type: CategoryType.INCOME },
-    { id: 'investments', name: 'Investments', emoji: '📈', type: CategoryType.INCOME },
-    { id: 'dividends', name: 'Dividends', emoji: '💵', type: CategoryType.INCOME },
-    { id: 'rental', name: 'Rental Income', emoji: '🏘️', type: CategoryType.INCOME },
-    { id: 'gifts_received', name: 'Gifts Received', emoji: '🎀', type: CategoryType.INCOME },
-    { id: 'tax_returns', name: 'Tax Returns', emoji: '📋', type: CategoryType.INCOME },
-    { id: 'other_income', name: 'Other Income', emoji: '💸', type: CategoryType.INCOME },
+    { id: 'salary', name: 'Salary', type: CategoryType.INCOME },
+    { id: 'freelance', name: 'Freelance', type: CategoryType.INCOME },
+    { id: 'business', name: 'Business', type: CategoryType.INCOME },
+    { id: 'investments', name: 'Investments', type: CategoryType.INCOME },
+    { id: 'dividends', name: 'Dividends', type: CategoryType.INCOME },
+    { id: 'rental', name: 'Rental Income', type: CategoryType.INCOME },
+    { id: 'gifts_received', name: 'Gifts Received', type: CategoryType.INCOME },
+    { id: 'tax_returns', name: 'Tax Returns', type: CategoryType.INCOME },
+    { id: 'other_income', name: 'Other Income', type: CategoryType.INCOME },
   ];
+
+  export const DEFAULT_CATEGORY_EMOJIS: CategoryEmojiSettings = {
+    food: '🍔',
+    groceries: '🥑',
+    transportation: '🚗',
+    rent: '🔑',
+    utilities: '💡',
+    internet: '📱',
+    entertainment: '🎬',
+    shopping: '🛍️',
+    health: '🏥',
+    education: '📚',
+    travel: '✈️',
+    fitness: '🏋️',
+    pets: '🐾',
+    gifts: '🎁',
+    personal: '💇',
+    childcare: '👶',
+    subscriptions: '📺',
+    insurance: '🔒',
+    taxes: '📝',
+    other_expense: '💼',
+    salary: '💰',
+    freelance: '💻',
+    business: '🏢',
+    investments: '📈',
+    dividends: '💵',
+    rental: '🏘️',
+    gifts_received: '🎀',
+    tax_returns: '📋',
+    other_income: '💸'
+  };
   
   // Combine all default categories
   export const DEFAULT_CATEGORIES: Category[] = [
@@ -547,7 +584,7 @@ function fallbackRandomIdPart(): string {
         .filter(t => t.type === TransactionType.EXPENSE)
         .forEach(t => {
           const category = categories.find(c => c.id === t.category);
-          const categoryName = category ? `${category.emoji} ${category.name}` : '❓ Unknown Category';
+          const categoryName = category ? category.name : 'Unknown Category';
           if (!expenses[categoryName]) {
             expenses[categoryName] = 0;
           }

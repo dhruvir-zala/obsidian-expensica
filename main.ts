@@ -10,12 +10,12 @@ import {
     formatDate,
     parseLocalDate,
     Category,
+    CategoryEmojiSettings,
     CategoryType,
     Currency,
     COMMON_CURRENCIES,
     DEFAULT_CATEGORIES,
-    DEFAULT_EXPENSE_CATEGORIES,
-    DEFAULT_INCOME_CATEGORIES,
+    DEFAULT_CATEGORY_EMOJIS,
     getCurrencyByCode,
     ColorScheme,
     Budget,
@@ -57,15 +57,52 @@ declare global {
 interface ExpensicaSettings {
     defaultCurrency: string;
     categories: Category[];
+    categoryEmojis: CategoryEmojiSettings;
     calendarColorScheme: ColorScheme;
     customCalendarColor: string;
     showWeekNumbers: boolean;
+    showTransactionCategoryLabels: boolean;
     enableBudgeting: boolean;
     enableDailyFinanceReview: boolean;
     enableDailyFinanceReviewForAnyDate: boolean;
     dailyReviewFolder: string;
     sharedDateRangeState: SharedDateRangeState | null;
 }
+
+type LegacyCategory = Category & { emoji?: string };
+
+const LEADING_CATEGORY_EMOJI_PATTERN = /^([\p{Extended_Pictographic}\uFE0F\u200D]+)\s+/u;
+const LEGACY_DEFAULT_CATEGORY_EMOJIS: CategoryEmojiSettings = {
+    food: '🍽️',
+    groceries: '🛒',
+    transportation: '🚗',
+    rent: '🏠',
+    utilities: '💡',
+    internet: '📱',
+    entertainment: '🎬',
+    shopping: '🛍️',
+    health: '🏥',
+    education: '📚',
+    travel: '✈️',
+    fitness: '🏋️',
+    pets: '🐾',
+    gifts: '🎁',
+    personal: '💇',
+    childcare: '👶',
+    subscriptions: '📺',
+    insurance: '🔒',
+    taxes: '📝',
+    other_expense: '💼',
+    salary: '💰',
+    freelance: '💻',
+    business: '🏢',
+    investments: '📈',
+    dividends: '💵',
+    rental: '🏘️',
+    gifts_received: '🎀',
+    tax_returns: '📋',
+    other_income: '💸'
+};
 
 // Define a separate interface for our transactions data
 interface TransactionsData {
@@ -86,9 +123,11 @@ export interface SharedDateRangeState {
 const DEFAULT_SETTINGS: ExpensicaSettings = {
     defaultCurrency: 'USD',
     categories: DEFAULT_CATEGORIES,
+    categoryEmojis: {},
     calendarColorScheme: ColorScheme.BLUE,
     customCalendarColor: '#2196f3',
     showWeekNumbers: false,
+    showTransactionCategoryLabels: true,
     enableBudgeting: true,
     enableDailyFinanceReview: true,
     enableDailyFinanceReviewForAnyDate: true,
@@ -433,22 +472,88 @@ export default class ExpensicaPlugin extends Plugin {
     }
 
     async loadSettings() {
-        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-
-        // Ensure categories have the required structure
-        // This handles migration from old format
-        if (!this.settings.categories[0]?.emoji) {
-            this.settings.categories = DEFAULT_CATEGORIES;
-            await this.saveSettings(false);
-        }
+        const loadedData = await this.loadData();
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData);
+        this.normalizeCategorySettings();
     }
 
     async saveSettings(refreshViews = true) {
-        await this.saveData(this.settings);
+        this.normalizeCategorySettings();
+        await this.saveData({
+            ...this.settings,
+            categories: this.settings.categories.map(category => ({
+                id: category.id,
+                name: category.name,
+                type: category.type
+            })),
+            categoryEmojis: this.getCategoryEmojiOverridesForSave()
+        });
 
         if (refreshViews) {
             await this.refreshExpensicaViews();
         }
+    }
+
+    normalizeCategorySettings() {
+        const legacyCategories = this.settings.categories as LegacyCategory[];
+        const categoryEmojis = this.settings.categoryEmojis || {};
+        const migratedEmojis = legacyCategories.reduce<CategoryEmojiSettings>((emojiSettings, category) => {
+            if (category.emoji) {
+                emojiSettings[category.id] = category.emoji;
+            }
+
+            return emojiSettings;
+        }, {});
+
+        this.settings.categoryEmojis = this.getCategoryEmojiOverridesForSave({
+            ...migratedEmojis,
+            ...categoryEmojis
+        });
+
+        this.settings.categories = legacyCategories.map(category => {
+            const normalizedName = this.normalizeCategoryName(category.name);
+            if (normalizedName.leadingEmoji && !this.settings.categoryEmojis[category.id]) {
+                this.settings.categoryEmojis[category.id] = normalizedName.leadingEmoji;
+            }
+
+            return {
+                id: category.id,
+                name: normalizedName.name,
+                type: category.type
+            };
+        });
+
+        this.settings.categoryEmojis = this.getCategoryEmojiOverridesForSave();
+    }
+
+    normalizeCategoryName(name: string): { name: string; leadingEmoji: string | null } {
+        const match = name.match(LEADING_CATEGORY_EMOJI_PATTERN);
+        if (!match) {
+            return {
+                name,
+                leadingEmoji: null
+            };
+        }
+
+        return {
+            name: name.slice(match[0].length).trim(),
+            leadingEmoji: match[1]
+        };
+    }
+
+    getCategoryEmojiOverridesForSave(categoryEmojis: CategoryEmojiSettings = this.settings.categoryEmojis): CategoryEmojiSettings {
+        return Object.entries(categoryEmojis).reduce<CategoryEmojiSettings>((overrides, [categoryId, emoji]) => {
+            if (emoji && !this.isBuiltInCategoryEmoji(categoryId, emoji)) {
+                overrides[categoryId] = emoji;
+            }
+
+            return overrides;
+        }, {});
+    }
+
+    isBuiltInCategoryEmoji(categoryId: string, emoji: string): boolean {
+        return emoji === DEFAULT_CATEGORY_EMOJIS[categoryId]
+            || emoji === LEGACY_DEFAULT_CATEGORY_EMOJIS[categoryId];
     }
 
     getSharedDateRangeState(): SharedDateRangeState | null {
@@ -526,6 +631,18 @@ export default class ExpensicaPlugin extends Plugin {
         return this.settings.categories.find(c => c.id === id);
     }
 
+    getCategoryEmoji(categoryId: string): string {
+        return this.settings.categoryEmojis[categoryId] || DEFAULT_CATEGORY_EMOJIS[categoryId] || '?';
+    }
+
+    async updateCategoryEmoji(categoryId: string, emoji: string): Promise<void> {
+        this.settings.categoryEmojis = {
+            ...this.settings.categoryEmojis,
+            [categoryId]: emoji
+        };
+        await this.saveSettings();
+    }
+
     // Add a new category
     async addCategory(category: Category): Promise<void> {
         this.settings.categories.push(category);
@@ -587,6 +704,7 @@ export default class ExpensicaPlugin extends Plugin {
                 if (confirmed) {
                     // Remove from categories list
                     this.settings.categories = this.settings.categories.filter(c => c.id !== id);
+                    delete this.settings.categoryEmojis[id];
 
                     // Save settings
                     await this.saveSettings();
@@ -828,7 +946,7 @@ export default class ExpensicaPlugin extends Plugin {
                 // Add each transaction to the table
                 for (const transaction of sortedTransactions) {
                     const category = this.getCategoryById(transaction.category);
-                    const categoryName = category ? `${category.emoji} ${category.name}` : '❓ Unknown';
+                    const categoryName = category ? `${this.getCategoryEmoji(category.id)} ${category.name}` : '❓ Unknown';
                     const notes = transaction.notes || '';
                     
                     // Format amount with color indicator
@@ -960,7 +1078,7 @@ export default class ExpensicaPlugin extends Plugin {
                     // Add each transaction to the table
                     for (const transaction of sortedTransactions) {
                         const category = this.getCategoryById(transaction.category);
-                        const categoryName = category ? `${category.emoji} ${category.name}` : '❓ Unknown';
+                        const categoryName = category ? `${this.getCategoryEmoji(category.id)} ${category.name}` : '❓ Unknown';
                         const notes = transaction.notes || '';
                         
                         // Format amount with color indicator
@@ -1260,6 +1378,28 @@ class ExpensicaSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
+        new Setting(containerEl)
+            .setName('Show Transaction Category Labels')
+            .setDesc('Display colored category labels on transaction cards.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.showTransactionCategoryLabels)
+                .onChange(async (value) => {
+                    this.plugin.settings.showTransactionCategoryLabels = value;
+                    await this.plugin.saveSettings();
+
+                    this.plugin.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE).forEach((leaf) => {
+                        if (leaf.view instanceof ExpensicaDashboardView) {
+                            leaf.view.renderDashboard();
+                        }
+                    });
+
+                    this.plugin.app.workspace.getLeavesOfType(EXPENSICA_TRANSACTIONS_VIEW_TYPE).forEach((leaf) => {
+                        if (leaf.view instanceof ExpensicaTransactionsView) {
+                            leaf.view.renderView();
+                        }
+                    });
+                }));
+
         // Enable budgeting feature
         new Setting(containerEl)
             .setName('Enable Budgeting')
@@ -1348,10 +1488,10 @@ class ExpensicaSettingTab extends PluginSettingTab {
                             const newCategory: Category = {
                                 id: generateId(),
                                 name: value,
-                                emoji: '💼', // Default emoji
                                 type: CategoryType.EXPENSE
                             };
                             this.plugin.settings.categories.push(newCategory);
+                            this.plugin.settings.categoryEmojis[newCategory.id] = '💼';
                             await this.plugin.saveSettings();
                             this.renderCategoriesList(expenseCategoriesContainer, CategoryType.EXPENSE);
                             inputEl.value = '';
@@ -1370,10 +1510,10 @@ class ExpensicaSettingTab extends PluginSettingTab {
                         const newCategory: Category = {
                             id: generateId(),
                             name: value,
-                            emoji: '💼', // Default emoji
                             type: CategoryType.EXPENSE
                         };
                         this.plugin.settings.categories.push(newCategory);
+                        this.plugin.settings.categoryEmojis[newCategory.id] = '💼';
                         await this.plugin.saveSettings();
                         this.renderCategoriesList(expenseCategoriesContainer, CategoryType.EXPENSE);
                         expenseInputEl.value = '';
@@ -1406,10 +1546,10 @@ class ExpensicaSettingTab extends PluginSettingTab {
                             const newCategory: Category = {
                                 id: generateId(),
                                 name: value,
-                                emoji: '💰', // Default emoji
                                 type: CategoryType.INCOME
                             };
                             this.plugin.settings.categories.push(newCategory);
+                            this.plugin.settings.categoryEmojis[newCategory.id] = '💰';
                             await this.plugin.saveSettings();
                             this.renderCategoriesList(incomeCategoriesContainer, CategoryType.INCOME);
                             inputEl.value = '';
@@ -1428,10 +1568,10 @@ class ExpensicaSettingTab extends PluginSettingTab {
                         const newCategory: Category = {
                             id: generateId(),
                             name: value,
-                            emoji: '💰', // Default emoji
                             type: CategoryType.INCOME
                         };
                         this.plugin.settings.categories.push(newCategory);
+                        this.plugin.settings.categoryEmojis[newCategory.id] = '💰';
                         await this.plugin.saveSettings();
                         this.renderCategoriesList(incomeCategoriesContainer, CategoryType.INCOME);
                         incomeInputEl.value = '';
@@ -1572,9 +1712,9 @@ class ExpensicaSettingTab extends PluginSettingTab {
         for (const category of categories) {
             const categoryDiv = container.createDiv('category-item');
             
-            // Create category name with emoji
+            // Create category name with decorative emoji from settings
             const nameSpan = categoryDiv.createSpan('category-name');
-            nameSpan.innerHTML = `<span class="category-emoji">${category.emoji}</span> ${category.name}`;
+            nameSpan.innerHTML = `<span class="category-emoji">${this.plugin.getCategoryEmoji(category.id)}</span> ${category.name}`;
             
             const actionsDiv = categoryDiv.createDiv('category-actions');
             
@@ -1594,8 +1734,8 @@ class ExpensicaSettingTab extends PluginSettingTab {
             
             // Event listeners
             editEmojiButton.addEventListener('click', () => {
-                new EmojiPickerModal(this.app, category, async (updatedCategory) => {
-                    await this.plugin.updateCategory(updatedCategory);
+                new EmojiPickerModal(this.app, category, this.plugin.getCategoryEmoji(category.id), async (emoji) => {
+                    await this.plugin.updateCategoryEmoji(category.id, emoji);
                     this.renderCategoriesList(container, type);
                 }).open();
             });
@@ -1754,11 +1894,13 @@ class ImportModal extends Modal {
 // Emoji Picker Modal with improved UI
 class EmojiPickerModal extends Modal {
     category: Category;
-    onConfirm: (updatedCategory: Category) => void;
+    currentEmoji: string;
+    onConfirm: (emoji: string) => void;
     
-    constructor(app: App, category: Category, onConfirm: (updatedCategory: Category) => void) {
+    constructor(app: App, category: Category, currentEmoji: string, onConfirm: (emoji: string) => void) {
         super(app);
         this.category = category;
+        this.currentEmoji = currentEmoji;
         this.onConfirm = onConfirm;
     }
     
@@ -1768,14 +1910,14 @@ class EmojiPickerModal extends Modal {
         contentEl.addClass('expensica-modal');
         
         const modalTitle = contentEl.createEl('h2', { cls: 'expensica-modal-title' });
-        modalTitle.innerHTML = `<span class="expensica-modal-title-icon">${this.category.emoji}</span> Choose Emoji for "${this.category.name}"`;
+        modalTitle.innerHTML = `<span class="expensica-modal-title-icon">${this.currentEmoji}</span> Choose Emoji for "${this.category.name}"`;
         
         const form = contentEl.createDiv('emoji-picker-form');
         
         const emojiInput = form.createEl('input', {
             attr: {
                 type: 'text',
-                value: this.category.emoji,
+                value: this.currentEmoji,
                 placeholder: 'Enter an emoji'
             },
             cls: 'emoji-input'
@@ -1819,12 +1961,7 @@ class EmojiPickerModal extends Modal {
         });
         
         saveButton.addEventListener('click', () => {
-            const updatedCategory = {
-                ...this.category,
-                emoji: emojiInput.value || this.category.emoji
-            };
-            
-            this.onConfirm(updatedCategory);
+            this.onConfirm(emojiInput.value || this.currentEmoji);
             this.close();
         });
     }
