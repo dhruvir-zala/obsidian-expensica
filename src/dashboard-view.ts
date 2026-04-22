@@ -160,6 +160,7 @@ export class ExpensicaDashboardView extends ItemView {
     private animateIncomeExpenseChartThisRender = false;
     private scrollTop: number = 0;
     private selectedTransactionIds = new Set<string>();
+    private mobileActiveCategorySliceIndex: number | null = null;
     private hasRenderedDashboard = false;
     private wasDashboardVisible = false;
     private readonly boundHandleResize = this.handleResize.bind(this);
@@ -783,9 +784,31 @@ export class ExpensicaDashboardView extends ItemView {
     }
 
     private clearChartHoverState(chart: Chart, point = { x: 0, y: 0 }) {
+        this.mobileActiveCategorySliceIndex = null;
         chart.setActiveElements([]);
         chart.tooltip?.setActiveElements([], point);
         chart.update('none');
+    }
+
+    private isMobileDashboard(): boolean {
+        return document.body.classList.contains('is-mobile');
+    }
+
+    private activateCategorySliceByIndex(chart: Chart, index: number, animate = false) {
+        const chartElement = chart.getDatasetMeta(0).data[index] as any;
+        const tooltipPosition = chartElement?.tooltipPosition?.() ?? {
+            x: chart.chartArea.left + chart.chartArea.width / 2,
+            y: chart.chartArea.top + chart.chartArea.height / 2
+        };
+
+        chart.setActiveElements([{ datasetIndex: 0, index }]);
+        chart.tooltip?.setActiveElements([{ datasetIndex: 0, index }], tooltipPosition);
+
+        if (animate) {
+            this.temporarilyEnableChartAnimations();
+        }
+
+        chart.update();
     }
 
     private formatWholeCurrency(amount: number): string {
@@ -2782,6 +2805,7 @@ export class ExpensicaDashboardView extends ItemView {
         const categoryData = categoryEntries ?? this.getCurrentCategoryChartData();
         const categories = categoryData.map(category => category.name);
         const amounts = categoryData.map(category => category.amount);
+        this.mobileActiveCategorySliceIndex = null;
 
         // If there are no expenses, return
         if (categories.length === 0) {
@@ -2860,8 +2884,29 @@ export class ExpensicaDashboardView extends ItemView {
                         }
                     }
                 },
-                onClick: (_event, elements) => {
-                    if (!legendContainer || elements.length === 0) {
+                onClick: (_event, elements, chart) => {
+                    if (!legendContainer) {
+                        return;
+                    }
+
+                    if (elements.length === 0) {
+                        if (this.isMobileDashboard()) {
+                            this.clearChartHoverState(chart);
+                        }
+                        return;
+                    }
+
+                    if (this.isMobileDashboard()) {
+                        const clickedIndex = elements[0].index;
+
+                        if (this.mobileActiveCategorySliceIndex === clickedIndex) {
+                            this.switchDashboardTab(DashboardTab.CATEGORIES);
+                            this.scrollToTop();
+                            return;
+                        }
+
+                        this.mobileActiveCategorySliceIndex = clickedIndex;
+                        this.activateCategorySliceByIndex(chart, clickedIndex, true);
                         return;
                     }
 
@@ -2944,15 +2989,7 @@ export class ExpensicaDashboardView extends ItemView {
             return;
         }
 
-        const chartElement = chart.getDatasetMeta(0).data[index] as any;
-        const tooltipPosition = chartElement?.tooltipPosition?.() ?? {
-            x: chart.chartArea.left + chart.chartArea.width / 2,
-            y: chart.chartArea.top + chart.chartArea.height / 2
-        };
-
-        chart.setActiveElements([{ datasetIndex: 0, index }]);
-        chart.tooltip?.setActiveElements([{ datasetIndex: 0, index }], tooltipPosition);
-        chart.update();
+        this.activateCategorySliceByIndex(chart, index);
     }
 
     private clearCategorySlice(chart: Chart | null) {

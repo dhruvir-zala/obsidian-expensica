@@ -94,6 +94,7 @@ export function renderTransactionCard(container: HTMLElement, options: Transacti
         const categorySpan = renderCategoryChip(metaEl, {
             emoji: categoryDisplay.emoji,
             text: categoryDisplay.name,
+            color: category ? plugin.getCategoryColor(category.id, category.name) : undefined,
             colorName: categoryDisplay.name,
             title: !category ? 'This category was deleted. Edit the transaction to select a new category.' : undefined
         });

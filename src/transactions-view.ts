@@ -251,6 +251,7 @@ export class ExpensicaTransactionsView implements TransactionView {
             const chip = renderCategoryChip(selectedFiltersContainer, {
                 emoji: this.plugin.getCategoryEmoji(category.id),
                 text: category.name,
+                color: this.plugin.getCategoryColor(category.id, category.name),
                 colorName: category.name,
                 interactive: true
             });
@@ -716,12 +717,19 @@ export class ExpensicaTransactionsView implements TransactionView {
         return Array.from({ length: visiblePageCount }, (_, index) => startPage + index);
     }
 
-    setCurrentPage(page: number) {
+    setCurrentPage(page: number, scrollToTop = false) {
         const nextPage = Math.max(1, Math.min(page, this.totalPages));
 
         if (nextPage === this.currentPage) return;
 
         this.currentPage = nextPage;
+        if (scrollToTop) {
+            this.scrollTop = 0;
+            this.app.workspace.requestSaveLayout();
+            this.refreshTransactionsListOnly(false);
+            return;
+        }
+
         this.persistTransactionsState();
         this.refreshTransactionsListOnly();
     }
@@ -817,7 +825,7 @@ export class ExpensicaTransactionsView implements TransactionView {
             '1',
             'First page',
             this.currentPage === 1,
-            () => this.setCurrentPage(1)
+            () => this.setCurrentPage(1, placement === 'bottom')
         );
 
         // Previous page button
@@ -826,7 +834,7 @@ export class ExpensicaTransactionsView implements TransactionView {
             '<',
             'Previous page',
             this.currentPage === 1,
-            () => this.setCurrentPage(this.currentPage - 1)
+            () => this.setCurrentPage(this.currentPage - 1, placement === 'bottom')
         );
 
         // Sliding page buttons
@@ -836,7 +844,7 @@ export class ExpensicaTransactionsView implements TransactionView {
                 String(page),
                 `Page ${page} of ${this.totalPages}`,
                 false,
-                () => this.setCurrentPage(page),
+                () => this.setCurrentPage(page, placement === 'bottom'),
                 page === this.currentPage ? 'active' : ''
             );
         });
@@ -847,7 +855,7 @@ export class ExpensicaTransactionsView implements TransactionView {
             '>',
             'Next page',
             this.currentPage === this.totalPages,
-            () => this.setCurrentPage(this.currentPage + 1)
+            () => this.setCurrentPage(this.currentPage + 1, placement === 'bottom')
         );
 
         // Last page button
@@ -856,7 +864,7 @@ export class ExpensicaTransactionsView implements TransactionView {
             String(this.totalPages),
             'Last page',
             this.currentPage === this.totalPages,
-            () => this.setCurrentPage(this.totalPages)
+            () => this.setCurrentPage(this.totalPages, placement === 'bottom')
         );
 
         // Items per page selector container
@@ -865,9 +873,11 @@ export class ExpensicaTransactionsView implements TransactionView {
         this.renderPageSizeSelector(itemsPerPageContainer);
     }
 
-    refreshTransactionsListOnly() {
+    refreshTransactionsListOnly(preserveScroll = true) {
         const container = this.getActiveContentEl();
-        this.rememberScrollPosition();
+        if (preserveScroll) {
+            this.rememberScrollPosition();
+        }
         container.addClass('expensica-suppress-motion');
 
         const countEl = container.querySelector('.expensica-transaction-count-chip');
