@@ -5,8 +5,8 @@ import Chart from 'chart.js/auto';
 import { 
     Transaction, Category, TransactionType, CategoryType, Currency, ColorScheme,
     formatCurrency, formatDate, formatTime, parseLocalDate, getMonthName, getYear, generateId, TransactionAggregator,
-    Budget, BudgetPeriod, calculateBudgetStatus, getCurrencyByCode, getCategoryColor, sortTransactionsByDateTimeDesc,
-    getRunningBalanceByTransactionId, getTransactionDisplayTime
+    Budget, BudgetPeriod, calculateBudgetStatus, getCurrencyByCode, getCategoryColor as getDefaultCategoryColor, sortTransactionsByDateTimeDesc,
+    getRunningBalanceByTransactionId, getTransactionDisplayTime, getTransactionTime, ColorPalette
 } from './models';
 import ExpensicaPlugin from '../main';
 import type { SharedDateRangeState } from '../main';
@@ -14,12 +14,17 @@ import { PremiumVisualizations } from './dashboard-integration';
 import { ConfirmationModal } from './confirmation-modal';
 import { showExpensicaNotice } from './notice';
 import { renderTransactionCard } from './transaction-card';
+import { showTransactionBulkCategoryMenu } from './transaction-card';
 import { renderCategoryChip } from './category-chip';
+import { renderCategoryCards } from './categories-cards';
+import { EmojiPickerModal } from './emoji-picker-modal';
+import { showCategoryQuickMenu } from './category-quick-menu';
 
 // Extend the plugin interface to include the new method
 declare module '../main' {
     interface ExpensicaPlugin {
         openTransactionsView(): Promise<void>;
+        renderDashboardTransactionsTab(dashboard: ExpensicaDashboardView, container: HTMLElement): void;
         openExportModal(): void;
     }
 }
@@ -30,9 +35,11 @@ export const EXPENSICA_VIEW_TYPE = 'expensica-dashboard-view';
 export enum DateRangeType {
     TODAY = 'today',
     THIS_WEEK = 'this_week',
+    LAST_WEEK = 'last_week',
     THIS_MONTH = 'this_month',
     LAST_MONTH = 'last_month',
     THIS_YEAR = 'this_year',
+    LAST_YEAR = 'last_year',
     ALL_TIME = 'all_time',
     CUSTOM = 'custom'
 }
@@ -56,7 +63,7 @@ interface DashboardViewState {
     currentDate?: string;
     selectedCalendarDate?: string | null;
     expenseChartPeriod?: 'category' | 'weekly' | 'monthly';
-    incomeExpenseChartPeriod?: 'daily' | 'weekly' | 'monthly';
+    categoryChartType?: CategoryType;
     incomeExpenseVisibility?: IncomeExpenseVisibility;
     scrollTop?: number;
 }
@@ -101,7 +108,9 @@ function isSameTransactionEdit(original: Transaction, updated: Transaction): boo
 // Dashboard tab options
 export enum DashboardTab {
     OVERVIEW = 'overview',
-    BUDGET = 'budget'
+    TRANSACTIONS = 'transactions',
+    BUDGET = 'budget',
+    CATEGORIES = 'categories'
 }
 
 export class ExpensicaDashboardView extends ItemView {
@@ -118,7 +127,7 @@ export class ExpensicaDashboardView extends ItemView {
     
     // Chart period for expenses (weekly, monthly, yearly)
     expenseChartPeriod: 'category' | 'weekly' | 'monthly' = 'category';
-    incomeExpenseChartPeriod: 'daily' | 'weekly' | 'monthly' = 'daily';
+    categoryChartType: CategoryType = CategoryType.EXPENSE;
     incomeExpenseVisibility: IncomeExpenseVisibility = {
         income: true,
         expenses: true,
@@ -150,6 +159,7 @@ export class ExpensicaDashboardView extends ItemView {
     private animateExpensesChartThisRender = false;
     private animateIncomeExpenseChartThisRender = false;
     private scrollTop: number = 0;
+    private selectedTransactionIds = new Set<string>();
     private hasRenderedDashboard = false;
     private wasDashboardVisible = false;
     private readonly boundHandleResize = this.handleResize.bind(this);
@@ -167,7 +177,7 @@ export class ExpensicaDashboardView extends ItemView {
     }
 
     getDisplayText(): string {
-        return 'Expensica Dashboard';
+        return 'Expensica';
     }
 
     getIcon(): string {
@@ -265,7 +275,7 @@ export class ExpensicaDashboardView extends ItemView {
             currentDate: formatDate(this.currentDate),
             selectedCalendarDate: this.selectedCalendarDate ? formatDate(this.selectedCalendarDate) : null,
             expenseChartPeriod: this.expenseChartPeriod,
-            incomeExpenseChartPeriod: this.incomeExpenseChartPeriod,
+            categoryChartType: this.categoryChartType,
             incomeExpenseVisibility: this.incomeExpenseVisibility,
             scrollTop: this.scrollTop
         };
@@ -294,11 +304,10 @@ export class ExpensicaDashboardView extends ItemView {
         }
 
         if (
-            dashboardState.incomeExpenseChartPeriod === 'daily'
-            || dashboardState.incomeExpenseChartPeriod === 'weekly'
-            || dashboardState.incomeExpenseChartPeriod === 'monthly'
+            dashboardState.categoryChartType === CategoryType.EXPENSE
+            || dashboardState.categoryChartType === CategoryType.INCOME
         ) {
-            this.incomeExpenseChartPeriod = dashboardState.incomeExpenseChartPeriod;
+            this.categoryChartType = dashboardState.categoryChartType;
         }
 
         if (dashboardState.incomeExpenseVisibility) {
@@ -453,44 +462,196 @@ export class ExpensicaDashboardView extends ItemView {
         const container = canvas.parentElement;
         if (!container) return;
 
-        const bounds = container.getBoundingClientRect();
-        const width = Math.max(1, Math.round(bounds.width));
-        const height = Math.max(1, Math.round(bounds.height));
-        const minimumWidth = Math.round(width * 0.75);
-        const minimumHeight = Math.round(height * 0.75);
+        const { width, height, minimumWidth, minimumHeight, isMiniDonut } = this.getChartCanvasDimensions(container);
 
         container.style.setProperty('--expensica-panel-natural-width', `${width}px`);
         container.style.setProperty('--expensica-panel-natural-height', `${height}px`);
-        container.style.setProperty('--expensica-panel-min-width', `${minimumWidth}px`);
-        container.style.setProperty('--expensica-panel-min-height', `${minimumHeight}px`);
+        if (isMiniDonut) {
+            container.style.removeProperty('--expensica-panel-min-width');
+            container.style.removeProperty('--expensica-panel-min-height');
+        } else {
+            container.style.setProperty('--expensica-panel-min-width', `${minimumWidth}px`);
+            container.style.setProperty('--expensica-panel-min-height', `${minimumHeight}px`);
+        }
         canvas.width = width;
         canvas.height = height;
-        canvas.style.minWidth = 'var(--expensica-panel-min-width)';
-        canvas.style.minHeight = 'var(--expensica-panel-min-height)';
+        if (isMiniDonut) {
+            canvas.style.removeProperty('min-width');
+            canvas.style.removeProperty('min-height');
+        } else {
+            canvas.style.minWidth = 'var(--expensica-panel-min-width)';
+            canvas.style.minHeight = 'var(--expensica-panel-min-height)';
+        }
     }
 
-    private resizeChartToContainer(chart: Chart): boolean {
+    private resizeChartToContainer(chart: Chart, force = false): boolean {
         const canvas = chart.canvas;
         const container = canvas.parentElement;
         if (!container) return false;
 
-        const bounds = container.getBoundingClientRect();
-        const width = Math.max(1, Math.round(bounds.width));
-        const height = Math.max(1, Math.round(bounds.height));
-        const minimumWidth = Math.round(width * 0.75);
-        const minimumHeight = Math.round(height * 0.75);
+        const { width, height, minimumWidth, minimumHeight, isMiniDonut } = this.getChartCanvasDimensions(container);
 
         container.style.setProperty('--expensica-panel-natural-width', `${width}px`);
         container.style.setProperty('--expensica-panel-natural-height', `${height}px`);
-        container.style.setProperty('--expensica-panel-min-width', `${minimumWidth}px`);
-        container.style.setProperty('--expensica-panel-min-height', `${minimumHeight}px`);
+        if (isMiniDonut) {
+            container.style.removeProperty('--expensica-panel-min-width');
+            container.style.removeProperty('--expensica-panel-min-height');
+            canvas.style.removeProperty('min-width');
+            canvas.style.removeProperty('min-height');
+        } else {
+            container.style.setProperty('--expensica-panel-min-width', `${minimumWidth}px`);
+            container.style.setProperty('--expensica-panel-min-height', `${minimumHeight}px`);
+            canvas.style.minWidth = 'var(--expensica-panel-min-width)';
+            canvas.style.minHeight = 'var(--expensica-panel-min-height)';
+        }
 
-        if (canvas.width === width && canvas.height === height) {
+        if (!force && canvas.width === width && canvas.height === height) {
             return false;
         }
 
+        chart.stop();
         chart.resize(width, height);
         chart.update('none');
+        return true;
+    }
+
+    private getChartCanvasDimensions(container: HTMLElement): {
+        width: number;
+        height: number;
+        minimumWidth: number;
+        minimumHeight: number;
+        isMiniDonut: boolean;
+    } {
+        const bounds = container.getBoundingClientRect();
+        const isMiniDonut = container.classList.contains('expensica-mini-donut-canvas-container');
+        let width = Math.max(1, Math.round(bounds.width));
+        let height = Math.max(1, Math.round(bounds.height));
+
+        if (isMiniDonut) {
+            const styles = window.getComputedStyle(container);
+            const horizontalPadding = (parseFloat(styles.paddingLeft) || 0) + (parseFloat(styles.paddingRight) || 0);
+            const verticalPadding = (parseFloat(styles.paddingTop) || 0) + (parseFloat(styles.paddingBottom) || 0);
+            const minSize = parseFloat(styles.getPropertyValue('--expensica-mini-donut-min-size')) || 128;
+            const maxSize = parseFloat(styles.getPropertyValue('--expensica-mini-donut-max-size')) || 160;
+            width = Math.round(Math.min(maxSize, Math.max(minSize, bounds.width - horizontalPadding)));
+            height = Math.round(Math.min(maxSize, Math.max(minSize, bounds.height - verticalPadding)));
+        }
+
+        return {
+            width,
+            height,
+            minimumWidth: Math.round(width * 0.75),
+            minimumHeight: Math.round(height * 0.75),
+            isMiniDonut
+        };
+    }
+
+    private clearChartCanvasMeasurement(chart: Chart) {
+        const canvas = chart.canvas;
+        const container = canvas.parentElement;
+        if (!container) return;
+
+        chart.stop();
+        this.clearChartLayoutConstraints(container, canvas);
+    }
+
+    private clearChartLayoutConstraints(container: HTMLElement, canvas?: HTMLCanvasElement) {
+        container.style.removeProperty('--expensica-panel-natural-width');
+        container.style.removeProperty('--expensica-panel-natural-height');
+        container.style.removeProperty('--expensica-panel-min-width');
+        container.style.removeProperty('--expensica-panel-min-height');
+
+        if (canvas) {
+            canvas.style.removeProperty('min-width');
+            canvas.style.removeProperty('min-height');
+        }
+    }
+
+    private clearCategoryChartMeasurements(container: HTMLElement) {
+        container
+            .querySelectorAll<HTMLElement>('.expensica-canvas-container')
+            .forEach(canvasContainer => {
+                const canvas = canvasContainer.querySelector('canvas') as HTMLCanvasElement | null;
+                this.clearChartLayoutConstraints(canvasContainer, canvas || undefined);
+            });
+    }
+
+    private clearIncomeExpenseChartLayoutConstraints() {
+        const canvasContainer = this.containerEl.querySelector(
+            '.expensica-income-expense-chart-container .expensica-canvas-container'
+        ) as HTMLElement | null;
+
+        if (!canvasContainer) return;
+
+        const canvas = canvasContainer.querySelector('canvas') as HTMLCanvasElement | null;
+        this.clearChartLayoutConstraints(canvasContainer, canvas || undefined);
+    }
+
+    private clearCurrentCategoryChartLayoutConstraints() {
+        const container = this.containerEl.querySelector('.expensica-expenses-chart-container') as HTMLElement | null;
+        if (!container) return;
+
+        this.clearCategoryChartMeasurements(container);
+    }
+
+    private resetDashboardChartGridStretch() {
+        const grid = this.containerEl.querySelector('.expensica-dashboard-grid') as HTMLElement | null;
+        if (!grid) return;
+
+        grid.removeClass('expensica-chart-grid-same-row');
+        this.clearCurrentCategoryChartLayoutConstraints();
+        this.clearIncomeExpenseChartLayoutConstraints();
+    }
+
+    private clearDashboardChartPanelHeights() {
+        const grid = this.containerEl.querySelector('.expensica-dashboard-grid') as HTMLElement | null;
+        if (!grid) return;
+
+        const categoriesContainer = grid.querySelector('.expensica-expenses-chart-container') as HTMLElement | null;
+        const incomeExpenseContainer = grid.querySelector('.expensica-income-expense-chart-container') as HTMLElement | null;
+        categoriesContainer?.style.removeProperty('height');
+        incomeExpenseContainer?.style.removeProperty('height');
+    }
+
+    private getCategoryChartNaturalHeight(): number {
+        const container = this.containerEl.querySelector('.expensica-expenses-chart-container') as HTMLElement | null;
+        const header = container?.querySelector('.expensica-chart-header') as HTMLElement | null;
+        const layout = container?.querySelector('.expensica-category-chart-layout') as HTMLElement | null;
+        if (!container || !header || !layout) return 0;
+
+        const containerStyles = getComputedStyle(container);
+        const headerStyles = getComputedStyle(header);
+        const paddingTop = parseFloat(containerStyles.paddingTop) || 0;
+        const paddingBottom = parseFloat(containerStyles.paddingBottom) || 0;
+        const headerMarginBottom = parseFloat(headerStyles.marginBottom) || 0;
+
+        return Math.ceil(
+            paddingTop
+            + header.getBoundingClientRect().height
+            + headerMarginBottom
+            + layout.scrollHeight
+            + paddingBottom
+        );
+    }
+
+    private syncSameRowChartPanelHeightsToCategory(): boolean {
+        this.clearDashboardChartPanelHeights();
+        const isSameRow = this.updateDashboardChartGridLayout();
+        if (!isSameRow) {
+            return false;
+        }
+
+        const grid = this.containerEl.querySelector('.expensica-dashboard-grid') as HTMLElement | null;
+        const categoriesContainer = grid?.querySelector('.expensica-expenses-chart-container') as HTMLElement | null;
+        const incomeExpenseContainer = grid?.querySelector('.expensica-income-expense-chart-container') as HTMLElement | null;
+        const targetHeight = this.getCategoryChartNaturalHeight();
+
+        if (!categoriesContainer || !incomeExpenseContainer || targetHeight <= 0) {
+            return false;
+        }
+
+        categoriesContainer.style.height = `${targetHeight}px`;
+        incomeExpenseContainer.style.height = `${targetHeight}px`;
         return true;
     }
 
@@ -506,9 +667,9 @@ export class ExpensicaDashboardView extends ItemView {
         return Number.isFinite(value) && value > 0 ? value : fallback;
     }
 
-    private updateDashboardChartGridLayout(dashboardGrid?: HTMLElement | null) {
+    private updateDashboardChartGridLayout(dashboardGrid?: HTMLElement | null): boolean {
         const grid = dashboardGrid ?? this.containerEl.querySelector('.expensica-dashboard-grid') as HTMLElement | null;
-        if (!grid) return;
+        if (!grid) return false;
 
         const categoriesContainer = grid.querySelector('.expensica-expenses-chart-container') as HTMLElement | null;
         const incomeExpenseContainer = grid.querySelector('.expensica-income-expense-chart-container') as HTMLElement | null;
@@ -517,7 +678,7 @@ export class ExpensicaDashboardView extends ItemView {
             grid.removeClass('expensica-chart-grid-same-row');
             grid.removeClass('is-narrow');
             categoryChartLayout?.removeClass('is-narrow');
-            return;
+            return false;
         }
 
         const gridStyles = getComputedStyle(grid);
@@ -531,7 +692,9 @@ export class ExpensicaDashboardView extends ItemView {
 
         const categoriesTop = categoriesContainer.getBoundingClientRect().top;
         const incomeExpenseTop = incomeExpenseContainer.getBoundingClientRect().top;
-        grid.toggleClass('expensica-chart-grid-same-row', !isNarrow && Math.abs(categoriesTop - incomeExpenseTop) < 2);
+        const isSameRow = !isNarrow && Math.abs(categoriesTop - incomeExpenseTop) < 2;
+        grid.toggleClass('expensica-chart-grid-same-row', isSameRow);
+        return isSameRow;
     }
 
     private resizeChartsToContainers(): boolean {
@@ -572,6 +735,53 @@ export class ExpensicaDashboardView extends ItemView {
         });
     }
 
+    private refreshCategoryChartOnly() {
+        const container = this.containerEl.querySelector('.expensica-expenses-chart-container') as HTMLElement | null;
+        if (!container) {
+            this.renderDashboard();
+            return;
+        }
+
+        if (this.expensesChart) {
+            this.clearChartCanvasMeasurement(this.expensesChart);
+            this.expensesChart.destroy();
+            this.expensesChart = null;
+        }
+
+        this.clearDashboardChartPanelHeights();
+        this.clearCategoryChartMeasurements(container);
+        this.clearIncomeExpenseChartLayoutConstraints();
+        this.animateExpensesChartThisRender = this.shouldAnimateExpensesChartOnNextRender;
+        this.shouldAnimateExpensesChartOnNextRender = false;
+        container.empty();
+        this.renderExpensesChart(container);
+    }
+
+    private syncChartsAfterCategoryLayoutChange() {
+        window.requestAnimationFrame(() => {
+            this.clearDashboardChartPanelHeights();
+            this.clearCurrentCategoryChartLayoutConstraints();
+            this.clearIncomeExpenseChartLayoutConstraints();
+
+            window.requestAnimationFrame(() => {
+                this.clearCurrentCategoryChartLayoutConstraints();
+                this.clearIncomeExpenseChartLayoutConstraints();
+
+                const isSameRow = this.syncSameRowChartPanelHeightsToCategory();
+
+                if (this.expensesChart) {
+                    this.resizeChartToContainer(this.expensesChart, true);
+                }
+
+                if (isSameRow && this.incomeExpenseChart) {
+                    this.resizeChartToContainer(this.incomeExpenseChart, true);
+                }
+
+                this.premiumVisualizations?.resize();
+            });
+        });
+    }
+
     private clearChartHoverState(chart: Chart, point = { x: 0, y: 0 }) {
         chart.setActiveElements([]);
         chart.tooltip?.setActiveElements([], point);
@@ -580,6 +790,18 @@ export class ExpensicaDashboardView extends ItemView {
 
     private formatWholeCurrency(amount: number): string {
         return formatCurrency(Math.round(amount), this.plugin.settings.defaultCurrency).replace(/\.00$/, '');
+    }
+
+    private formatCategoryCardCurrency(amount: number): string {
+        return formatCurrency(amount, this.plugin.settings.defaultCurrency)
+            .replace(/^[A-Z]{1,3}(?=\$)/, '')
+            .replace(/\.00$/, '');
+    }
+
+    private getCategoryChartTransactionType(): TransactionType {
+        return this.categoryChartType === CategoryType.INCOME
+            ? TransactionType.INCOME
+            : TransactionType.EXPENSE;
     }
 
     private formatCompactChartCurrency(amount: number): string {
@@ -729,6 +951,14 @@ export class ExpensicaDashboardView extends ItemView {
                 end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (6 - dayOfWeek), 23, 59, 59, 999);
                 label = 'This Week';
                 break;
+
+            case DateRangeType.LAST_WEEK:
+                // Get the previous week (Sunday through Saturday)
+                const currentDayOfWeek = now.getDay();
+                start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - currentDayOfWeek - 7);
+                end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - currentDayOfWeek - 1, 23, 59, 59, 999);
+                label = 'Last Week';
+                break;
                 
             case DateRangeType.THIS_MONTH:
                 start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -746,6 +976,12 @@ export class ExpensicaDashboardView extends ItemView {
                 start = new Date(now.getFullYear(), 0, 1);
                 end = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
                 label = 'This Year';
+                break;
+
+            case DateRangeType.LAST_YEAR:
+                start = new Date(now.getFullYear() - 1, 0, 1);
+                end = new Date(now.getFullYear() - 1, 11, 31, 23, 59, 59, 999);
+                label = 'Last Year';
                 break;
 
             case DateRangeType.ALL_TIME:
@@ -845,6 +1081,26 @@ export class ExpensicaDashboardView extends ItemView {
         return new Date(this.currentDate.getFullYear(), this.currentDate.getMonth(), 0, 23, 59, 59, 999);
     }
 
+    getSummaryComparisonRange(): { range: DateRange; label: string } | null {
+        switch (this.dateRange.type) {
+            case DateRangeType.THIS_WEEK:
+                return { range: this.getDateRange(DateRangeType.LAST_WEEK), label: 'last week' };
+            case DateRangeType.THIS_MONTH:
+                return { range: this.getDateRange(DateRangeType.LAST_MONTH), label: 'last month' };
+            case DateRangeType.THIS_YEAR:
+                return { range: this.getDateRange(DateRangeType.LAST_YEAR), label: 'last year' };
+            default:
+                return null;
+        }
+    }
+
+    getTransactionsForDateRange(dateRange: DateRange): Transaction[] {
+        return this.plugin.getAllTransactions().filter(transaction => {
+            const transactionDate = parseLocalDate(transaction.date);
+            return transactionDate >= dateRange.startDate && transactionDate <= dateRange.endDate;
+        });
+    }
+
     loadTransactionsForDateRange() {
         // Get all transactions
         const allTransactions = this.plugin.getAllTransactions();
@@ -867,7 +1123,7 @@ export class ExpensicaDashboardView extends ItemView {
     }
 
     async addTransaction(transaction: Transaction) {
-        await this.plugin.addTransaction(transaction);
+        await this.plugin.addTransaction(transaction, this);
         await this.loadTransactionsData();
         this.requestAllChartAnimations();
         this.renderDashboard();
@@ -875,7 +1131,8 @@ export class ExpensicaDashboardView extends ItemView {
     }
 
     async updateTransaction(transaction: Transaction) {
-        await this.plugin.updateTransaction(transaction);
+        await this.plugin.updateTransaction(transaction, this);
+        this.selectedTransactionIds.delete(transaction.id);
         await this.loadTransactionsData();
         this.requestAllChartAnimations();
         this.renderDashboard();
@@ -892,7 +1149,8 @@ export class ExpensicaDashboardView extends ItemView {
             `Are you sure you want to delete this ${transaction.type.toLowerCase()} transaction? This action cannot be undone.`,
             async (confirmed) => {
                 if (confirmed) {
-                    await this.plugin.deleteTransaction(id);
+                    this.selectedTransactionIds.delete(id);
+                    await this.plugin.deleteTransaction(id, this);
                     await this.loadTransactionsData();
                     this.requestAllChartAnimations();
                     this.renderDashboard();
@@ -913,6 +1171,9 @@ export class ExpensicaDashboardView extends ItemView {
         this.consumeChartAnimationRequest();
         this.rememberScrollPosition();
         container.empty();
+        container.removeClass('expensica-container');
+        container.removeClass('transactions-container');
+        container.removeClass('expensica-dashboard-transactions-tab');
         container.addClass('expensica-dashboard');
         container.toggleClass('expensica-suppress-motion', isRoutineRender);
 
@@ -927,18 +1188,68 @@ export class ExpensicaDashboardView extends ItemView {
         // Tab navigation
         this.renderTabNavigation(container);
 
-        // Render the current tab
+        this.renderCurrentTabContent(container);
+
+        this.restoreScrollPosition();
+        this.hasRenderedDashboard = true;
+    }
+
+    private renderCurrentTabContent(container: HTMLElement) {
+        container.removeClass('expensica-container');
+        container.removeClass('transactions-container');
+        container.removeClass('expensica-dashboard-transactions-tab');
+
         switch (this.currentTab) {
             case DashboardTab.OVERVIEW:
                 this.renderOverviewTab(container);
                 break;
+            case DashboardTab.TRANSACTIONS:
+                this.renderTransactionsTab(container);
+                break;
             case DashboardTab.BUDGET:
                 this.renderBudgetTab(container);
                 break;
+            case DashboardTab.CATEGORIES:
+                this.renderCategoriesTab(container);
+                break;
+        }
+    }
+
+    private clearTabContent(container: HTMLElement) {
+        const children = Array.from(container.children);
+        const tabsIndex = children.findIndex(child => child.classList.contains('expensica-tabs'));
+        const firstContentIndex = tabsIndex >= 0 ? tabsIndex + 1 : 0;
+
+        children.slice(firstContentIndex).forEach(child => child.remove());
+    }
+
+    private updateActiveTabButtons(container: HTMLElement) {
+        container.querySelectorAll<HTMLElement>('.expensica-tab').forEach(tab => {
+            const tabName = tab.getAttribute('data-expensica-tab') as DashboardTab | null;
+            tab.toggleClass('active', tabName === this.currentTab);
+        });
+    }
+
+    switchDashboardTab(tab: DashboardTab) {
+        if (this.currentTab === tab) {
+            return;
         }
 
+        this.currentTab = tab;
+        this.persistDashboardState();
+
+        const container = this.containerEl.children[1] as HTMLElement | undefined;
+        if (!container || container.childElementCount === 0) {
+            this.renderDashboard();
+            return;
+        }
+
+        this.consumeChartAnimationRequest();
+        this.rememberScrollPosition();
+        this.clearTabContent(container);
+        this.updateActiveTabButtons(container);
+        this.renderCurrentTabContent(container);
         this.restoreScrollPosition();
-        this.hasRenderedDashboard = true;
     }
 
     rememberScrollPosition() {
@@ -954,6 +1265,16 @@ export class ExpensicaDashboardView extends ItemView {
 
         requestAnimationFrame(() => {
             container.scrollTop = this.scrollTop;
+        });
+    }
+
+    scrollToTop() {
+        const container = this.containerEl.children[1] as HTMLElement | undefined;
+        this.scrollTop = 0;
+        if (!container) return;
+
+        requestAnimationFrame(() => {
+            container.scrollTop = 0;
         });
     }
 
@@ -974,7 +1295,7 @@ export class ExpensicaDashboardView extends ItemView {
             currentDate: formatDate(this.currentDate),
             selectedCalendarDate: this.selectedCalendarDate ? formatDate(this.selectedCalendarDate) : null,
             expenseChartPeriod: this.expenseChartPeriod,
-            incomeExpenseChartPeriod: this.incomeExpenseChartPeriod,
+            categoryChartType: this.categoryChartType,
             incomeExpenseVisibility: this.incomeExpenseVisibility
         });
     }
@@ -1071,29 +1392,47 @@ export class ExpensicaDashboardView extends ItemView {
         // Overview tab
         const overviewTab = tabsContainer.createEl('button', {
             text: 'Overview',
-            cls: `expensica-tab ${this.currentTab === DashboardTab.OVERVIEW ? 'active' : ''}`
+            cls: `expensica-standard-button expensica-tab ${this.currentTab === DashboardTab.OVERVIEW ? 'active' : ''}`,
+            attr: { 'data-expensica-tab': DashboardTab.OVERVIEW }
+        });
+
+        const transactionsTab = tabsContainer.createEl('button', {
+            text: 'Transactions',
+            cls: `expensica-standard-button expensica-tab ${this.currentTab === DashboardTab.TRANSACTIONS ? 'active' : ''}`,
+            attr: { 'data-expensica-tab': DashboardTab.TRANSACTIONS }
         });
         
         // Budget tab - only show if budgeting is enabled
         if (this.plugin.settings.enableBudgeting) {
             const budgetTab = tabsContainer.createEl('button', {
-                text: 'Budget',
-                cls: `expensica-tab ${this.currentTab === DashboardTab.BUDGET ? 'active' : ''}`
+                text: 'Budgets',
+                cls: `expensica-standard-button expensica-tab ${this.currentTab === DashboardTab.BUDGET ? 'active' : ''}`,
+                attr: { 'data-expensica-tab': DashboardTab.BUDGET }
             });
             
             // Add event listener
             budgetTab.addEventListener('click', () => {
-                this.currentTab = DashboardTab.BUDGET;
-                this.persistDashboardState();
-                this.renderDashboard();
+                this.switchDashboardTab(DashboardTab.BUDGET);
             });
         }
+
+        const categoriesTab = tabsContainer.createEl('button', {
+            text: 'Categories',
+            cls: `expensica-standard-button expensica-tab ${this.currentTab === DashboardTab.CATEGORIES ? 'active' : ''}`,
+            attr: { 'data-expensica-tab': DashboardTab.CATEGORIES }
+        });
+
+        categoriesTab.addEventListener('click', () => {
+            this.switchDashboardTab(DashboardTab.CATEGORIES);
+        });
         
         // Add event listeners
         overviewTab.addEventListener('click', () => {
-            this.currentTab = DashboardTab.OVERVIEW;
-            this.persistDashboardState();
-            this.renderDashboard();
+            this.switchDashboardTab(DashboardTab.OVERVIEW);
+        });
+
+        transactionsTab.addEventListener('click', () => {
+            this.switchDashboardTab(DashboardTab.TRANSACTIONS);
         });
     }
 
@@ -1123,6 +1462,10 @@ export class ExpensicaDashboardView extends ItemView {
 
         // Recent transactions
         this.renderTransactions(container);
+    }
+
+    renderTransactionsTab(container: HTMLElement) {
+        this.plugin.renderDashboardTransactionsTab(this, container);
     }
 
     // New method to render the budget tab
@@ -1197,7 +1540,7 @@ export class ExpensicaDashboardView extends ItemView {
         // Add budget button
         const addBudgetContainer = budgetContainer.createDiv('expensica-add-budget-container expensica-animate expensica-animate-delay-2');
         const addBudgetBtn = addBudgetContainer.createEl('button', {
-            cls: 'expensica-btn expensica-btn-primary',
+            cls: 'expensica-standard-button expensica-btn expensica-btn-primary',
         });
         
         // Create SVG icon using DOM methods
@@ -1240,16 +1583,65 @@ export class ExpensicaDashboardView extends ItemView {
         });
     }
 
+    renderCategoriesTab(container: HTMLElement) {
+        const categoriesContainer = container.createDiv('expensica-categories-tab');
+        const chartContainer = categoriesContainer.createDiv('expensica-chart-container expensica-chart-container-donut expensica-categories-chart-container expensica-animate');
+        const listContainer = categoriesContainer.createDiv('expensica-categories-list expensica-animate expensica-animate-delay-1');
+        const categoryData = this.getCategoriesTabData();
+        const chartTypeLabel = this.categoryChartType === CategoryType.INCOME ? 'income' : 'expenses';
+
+        this.renderCategoryChartTypeSelector(chartContainer, () => {
+            this.renderDashboard();
+        }, {
+            showTitle: false,
+            overlayClass: 'expensica-category-chart-type-selector-overlay'
+        });
+
+        if (categoryData.length === 0) {
+            chartContainer.createDiv('expensica-empty-charts').createEl('p', {
+                text: `No ${chartTypeLabel} categories found for this period.`,
+                cls: 'expensica-empty-state-message'
+            });
+            return;
+        }
+
+        const chartLayout = chartContainer.createDiv('expensica-category-chart-layout expensica-categories-chart-layout');
+        const canvasContainer = chartLayout.createDiv('expensica-mini-donut-canvas-container expensica-categories-canvas-container');
+        const canvas = canvasContainer.createEl('canvas', {
+            cls: 'mini-donut__content',
+            attr: { id: 'categories-chart' }
+        });
+
+        this.prepareChartCanvasSize(canvas);
+
+        setTimeout(() => {
+            this.createCategoryExpensesChart(canvas, null, categoryData);
+        }, 50);
+
+        renderCategoryCards(
+            listContainer,
+            categoryData.map(category => ({
+                ...category,
+                formattedAmount: this.formatCategoryCardCurrency(category.amount)
+            })),
+            {
+                onHoverStart: (index, event) => this.activateCategorySlice(this.expensesChart, index, event),
+                onHoverEnd: () => this.clearCategorySlice(this.expensesChart),
+                onClick: (category) => this.openCategoryModal(category.id)
+            }
+        );
+    }
+
     // Render budget summary cards
     renderBudgetSummary(container: HTMLElement) {
         const budgets = this.plugin.getAllBudgets();
         
         // If no budgets, show a simplified summary
         if (budgets.length === 0) {
-            const summaryEl = container.createDiv('expensica-summary');
+            const summaryEl = container.createDiv('expensica-summary expensica-overview-summary expensica-budget-summary');
             
             // Empty budgeted card
-            const budgetedCard = summaryEl.createDiv('expensica-card expensica-animate');
+            const budgetedCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-animate');
             const budgetedCardTitle = budgetedCard.createEl('h3', { cls: 'expensica-card-title' });
             
             // Create emoji span
@@ -1264,10 +1656,9 @@ export class ExpensicaDashboardView extends ItemView {
                 text: formatCurrency(0, this.plugin.settings.defaultCurrency),
                 cls: 'expensica-card-value expensica-budget'
             });
-            budgetedCard.createEl('div', { text: '💰', cls: 'expensica-card-bg-icon' });
             
             // Empty spent card
-            const spentCard = summaryEl.createDiv('expensica-card expensica-animate expensica-animate-delay-1');
+            const spentCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-animate expensica-animate-delay-1');
             const spentCardTitle = spentCard.createEl('h3', { cls: 'expensica-card-title' });
             
             // Create emoji span
@@ -1282,10 +1673,9 @@ export class ExpensicaDashboardView extends ItemView {
                 text: formatCurrency(0, this.plugin.settings.defaultCurrency),
                 cls: 'expensica-card-value expensica-expense'
             });
-            spentCard.createEl('div', { text: '💸', cls: 'expensica-card-bg-icon' });
             
             // Empty remaining card
-            const remainingCard = summaryEl.createDiv('expensica-card expensica-animate expensica-animate-delay-2');
+            const remainingCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-animate expensica-animate-delay-2');
             const remainingCardTitle = remainingCard.createEl('h3', { cls: 'expensica-card-title' });
             
             // Create emoji span
@@ -1300,7 +1690,6 @@ export class ExpensicaDashboardView extends ItemView {
                 text: formatCurrency(0, this.plugin.settings.defaultCurrency),
                 cls: 'expensica-card-value expensica-budget-remaining'
             });
-            remainingCard.createEl('div', { text: '💵', cls: 'expensica-card-bg-icon' });
             
             return;
         }
@@ -1316,20 +1705,19 @@ export class ExpensicaDashboardView extends ItemView {
         const spentPercentage = totalBudgeted > 0 ? Math.min(100, (totalSpent / totalBudgeted) * 100) : 0;
         
         // Create summary container with dashboard style
-        const summaryEl = container.createDiv('expensica-summary');
+        const summaryEl = container.createDiv('expensica-summary expensica-overview-summary expensica-budget-summary');
         
         // Total budgeted card
-        const budgetedCard = summaryEl.createDiv('expensica-card expensica-animate');
+        const budgetedCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-animate');
         const budgetedCardTitle = budgetedCard.createEl('h3', { cls: 'expensica-card-title' });
         budgetedCardTitle.innerHTML = '<span class="emoji">💰</span> Total Budgeted';
         budgetedCard.createEl('p', {
             text: formatCurrency(totalBudgeted, this.plugin.settings.defaultCurrency),
             cls: 'expensica-card-value expensica-budget'
         });
-        budgetedCard.createEl('div', { text: '💰', cls: 'expensica-card-bg-icon' });
         
         // Total spent card
-        const spentCard = summaryEl.createDiv('expensica-card expensica-animate expensica-animate-delay-1');
+        const spentCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-animate expensica-animate-delay-1');
         const spentCardTitle = spentCard.createEl('h3', { cls: 'expensica-card-title' });
         
         // Create emoji span
@@ -1344,10 +1732,9 @@ export class ExpensicaDashboardView extends ItemView {
             text: formatCurrency(totalSpent, this.plugin.settings.defaultCurrency),
             cls: 'expensica-card-value expensica-expense'
         });
-        spentCard.createEl('div', { text: '💸', cls: 'expensica-card-bg-icon' });
         
         // Remaining amount card
-        const remainingCard = summaryEl.createDiv('expensica-card expensica-animate expensica-animate-delay-2');
+        const remainingCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-animate expensica-animate-delay-2');
         const remainingCardTitle = remainingCard.createEl('h3', { cls: 'expensica-card-title' });
         
         // Create emoji span
@@ -1362,7 +1749,6 @@ export class ExpensicaDashboardView extends ItemView {
             text: formatCurrency(remainingAmount, this.plugin.settings.defaultCurrency),
             cls: 'expensica-card-value expensica-budget-remaining'
         });
-        remainingCard.createEl('div', { text: '💵', cls: 'expensica-card-bg-icon' });
         
         // Overall budget progress
         const progressContainer = container.createDiv('notion-budget-progress-container expensica-animate expensica-animate-delay-3');
@@ -1644,7 +2030,7 @@ export class ExpensicaDashboardView extends ItemView {
         const logoTitle = titleSection.createEl('h1', { cls: 'shadcn-title' });
         
         // Add title text directly without the logo
-        logoTitle.textContent = "Expensica Dashboard";
+        logoTitle.textContent = "Expensica";
 
         const actionsEl = headerEl.createDiv('shadcn-actions');
 
@@ -1653,7 +2039,7 @@ export class ExpensicaDashboardView extends ItemView {
 
         // Add expense button with shadcn design
         const addExpenseBtn = actionsEl.createEl('button', {
-            cls: 'shadcn-btn shadcn-btn-danger',
+            cls: 'expensica-standard-button shadcn-btn shadcn-btn-danger',
         });
         
         // Create SVG icon
@@ -1687,7 +2073,7 @@ export class ExpensicaDashboardView extends ItemView {
 
         // Add income button with shadcn design
         const addIncomeBtn = actionsEl.createEl('button', {
-            cls: 'shadcn-btn shadcn-btn-success',
+            cls: 'expensica-standard-button shadcn-btn shadcn-btn-success',
         });
         
         // Create SVG icon
@@ -1721,7 +2107,7 @@ export class ExpensicaDashboardView extends ItemView {
 
         // Add export button with shadcn design
         const exportBtn = actionsEl.createEl('button', {
-            cls: 'shadcn-btn shadcn-btn-primary',
+            cls: 'expensica-standard-button shadcn-btn shadcn-btn-primary',
         });
         
         // Create SVG icon
@@ -1780,7 +2166,7 @@ export class ExpensicaDashboardView extends ItemView {
         const dateRangeSelector = dateRangeContainer.createDiv('shadcn-date-range-selector');
         
         // Current selection display with calendar icon
-        const currentSelection = dateRangeSelector.createDiv('shadcn-date-range-current');
+        const currentSelection = dateRangeSelector.createDiv('expensica-standard-button shadcn-date-range-current');
         
         // Calendar icon
         const calendarSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -1858,9 +2244,11 @@ export class ExpensicaDashboardView extends ItemView {
         const options: { type: DateRangeType, label: string }[] = [
             { type: DateRangeType.TODAY, label: 'Today' },
             { type: DateRangeType.THIS_WEEK, label: 'This Week' },
+            { type: DateRangeType.LAST_WEEK, label: 'Last Week' },
             { type: DateRangeType.THIS_MONTH, label: 'This Month' },
             { type: DateRangeType.LAST_MONTH, label: 'Last Month' },
             { type: DateRangeType.THIS_YEAR, label: 'This Year' },
+            { type: DateRangeType.LAST_YEAR, label: 'Last Year' },
             { type: DateRangeType.ALL_TIME, label: 'All Time' },
             { type: DateRangeType.CUSTOM, label: 'Custom Range' }
         ];
@@ -1947,24 +2335,29 @@ export class ExpensicaDashboardView extends ItemView {
     }
 
     renderSummary(container: HTMLElement) {
-        const summaryEl = container.createDiv('expensica-summary');
+        const summaryEl = container.createDiv('expensica-summary expensica-overview-summary');
 
         // Get data for current and previous month
         const totalIncome = TransactionAggregator.getTotalIncome(this.transactions);
         const totalExpenses = TransactionAggregator.getTotalExpenses(this.transactions);
+        const netBalance = TransactionAggregator.getBalance(this.transactions);
         const balance = this.getCumulativeBalanceThrough(this.dateRange.endDate);
 
-        const prevTotalIncome = TransactionAggregator.getTotalIncome(this.previousMonthTransactions);
-        const prevTotalExpenses = TransactionAggregator.getTotalExpenses(this.previousMonthTransactions);
-        const prevBalance = this.getCumulativeBalanceThrough(this.getPreviousMonthEndDate());
+        const comparison = this.getSummaryComparisonRange();
+        const comparisonTransactions = comparison ? this.getTransactionsForDateRange(comparison.range) : [];
+        const prevTotalIncome = TransactionAggregator.getTotalIncome(comparisonTransactions);
+        const prevTotalExpenses = TransactionAggregator.getTotalExpenses(comparisonTransactions);
+        const prevNetBalance = TransactionAggregator.getBalance(comparisonTransactions);
+        const prevBalance = comparison ? this.getCumulativeBalanceThrough(comparison.range.endDate) : 0;
 
         // Calculate trends (percentage change from previous month)
         const incomeTrend = prevTotalIncome === 0 ? 100 : ((totalIncome - prevTotalIncome) / prevTotalIncome) * 100;
         const expenseTrend = prevTotalExpenses === 0 ? 100 : ((totalExpenses - prevTotalExpenses) / prevTotalExpenses) * 100;
+        const netBalanceTrend = prevNetBalance === 0 ? 100 : ((netBalance - prevNetBalance) / Math.abs(prevNetBalance)) * 100;
         const balanceTrend = prevBalance === 0 ? 100 : ((balance - prevBalance) / Math.abs(prevBalance)) * 100;
 
         // Income card
-        const incomeCard = summaryEl.createDiv('expensica-card expensica-animate');
+        const incomeCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-animate');
         const incomeCardTitle = incomeCard.createEl('h3', { cls: 'expensica-card-title' });
         incomeCardTitle.innerHTML = '<span class="emoji">💰</span> Income';
         incomeCard.createEl('p', {
@@ -1972,19 +2365,18 @@ export class ExpensicaDashboardView extends ItemView {
             cls: 'expensica-card-value expensica-income'
         });
 
-        if (prevTotalIncome > 0 && this.dateRange.type === DateRangeType.THIS_MONTH) {
+        if (comparison && prevTotalIncome > 0) {
             const trendEl = incomeCard.createEl('div', { cls: 'expensica-card-trend' });
             if (incomeTrend >= 0) {
-                trendEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg> ${Math.abs(incomeTrend).toFixed(1)}% from last month`;
+                trendEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg> ${Math.abs(incomeTrend).toFixed(1)}% from ${comparison.label}`;
             } else {
-                trendEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg> ${Math.abs(incomeTrend).toFixed(1)}% from last month`;
+                trendEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg> ${Math.abs(incomeTrend).toFixed(1)}% from ${comparison.label}`;
             }
         }
 
-        incomeCard.createEl('div', { text: '💰', cls: 'expensica-card-bg-icon' });
 
         // Expenses card
-        const expensesCard = summaryEl.createDiv('expensica-card expensica-animate expensica-animate-delay-1');
+        const expensesCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-animate expensica-animate-delay-1');
         const expensesCardTitle = expensesCard.createEl('h3', { cls: 'expensica-card-title' });
         expensesCardTitle.innerHTML = '<span class="emoji">💸</span> Expenses';
         expensesCard.createEl('p', {
@@ -1992,44 +2384,62 @@ export class ExpensicaDashboardView extends ItemView {
             cls: 'expensica-card-value expensica-expense'
         });
 
-        if (prevTotalExpenses > 0 && this.dateRange.type === DateRangeType.THIS_MONTH) {
+        if (comparison && prevTotalExpenses > 0) {
             // For expenses, trend up (more expenses) is bad, trend down is good
             const trendEl = expensesCard.createEl('div', { cls: 'expensica-card-trend' });
             if (expenseTrend >= 0) {
-                trendEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg> ${Math.abs(expenseTrend).toFixed(1)}% from last month`;
+                trendEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg> ${Math.abs(expenseTrend).toFixed(1)}% from ${comparison.label}`;
             } else {
-                trendEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg> ${Math.abs(expenseTrend).toFixed(1)}% from last month`;
+                trendEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg> ${Math.abs(expenseTrend).toFixed(1)}% from ${comparison.label}`;
             }
         }
 
-        expensesCard.createEl('div', { text: '💸', cls: 'expensica-card-bg-icon' });
+
+        // Net Balance card
+        const netBalanceCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-animate expensica-animate-delay-2');
+        const netBalanceCardTitle = netBalanceCard.createEl('h3', { cls: 'expensica-card-title' });
+        netBalanceCardTitle.innerHTML = '<span class="emoji">⚖️</span> Net Balance';
+        netBalanceCard.createEl('p', {
+            text: formatCurrency(netBalance, this.plugin.settings.defaultCurrency),
+            cls: 'expensica-card-value expensica-balance'
+        });
+
+        if (comparison && prevNetBalance !== 0) {
+            const trendEl = netBalanceCard.createEl('div', { cls: 'expensica-card-trend' });
+            if (netBalanceTrend >= 0) {
+                trendEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg> ${Math.abs(netBalanceTrend).toFixed(1)}% from ${comparison.label}`;
+            } else {
+                trendEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg> ${Math.abs(netBalanceTrend).toFixed(1)}% from ${comparison.label}`;
+            }
+        }
+
 
         // Balance card
-        const balanceCard = summaryEl.createDiv('expensica-card expensica-animate expensica-animate-delay-2');
+        const balanceCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-animate expensica-animate-delay-3');
         const balanceCardTitle = balanceCard.createEl('h3', { cls: 'expensica-card-title' });
-        balanceCardTitle.innerHTML = '<span class="emoji">💵</span> Balance';
+        balanceCardTitle.innerHTML = '<span class="emoji">💵</span> Running Balance';
         balanceCard.createEl('p', {
             text: formatCurrency(balance, this.plugin.settings.defaultCurrency),
             cls: 'expensica-card-value expensica-balance'
         });
 
-        if (prevBalance !== 0 && this.dateRange.type === DateRangeType.THIS_MONTH) {
+        if (comparison && prevBalance !== 0) {
             const trendEl = balanceCard.createEl('div', { cls: 'expensica-card-trend' });
             if (balanceTrend >= 0) {
-                trendEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg> ${Math.abs(balanceTrend).toFixed(1)}% from last month`;
+                trendEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg> ${Math.abs(balanceTrend).toFixed(1)}% from ${comparison.label}`;
             } else {
-                trendEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg> ${Math.abs(balanceTrend).toFixed(1)}% from last month`;
+                trendEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg> ${Math.abs(balanceTrend).toFixed(1)}% from ${comparison.label}`;
             }
         }
 
-        balanceCard.createEl('div', { text: '💵', cls: 'expensica-card-bg-icon' });
     }
 
     renderExpensesChart(container: HTMLElement) {
         // Header with title and view options
-        const chartHeader = container.createDiv('expensica-chart-header');
-        const chartTitle = chartHeader.createEl('h3', { cls: 'expensica-chart-title' });
-        chartTitle.setText('Expenses By Category');
+        this.renderCategoryChartTypeSelector(container, () => {
+            this.requestExpensesChartAnimation();
+            this.refreshCategoryChartOnly();
+        });
 
         container.addClass('expensica-chart-container-donut');
 
@@ -2037,16 +2447,18 @@ export class ExpensicaDashboardView extends ItemView {
         const chartLayout = container.createDiv('expensica-category-chart-layout');
         const canvasContainer = chartLayout.createDiv('expensica-canvas-container');
         const legendContainer = chartLayout.createDiv('expensica-chart-html-legend');
+        const chartTypeLabel = this.categoryChartType === CategoryType.INCOME ? 'income' : 'expenses';
+        const transactionType = this.getCategoryChartTransactionType();
 
-        // If there are no expenses, show an empty state
-        if (this.transactions.filter(t => t.type === TransactionType.EXPENSE).length === 0) {
+        if (this.transactions.filter(t => t.type === transactionType).length === 0) {
             canvasContainer.empty();
             const emptyState = canvasContainer.createDiv('expensica-empty-charts');
             emptyState.createEl('div', { text: '📊', cls: 'expensica-empty-icon' });
             emptyState.createEl('p', {
-                text: 'No expenses found for this period. Add some expenses to see your spending patterns.',
+                text: `No transactions found for this period. Add income or expenses to see your category patterns.`,
                 cls: 'expensica-empty-state-message'
             });
+            this.syncChartsAfterCategoryLayoutChange();
             return;
         }
 
@@ -2092,28 +2504,6 @@ export class ExpensicaDashboardView extends ItemView {
         return { start, end: cappedEnd };
     }
 
-    getIncomeExpenseDailyChartDayBounds(): { start: Date; end: Date } | null {
-        const chartBounds = this.getIncomeExpenseChartDayBounds();
-        if (!chartBounds) {
-            return null;
-        }
-
-        const start = new Date(chartBounds.end);
-        start.setHours(0, 0, 0, 0);
-        start.setDate(start.getDate() - 6);
-
-        return {
-            start: start < chartBounds.start ? new Date(chartBounds.start) : start,
-            end: new Date(chartBounds.end)
-        };
-    }
-
-    getIncomeExpenseChartPeriodLabel(period: 'daily' | 'weekly' | 'monthly'): string {
-        if (period === 'weekly') return 'Weekly';
-        if (period === 'monthly') return 'Monthly';
-        return 'Last 7 days';
-    }
-
     getDateRangeDays(): Date[] {
         const { start, end } = this.getDateRangeDayBounds();
         const days: Date[] = [];
@@ -2150,6 +2540,22 @@ export class ExpensicaDashboardView extends ItemView {
         });
     }
 
+    formatChartHourLabel(date: Date, includeDate = false): string {
+        const timeLabel = date.toLocaleTimeString(undefined, {
+            hour: 'numeric'
+        });
+
+        if (!includeDate) {
+            return timeLabel;
+        }
+
+        return `${this.formatChartShortDateLabel(date)} ${timeLabel}`;
+    }
+
+    formatChartYearLabel(date: Date): string {
+        return String(date.getFullYear());
+    }
+
     getIsoWeek(date: Date): { year: number; week: number } {
         const d = new Date(date);
         d.setHours(0, 0, 0, 0);
@@ -2160,6 +2566,69 @@ export class ExpensicaDashboardView extends ItemView {
         return { year: d.getFullYear(), week };
     }
 
+    getTransactionDateTime(transaction: Transaction): Date {
+        const date = parseLocalDate(transaction.date);
+        const transactionTime = getTransactionTime(transaction);
+
+        if (!transactionTime) {
+            return date;
+        }
+
+        const [hours, minutes, seconds] = transactionTime.split(':').map(Number);
+        date.setHours(hours, minutes, seconds, 0);
+        return date;
+    }
+
+    getCumulativeBalanceThroughDateTime(endDate: Date): number {
+        return this.plugin.getAllTransactions().reduce((balance, transaction) => {
+            if (this.getTransactionDateTime(transaction) > endDate) {
+                return balance;
+            }
+
+            return transaction.type === TransactionType.INCOME
+                ? balance + transaction.amount
+                : balance - transaction.amount;
+        }, 0);
+    }
+
+    getIncomeExpenseChartResolution(start: Date, end: Date): 'hour' | 'day' | 'week' | 'month' | 'year' {
+        const durationDays = (end.getTime() - start.getTime()) / 86400000;
+        const monthSpan = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+
+        if (durationDays <= 1) {
+            return 'hour';
+        }
+
+        if (monthSpan < 1 || (monthSpan === 1 && end.getDate() <= start.getDate())) {
+            return 'day';
+        }
+
+        if (monthSpan < 3 || (monthSpan === 3 && end.getDate() <= start.getDate())) {
+            return 'week';
+        }
+
+        if (monthSpan < 36 || (monthSpan === 36 && end.getDate() <= start.getDate())) {
+            return 'month';
+        }
+
+        return 'year';
+    }
+
+    createIncomeExpenseBucket(
+        label: string,
+        start: Date,
+        end: Date
+    ): { label: string; start: Date; end: Date; income: number; expenses: number; balance: number } {
+        return {
+            label,
+            start,
+            end,
+            income: 0,
+            expenses: 0,
+            balance: 0
+        };
+    }
+
     getIncomeExpenseChartBuckets(): { label: string; start: Date; end: Date; income: number; expenses: number; balance: number }[] {
         const chartBounds = this.getIncomeExpenseChartDayBounds();
         if (!chartBounds) {
@@ -2168,54 +2637,62 @@ export class ExpensicaDashboardView extends ItemView {
 
         const { start, end } = chartBounds;
         const includeYear = start.getFullYear() !== end.getFullYear();
+        const resolution = this.getIncomeExpenseChartResolution(start, end);
+        const buckets: { label: string; start: Date; end: Date; income: number; expenses: number; balance: number }[] = [];
 
-        if (this.incomeExpenseChartPeriod === 'monthly') {
-            const minimumMonthlyStart = new Date(end.getFullYear(), end.getMonth() - 2, 1);
-            const chartStart = start > minimumMonthlyStart ? minimumMonthlyStart : start;
-            const includeYearInMonthlyLabels = chartStart.getFullYear() !== end.getFullYear();
-            const buckets: { label: string; start: Date; end: Date; income: number; expenses: number; balance: number }[] = [];
-            const currentMonth = new Date(chartStart.getFullYear(), chartStart.getMonth(), 1);
+        if (resolution === 'hour') {
+            const currentHour = new Date(start);
+            currentHour.setMinutes(0, 0, 0);
 
-            while (currentMonth <= end) {
-                const bucketStart = new Date(currentMonth);
-                const bucketEnd = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59, 999);
-                buckets.push({
-                    label: this.formatChartMonthLabel(currentMonth, includeYearInMonthlyLabels),
-                    start: bucketStart < chartStart ? new Date(chartStart) : bucketStart,
-                    end: bucketEnd > end ? new Date(end) : bucketEnd,
-                    income: 0,
-                    expenses: 0,
-                    balance: 0
-                });
-                currentMonth.setMonth(currentMonth.getMonth() + 1);
+            while (currentHour <= end) {
+                const bucketStart = new Date(currentHour);
+                const bucketEnd = new Date(currentHour);
+                bucketEnd.setMinutes(59, 59, 999);
+                buckets.push(this.createIncomeExpenseBucket(
+                    this.formatChartHourLabel(currentHour, includeYear || formatDate(start) !== formatDate(end)),
+                    bucketStart < start ? new Date(start) : bucketStart,
+                    bucketEnd > end ? new Date(end) : bucketEnd
+                ));
+                currentHour.setHours(currentHour.getHours() + 1);
             }
-
-            this.assignTransactionsToIncomeExpenseBuckets(buckets, this.plugin.getAllTransactions());
-            return buckets.map(bucket => ({
-                ...bucket,
-                balance: this.getCumulativeBalanceThrough(bucket.end)
-            }));
         }
 
-        if (this.incomeExpenseChartPeriod === 'weekly') {
-            const buckets: { label: string; isoYear: number; isoWeek: number; start: Date; end: Date; income: number; expenses: number; balance: number }[] = [];
+        if (resolution === 'day') {
+            const currentDay = new Date(start);
+
+            while (currentDay <= end) {
+                const bucketStart = new Date(currentDay);
+                const bucketEnd = new Date(currentDay);
+                bucketEnd.setHours(23, 59, 59, 999);
+                buckets.push(this.createIncomeExpenseBucket(
+                    this.formatChartShortDateLabel(currentDay, includeYear),
+                    bucketStart,
+                    bucketEnd > end ? new Date(end) : bucketEnd
+                ));
+                currentDay.setDate(currentDay.getDate() + 1);
+            }
+        }
+
+        if (resolution === 'week') {
+            const weekBuckets: { label: string; isoYear: number; isoWeek: number; start: Date; end: Date; income: number; expenses: number; balance: number }[] = [];
             const currentDay = new Date(start);
 
             while (currentDay <= end) {
                 const { year, week } = this.getIsoWeek(currentDay);
-                const existingBucket = buckets.find(bucket => bucket.isoYear === year && bucket.isoWeek === week);
+                const existingBucket = weekBuckets.find(bucket => bucket.isoYear === year && bucket.isoWeek === week);
 
                 if (existingBucket) {
                     existingBucket.end = new Date(currentDay);
+                    existingBucket.end.setHours(23, 59, 59, 999);
                 } else {
-                    buckets.push({
+                    weekBuckets.push({
                         label: this.plugin.settings.showWeekNumbers
                             ? (includeYear ? `${year} Wk ${week}` : `Wk ${week}`)
                             : '',
                         isoYear: year,
                         isoWeek: week,
                         start: new Date(currentDay),
-                        end: new Date(currentDay),
+                        end: new Date(currentDay.getFullYear(), currentDay.getMonth(), currentDay.getDate(), 23, 59, 59, 999),
                         income: 0,
                         expenses: 0,
                         balance: 0
@@ -2226,63 +2703,49 @@ export class ExpensicaDashboardView extends ItemView {
             }
 
             if (!this.plugin.settings.showWeekNumbers) {
-                buckets.forEach(bucket => {
+                weekBuckets.forEach(bucket => {
                     bucket.label = `${this.formatChartDateLabel(bucket.start, includeYear)} - ${this.formatChartDateLabel(bucket.end, includeYear)}`;
                 });
             }
 
-            this.transactions.forEach(transaction => {
-                const date = parseLocalDate(transaction.date);
-                const { year, week } = this.getIsoWeek(date);
-                const bucket = buckets.find(weekBucket => weekBucket.isoYear === year && weekBucket.isoWeek === week);
-
-                if (!bucket) {
-                    return;
-                }
-
-                if (transaction.type === TransactionType.INCOME) {
-                    bucket.income += transaction.amount;
-                } else {
-                    bucket.expenses += transaction.amount;
-                }
-            });
-
-            return buckets.map(({ isoYear, isoWeek, ...bucket }) => ({
-                ...bucket,
-                balance: this.getCumulativeBalanceThrough(bucket.end)
-            }));
+            buckets.push(...weekBuckets.map(({ isoYear, isoWeek, ...bucket }) => bucket));
         }
 
-        const dailyBounds = this.getIncomeExpenseDailyChartDayBounds();
-        if (!dailyBounds) {
-            return [];
+        if (resolution === 'month') {
+            const currentMonth = new Date(start.getFullYear(), start.getMonth(), 1);
+
+            while (currentMonth <= end) {
+                const bucketStart = new Date(currentMonth);
+                const bucketEnd = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59, 999);
+                buckets.push(this.createIncomeExpenseBucket(
+                    this.formatChartMonthLabel(currentMonth, includeYear),
+                    bucketStart < start ? new Date(start) : bucketStart,
+                    bucketEnd > end ? new Date(end) : bucketEnd
+                ));
+                currentMonth.setMonth(currentMonth.getMonth() + 1);
+            }
         }
 
-        const transactionsByDate = TransactionAggregator.getTransactionsByDate(this.transactions);
-        const days: Date[] = [];
-        const dailyStart = new Date(dailyBounds.start);
-        const dailyEnd = new Date(dailyBounds.end);
-        const includeYearInDailyLabels = dailyStart.getFullYear() !== dailyEnd.getFullYear();
-        const currentDay = new Date(dailyStart);
-        while (currentDay <= dailyEnd) {
-            days.push(new Date(currentDay));
-            currentDay.setDate(currentDay.getDate() + 1);
+        if (resolution === 'year') {
+            const currentYear = new Date(start.getFullYear(), 0, 1);
+
+            while (currentYear <= end) {
+                const bucketStart = new Date(currentYear);
+                const bucketEnd = new Date(currentYear.getFullYear(), 11, 31, 23, 59, 59, 999);
+                buckets.push(this.createIncomeExpenseBucket(
+                    this.formatChartYearLabel(currentYear),
+                    bucketStart < start ? new Date(start) : bucketStart,
+                    bucketEnd > end ? new Date(end) : bucketEnd
+                ));
+                currentYear.setFullYear(currentYear.getFullYear() + 1);
+            }
         }
 
-        return days.map(date => {
-            const transactions = transactionsByDate[formatDate(date)] || [];
-            return {
-                label: this.formatChartShortDateLabel(date, includeYearInDailyLabels),
-                start: new Date(date),
-                end: new Date(date),
-                income: transactions
-                    .filter(t => t.type === TransactionType.INCOME)
-                    .reduce((sum, t) => sum + t.amount, 0),
-                expenses: transactions
-                    .filter(t => t.type === TransactionType.EXPENSE)
-                    .reduce((sum, t) => sum + t.amount, 0),
-                balance: this.getCumulativeBalanceThrough(date)
-            };
+        this.assignTransactionsToIncomeExpenseBuckets(buckets);
+
+        return buckets.map(bucket => {
+            bucket.balance = this.getCumulativeBalanceThroughDateTime(bucket.end);
+            return bucket;
         });
     }
 
@@ -2291,7 +2754,7 @@ export class ExpensicaDashboardView extends ItemView {
         transactions: Transaction[] = this.transactions
     ) {
         transactions.forEach(transaction => {
-            const transactionDate = parseLocalDate(transaction.date);
+            const transactionDate = this.getTransactionDateTime(transaction);
             const bucket = buckets.find(candidate => transactionDate >= candidate.start && transactionDate <= candidate.end);
 
             if (!bucket) {
@@ -2306,29 +2769,44 @@ export class ExpensicaDashboardView extends ItemView {
         });
     }
 
-    createCategoryExpensesChart(canvas: HTMLCanvasElement, legendContainer: HTMLElement | null = null) {
+    createCategoryExpensesChart(
+        canvas: HTMLCanvasElement,
+        legendContainer: HTMLElement | null = null,
+        categoryEntries?: { name: string; amount: number; color: string; emoji?: string }[]
+    ) {
         // Cleanup previous chart
         if (this.expensesChart) {
             this.expensesChart.destroy();
         }
 
-        // Get expenses by category
-        const expensesByCategory = TransactionAggregator.getExpensesByCategory(this.transactions, this.plugin.settings.categories);
-
-        // Prepare data for chart
-        const categories = Object.keys(expensesByCategory);
-        const amounts = categories.map(category => expensesByCategory[category]);
+        const categoryData = categoryEntries ?? this.getCurrentCategoryChartData();
+        const categories = categoryData.map(category => category.name);
+        const amounts = categoryData.map(category => category.amount);
 
         // If there are no expenses, return
         if (categories.length === 0) {
             return;
         }
 
-        // Match the calendar category breakdown colors by deriving color from the plain category name.
-        const colors = categories.map(categoryLabel => {
-            const category = this.plugin.settings.categories.find(c => c.name === categoryLabel);
-            return getCategoryColor(category ? category.name : categoryLabel);
-        });
+        const colors = categoryData.map(category => category.color);
+        const isMiniDonut = canvas.parentElement?.classList.contains('expensica-mini-donut-canvas-container') ?? false;
+        const miniDonutGap = isMiniDonut && canvas.parentElement
+            ? this.getCssPixelValue(canvas.parentElement, '--expensica-gap-md', 8)
+            : 8;
+        const hoverOffset = isMiniDonut ? miniDonutGap : 15;
+        const chartPadding = legendContainer
+            ? 12
+            : isMiniDonut
+                ? miniDonutGap
+                : 0;
+        const showTooltip = legendContainer !== null;
+        const doughnutDataset: Record<string, unknown> = {
+            data: amounts,
+            backgroundColor: colors,
+            borderColor: colors.map(color => this.adjustColor(color, -20)),
+            borderWidth: 1,
+            hoverOffset
+        };
 
         // Create the chart
         this.prepareChartCanvasSize(canvas);
@@ -2336,17 +2814,12 @@ export class ExpensicaDashboardView extends ItemView {
             type: 'doughnut',
             data: {
                 labels: categories,
-                datasets: [{
-                    data: amounts,
-                    backgroundColor: colors,
-                    borderColor: colors.map(color => this.adjustColor(color, -20)),
-                    borderWidth: 1,
-                    hoverOffset: 15
-                }]
+                datasets: [doughnutDataset as never]
             },
             options: {
                 responsive: false,
                 maintainAspectRatio: false,
+                events: ['mousemove', 'mouseout', 'click'],
                 animation: this.getChartAnimationOptions(this.animateExpensesChartThisRender),
                 resizeDelay: this.getChartResizeDelay(),
                 transitions: {
@@ -2363,13 +2836,14 @@ export class ExpensicaDashboardView extends ItemView {
                     }
                 },
                 layout: {
-                    padding: 12
+                    padding: chartPadding
                 },
                 plugins: {
                     legend: {
                         display: false
                     },
                     tooltip: {
+                        enabled: showTooltip,
                         backgroundColor: this.getTooltipBackgroundColor(),
                         titleColor: this.getTooltipTitleColor(),
                         bodyColor: this.getTooltipBodyColor(),
@@ -2380,23 +2854,30 @@ export class ExpensicaDashboardView extends ItemView {
                                 const label = context.label || '';
                                 const value = context.raw as number;
                                 const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0) as number;
-                                const percentage = Math.round((value / total) * 100);
+                                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
                                 return `${label}: ${this.formatWholeCurrency(value)} (${percentage}%)`;
                             }
                         }
                     }
+                },
+                onClick: (_event, elements) => {
+                    if (!legendContainer || elements.length === 0) {
+                        return;
+                    }
+
+                    this.switchDashboardTab(DashboardTab.CATEGORIES);
+                    this.scrollToTop();
                 }
             }
         });
 
         if (legendContainer) {
-            this.renderCategoryExpensesLegend(legendContainer, this.expensesChart, categories, colors);
+            this.renderCategoryExpensesLegend(legendContainer, this.expensesChart, categoryData);
         }
 
         requestAnimationFrame(() => {
-            if (this.expensesChart) {
-                this.resizeChartToContainer(this.expensesChart);
-            }
+            this.updateDashboardChartGridLayout();
+            this.syncChartsAfterCategoryLayoutChange();
         });
 
         if (this.animateExpensesChartThisRender) {
@@ -2407,69 +2888,81 @@ export class ExpensicaDashboardView extends ItemView {
     renderCategoryExpensesLegend(
         container: HTMLElement,
         chart: Chart,
-        categories: string[],
-        colors: string[]
+        categoryData: { name: string; amount: number; color: string; emoji?: string }[]
     ) {
         container.empty();
-        const columnCount = categories.length === 1
+        const columnCount = categoryData.length === 1
             ? 1
-            : categories.length === 2
+            : categoryData.length === 2
                 ? 2
-                : categories.length === 3
+                : categoryData.length === 3
                     ? 3
-                    : categories.length === 4
+                    : categoryData.length === 4
                         ? 2
                         : 3;
 
         container.addClass('expensica-category-chip-grid');
+        container.addClass('expensica-donut-category-legend');
         container.style.setProperty('--expensica-category-chip-columns', String(columnCount));
 
-        categories.forEach((category, index) => {
-            const matchingCategory = this.plugin.settings.categories.find(candidate => candidate.name === category);
-            const legendItem = renderCategoryChip(container, {
-                emoji: matchingCategory ? this.plugin.getCategoryEmoji(matchingCategory.id) : undefined,
-                text: matchingCategory?.name || category,
-                color: colors[index],
-                colorName: matchingCategory?.name || category,
-                interactive: true,
-                hidden: !chart.getDataVisibility(index)
+        categoryData.forEach((category, index) => {
+            const categoryName = category.name;
+            const categoryEmoji = category.emoji;
+            const legendItem = container.createEl('button', {
+                cls: 'expensica-category-chip expensica-donut-legend-chip',
+                attr: { type: 'button' }
             });
+            legendItem.style.setProperty('--expensica-category-chip-color', category.color);
+            legendItem.setAttribute('aria-label', `Toggle ${categoryName}`);
+            legendItem.toggleClass('is-hidden', !chart.getDataVisibility(index));
+
+            const swatch = legendItem.createSpan('expensica-category-chip-swatch');
+            swatch.style.backgroundColor = category.color;
+
+            if (categoryEmoji) {
+                legendItem.createSpan({ text: categoryEmoji, cls: 'expensica-donut-legend-emoji' });
+            }
+
+            legendItem.createSpan({ text: categoryName, cls: 'expensica-category-chip-label' });
             legendItem.setAttribute('data-category-index', String(index));
 
             legendItem.addEventListener('click', () => {
+                this.clearChartHoverState(chart);
                 this.temporarilyEnableChartAnimations();
                 chart.toggleDataVisibility(index);
                 chart.update();
                 legendItem.toggleClass('is-hidden', !chart.getDataVisibility(index));
             });
 
-            const activateLegendSlice = () => {
-                if (!chart.getDataVisibility(index)) {
-                    return;
-                }
-
-                const chartElement = chart.getDatasetMeta(0).data[index] as any;
-                const tooltipPosition = chartElement?.tooltipPosition?.() ?? {
-                    x: chart.chartArea.left + chart.chartArea.width / 2,
-                    y: chart.chartArea.top + chart.chartArea.height / 2
-                };
-
-                chart.setActiveElements([{ datasetIndex: 0, index }]);
-                chart.tooltip?.setActiveElements([{ datasetIndex: 0, index }], tooltipPosition);
-                chart.update();
-            };
-
-            const clearLegendSlice = () => {
-                chart.setActiveElements([]);
-                chart.tooltip?.setActiveElements([], { x: 0, y: 0 });
-                chart.update();
-            };
-
-            legendItem.addEventListener('mouseenter', activateLegendSlice);
-            legendItem.addEventListener('focus', activateLegendSlice);
-            legendItem.addEventListener('mouseleave', clearLegendSlice);
-            legendItem.addEventListener('blur', clearLegendSlice);
+            legendItem.addEventListener('pointerenter', (event) => this.activateCategorySlice(chart, index, event));
+            legendItem.addEventListener('pointerleave', () => this.clearCategorySlice(chart));
         });
+    }
+
+    private activateCategorySlice(chart: Chart | null, index: number, event: PointerEvent) {
+        if (!chart || event.pointerType !== 'mouse' || !chart.getDataVisibility(index)) {
+            return;
+        }
+
+        const chartElement = chart.getDatasetMeta(0).data[index] as any;
+        const tooltipPosition = chartElement?.tooltipPosition?.() ?? {
+            x: chart.chartArea.left + chart.chartArea.width / 2,
+            y: chart.chartArea.top + chart.chartArea.height / 2
+        };
+
+        chart.setActiveElements([{ datasetIndex: 0, index }]);
+        chart.tooltip?.setActiveElements([{ datasetIndex: 0, index }], tooltipPosition);
+        chart.update();
+    }
+
+    private clearCategorySlice(chart: Chart | null) {
+        if (!chart) {
+            return;
+        }
+
+        chart.setActiveElements([]);
+        chart.tooltip?.setActiveElements([], { x: 0, y: 0 });
+        chart.update();
     }
 
     createWeeklyExpensesChart(canvas: HTMLCanvasElement) {
@@ -2757,38 +3250,12 @@ export class ExpensicaDashboardView extends ItemView {
         const chartTitle = chartHeader.createEl('h3', { cls: 'expensica-chart-title' });
         chartTitle.setText('Transactions & Balance');
 
-        const chartOptions = chartHeader.createDiv('expensica-chart-options');
-        const periods: { value: 'daily' | 'weekly' | 'monthly'; label: string }[] = [
-            { value: 'daily', label: 'Last 7 days' },
-            { value: 'weekly', label: 'Weekly' },
-            { value: 'monthly', label: 'Monthly' }
-        ];
-
-        periods.forEach(period => {
-            const periodButton = chartOptions.createEl('button', {
-                text: period.label,
-                cls: `expensica-chart-option ${this.incomeExpenseChartPeriod === period.value ? 'active' : ''}`
-            });
-
-            periodButton.addEventListener('click', () => {
-                if (this.incomeExpenseChartPeriod === period.value) return;
-
-                this.incomeExpenseChartPeriod = period.value;
-                this.persistDashboardState();
-                this.requestIncomeExpenseChartAnimation();
-                this.refreshIncomeExpenseChartOnly();
-            });
-        });
-
         // Canvas container
         const canvasContainer = container.createDiv('expensica-canvas-container');
         const legendContainer = container.createDiv('expensica-chart-html-legend expensica-income-expense-legend');
 
         // If there are no transactions, show an empty state
-        const hasTransactionsForChart = this.incomeExpenseChartPeriod === 'monthly'
-            ? this.plugin.getAllTransactions().length > 0
-            : this.transactions.length > 0;
-        if (!hasTransactionsForChart) {
+        if (this.transactions.length === 0) {
             canvasContainer.empty();
             legendContainer.remove();
             const emptyState = canvasContainer.createDiv('expensica-empty-charts');
@@ -2872,12 +3339,17 @@ export class ExpensicaDashboardView extends ItemView {
                         hidden: !this.incomeExpenseVisibility.balance,
                         borderColor: balanceColor,
                         backgroundColor: balanceColor,
-                        borderWidth: 2,
+                        borderWidth: 4,
                         fill: false,
                         tension: 0.35,
                         pointBackgroundColor: balanceColor,
-                        pointRadius: 3,
+                        pointBorderColor: balanceColor,
+                        pointRadius: 0,
                         pointHoverRadius: 5,
+                        pointHoverBackgroundColor: balanceColor,
+                        pointHoverBorderColor: balanceColor,
+                        pointHoverBorderWidth: 2,
+                        pointHitRadius: 16,
                         order: 0
                     }
                 ]
@@ -2887,6 +3359,10 @@ export class ExpensicaDashboardView extends ItemView {
                 maintainAspectRatio: false,
                 animation: this.getChartAnimationOptions(this.animateIncomeExpenseChartThisRender),
                 resizeDelay: this.getChartResizeDelay(),
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
                 transitions: {
                     resize: {
                         animation: {
@@ -3056,13 +3532,176 @@ export class ExpensicaDashboardView extends ItemView {
         });
     }
 
+    private getCurrentCategoryChartData(): { id?: string; name: string; amount: number; color: string; emoji?: string }[] {
+        const totals = new Map<string, { id?: string; name: string; amount: number; color: string; emoji?: string }>();
+
+        this.transactions.forEach(transaction => {
+            if (transaction.type !== this.getCategoryChartTransactionType()) {
+                return;
+            }
+
+            const category = this.plugin.settings.categories.find(candidate => candidate.id === transaction.category);
+            const name = category?.name || 'Unknown Category';
+            const existing = totals.get(name);
+
+            if (existing) {
+                existing.amount += transaction.amount;
+                return;
+            }
+
+            totals.set(name, {
+                id: category?.id,
+                name,
+                amount: transaction.amount,
+                color: category ? this.plugin.getCategoryColor(category.id, category.name) : getDefaultCategoryColor(name),
+                emoji: category ? this.plugin.getCategoryEmoji(category.id) : undefined
+            });
+        });
+
+        return Array.from(totals.values()).sort((left, right) => right.amount - left.amount);
+    }
+
+    private getCategoriesTabData(): { id?: string; name: string; amount: number; color: string; emoji?: string; percentage: number }[] {
+        const transactionType = this.getCategoryChartTransactionType();
+        const categories = this.transactions.reduce((totals, transaction) => {
+            if (transaction.type !== transactionType) {
+                return totals;
+            }
+
+            const category = this.plugin.settings.categories.find(candidate => candidate.id === transaction.category);
+            const name = category?.name || 'Unknown Category';
+            const existing = totals.get(name);
+
+            if (existing) {
+                existing.amount += transaction.amount;
+                return totals;
+            }
+
+            totals.set(name, {
+                id: category?.id,
+                name,
+                amount: transaction.amount,
+                color: category ? this.plugin.getCategoryColor(category.id, category.name) : getDefaultCategoryColor(name),
+                emoji: category ? this.plugin.getCategoryEmoji(category.id) : undefined
+            });
+
+            return totals;
+        }, new Map<string, { id?: string; name: string; amount: number; color: string; emoji?: string }>());
+
+        const items = Array.from(categories.values()).sort((left, right) => right.amount - left.amount);
+        const total = items.reduce((sum, item) => sum + item.amount, 0);
+
+        return items.map(item => ({
+            ...item,
+            percentage: total > 0 ? (item.amount / total) * 100 : 0
+        }));
+    }
+
+    private renderCategoryChartTypeSelector(
+        container: HTMLElement,
+        onChange: () => void,
+        options: {
+            showTitle?: boolean;
+            overlayClass?: string;
+        } = {}
+    ) {
+        const chartHeader = container.createDiv('expensica-chart-header');
+        if (options.overlayClass) {
+            chartHeader.addClass(options.overlayClass);
+        }
+
+        if (options.showTitle !== false) {
+            chartHeader.createEl('h3', {
+                text: 'Categories',
+                cls: 'expensica-chart-title'
+            });
+        }
+
+        const chartTypeOptions: { value: CategoryType; label: string }[] = [
+            { value: CategoryType.EXPENSE, label: 'Expenses' },
+            { value: CategoryType.INCOME, label: 'Income' }
+        ];
+        const selectedChartType = chartTypeOptions.find(option => option.value === this.categoryChartType) || chartTypeOptions[0];
+        const chartTypeSelector = chartHeader.createDiv('expensica-chart-type-selector');
+        const chartTypeCurrent = chartTypeSelector.createEl('button', {
+            cls: 'expensica-standard-button shadcn-date-range-current expensica-chart-type-current',
+            attr: {
+                type: 'button',
+                'aria-label': 'Category chart type',
+                'aria-expanded': 'false'
+            }
+        });
+        chartTypeCurrent.createSpan({
+            text: selectedChartType.label,
+            cls: 'shadcn-date-range-text expensica-chart-type-text'
+        });
+        const dropdownIcon = chartTypeCurrent.createSpan({ cls: 'shadcn-date-range-icon expensica-chart-type-icon' });
+        dropdownIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+
+        const chartTypeMenu = chartTypeSelector.createDiv('shadcn-date-range-options expensica-chart-type-options shadcn-date-range-hidden');
+        chartTypeOptions.forEach(option => {
+            const optionButton = chartTypeMenu.createEl('button', {
+                text: option.label,
+                cls: 'shadcn-date-range-option expensica-chart-type-option',
+                attr: { type: 'button' }
+            });
+            optionButton.toggleClass('is-active', this.categoryChartType === option.value);
+            optionButton.toggleClass('shadcn-date-range-option-active', this.categoryChartType === option.value);
+            optionButton.addEventListener('click', () => {
+                if (this.categoryChartType === option.value) {
+                    chartTypeMenu.addClass('shadcn-date-range-hidden');
+                    dropdownIcon.removeClass('dropdown-icon-open');
+                    chartTypeCurrent.setAttribute('aria-expanded', 'false');
+                    return;
+                }
+
+                this.categoryChartType = option.value;
+                chartTypeMenu.addClass('shadcn-date-range-hidden');
+                dropdownIcon.removeClass('dropdown-icon-open');
+                chartTypeCurrent.setAttribute('aria-expanded', 'false');
+                this.persistDashboardState();
+                onChange();
+            });
+        });
+
+        chartTypeCurrent.addEventListener('click', () => {
+            const isHidden = chartTypeMenu.hasClass('shadcn-date-range-hidden');
+            chartTypeMenu.toggleClass('shadcn-date-range-hidden', !isHidden);
+            dropdownIcon.toggleClass('dropdown-icon-open', isHidden);
+            chartTypeCurrent.setAttribute('aria-expanded', String(isHidden));
+        });
+
+        document.addEventListener('click', (event) => {
+            const target = event.target as HTMLElement;
+            if (!chartTypeSelector.contains(target)) {
+                chartTypeMenu.addClass('shadcn-date-range-hidden');
+                dropdownIcon.removeClass('dropdown-icon-open');
+                chartTypeCurrent.setAttribute('aria-expanded', 'false');
+            }
+        });
+    }
+
+    private openCategoryModal(categoryId?: string) {
+        if (!categoryId) {
+            return;
+        }
+
+        const category = this.plugin.getCategoryById(categoryId);
+        if (!category) {
+            showExpensicaNotice('Category no longer exists.');
+            return;
+        }
+
+        new CategoryModal(this.app, this.plugin, this, category).open();
+    }
+
     renderTransactions(container: HTMLElement) {
-        const transactionsSection = container.createDiv('expensica-section expensica-animate expensica-animate-delay-3');
+        const transactionsSection = container.createDiv('expensica-section expensica-recent-transactions-section expensica-animate expensica-animate-delay-3');
 
         // Section header
         const sectionHeader = transactionsSection.createDiv('expensica-section-header');
         sectionHeader.createEl('h2', {
-            text: 'Most Recent Transactions',
+            text: 'Transactions',
             cls: 'expensica-section-title expensica-transactions-title'
         });
         
@@ -3116,9 +3755,22 @@ export class ExpensicaDashboardView extends ItemView {
                             ...transaction,
                             category: categoryId
                         });
+                    },
+                    selectable: true,
+                    selected: this.selectedTransactionIds.has(transaction.id),
+                    onSelectionToggle: (transaction, selected) => {
+                        if (selected) {
+                            this.selectedTransactionIds.add(transaction.id);
+                        } else {
+                            this.selectedTransactionIds.delete(transaction.id);
+                        }
+                        this.maybeShowMixedTransactionTypeSelectionNotice();
+                        this.syncOverviewBulkSelectionFooter();
                     }
                 });
             });
+
+            this.renderTransactionBulkFooter(transactionsSection);
 
             if (sortedTransactions.length > recentTransactions.length) {
                 const footer = transactionsSection.createDiv('expensica-transactions-footer');
@@ -3127,9 +3779,103 @@ export class ExpensicaDashboardView extends ItemView {
         }
     }
 
+    private renderTransactionBulkFooter(container: HTMLElement) {
+        container.querySelector('.expensica-transaction-bulk-footer')?.remove();
+        const selectedTransactions = this.transactions.filter(transaction => this.selectedTransactionIds.has(transaction.id));
+        if (selectedTransactions.length === 0) {
+            return;
+        }
+
+        const footer = container.createDiv('expensica-transaction-bulk-footer');
+        footer.createSpan({
+            text: `${selectedTransactions.length} selected`,
+            cls: 'expensica-transaction-bulk-count'
+        });
+
+        const hasMixedTypes = new Set(selectedTransactions.map(transaction => transaction.type)).size > 1;
+        const categoryButton = footer.createEl('button', {
+            text: 'Category',
+            cls: 'expensica-standard-button expensica-transaction-bulk-category-btn',
+            attr: {
+                type: 'button',
+                'aria-label': hasMixedTypes ? 'Category unavailable for mixed transaction types' : 'Change category for selected transactions'
+            }
+        });
+
+        if (hasMixedTypes) {
+            categoryButton.disabled = true;
+            categoryButton.title = 'Select only income or only expense transactions to bulk change category.';
+        } else {
+            categoryButton.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const categoryType = selectedTransactions[0].type === TransactionType.INCOME
+                    ? CategoryType.INCOME
+                    : CategoryType.EXPENSE;
+                showTransactionBulkCategoryMenu(categoryButton, this.plugin, categoryType, async (categoryId) => {
+                    await Promise.all(selectedTransactions.map(transaction =>
+                        this.plugin.updateTransaction({
+                            ...transaction,
+                            category: categoryId
+                        }, this)
+                    ));
+                    this.selectedTransactionIds.clear();
+                    await this.loadTransactionsData();
+                    this.requestAllChartAnimations();
+                    this.renderDashboard();
+                    showExpensicaNotice('Transactions updated successfully');
+                });
+            });
+        }
+
+        const clearButton = footer.createEl('button', {
+            cls: 'expensica-transaction-bulk-clear',
+            attr: {
+                type: 'button',
+                'aria-label': 'Clear selected transactions',
+                title: 'Clear selected transactions'
+            }
+        });
+        clearButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+        clearButton.addEventListener('click', () => {
+            this.selectedTransactionIds.clear();
+            this.syncOverviewVisibleTransactionSelectionState();
+            this.syncOverviewBulkSelectionFooter();
+        });
+    }
+
+    private syncOverviewBulkSelectionFooter() {
+        const container = this.containerEl.querySelector('.expensica-recent-transactions-section') as HTMLElement | null;
+        if (!container) {
+            return;
+        }
+
+        this.renderTransactionBulkFooter(container);
+    }
+
+    private maybeShowMixedTransactionTypeSelectionNotice() {
+        const selectedTransactions = this.transactions.filter(transaction => this.selectedTransactionIds.has(transaction.id));
+        const hasMixedTypes = new Set(selectedTransactions.map(transaction => transaction.type)).size > 1;
+        if (hasMixedTypes) {
+            showExpensicaNotice('You can only change one transaction type at a time: Income or Expenses.');
+        }
+    }
+
+    private syncOverviewVisibleTransactionSelectionState() {
+        this.containerEl.querySelectorAll<HTMLElement>('.expensica-transaction[data-transaction-id]').forEach(card => {
+            const transactionId = card.getAttribute('data-transaction-id');
+            const isSelected = !!transactionId && this.selectedTransactionIds.has(transactionId);
+            card.toggleClass('is-selected', isSelected);
+
+            const selector = card.querySelector<HTMLElement>('.expensica-transaction-selector');
+            selector?.toggleClass('is-selected', isSelected);
+            selector?.setAttribute('aria-pressed', String(isSelected));
+        });
+    }
+
     private renderViewAllTransactionsButton(container: HTMLElement, extraClass = '') {
         const viewAllBtn = container.createEl('button', {
-            cls: `expensica-view-all-btn ${extraClass}`.trim(),
+            cls: `expensica-standard-button expensica-view-all-btn ${extraClass}`.trim(),
             attr: { 'aria-label': 'View all transactions' }
         });
         viewAllBtn.textContent = 'View All';
@@ -3166,15 +3912,16 @@ export class ExpensicaDashboardView extends ItemView {
 
     getTransactionMonthLabel(transaction: Transaction): string {
         return parseLocalDate(transaction.date).toLocaleDateString('en-US', {
-            month: 'long'
+            month: 'long',
+            year: 'numeric'
         });
     }
 
     getTransactionDayLabel(transaction: Transaction): string {
         return parseLocalDate(transaction.date).toLocaleDateString('en-US', {
+            weekday: 'long',
             month: 'long',
-            day: 'numeric',
-            year: 'numeric'
+            day: 'numeric'
         });
     }
 
@@ -3340,7 +4087,21 @@ export class ExpensicaDashboardView extends ItemView {
             const l = Math.max(0, Math.min(100, parseInt(match[3]) + amount));
             return `hsl(${h}, ${s}%, ${l}%)`;
         }
+
+        const hexMatch = color.match(/^#([0-9a-f]{6})$/i);
+        if (hexMatch) {
+            const hex = hexMatch[1];
+            const red = Math.max(0, Math.min(255, parseInt(hex.slice(0, 2), 16) + amount));
+            const green = Math.max(0, Math.min(255, parseInt(hex.slice(2, 4), 16) + amount));
+            const blue = Math.max(0, Math.min(255, parseInt(hex.slice(4, 6), 16) + amount));
+            return `#${this.toHex(red)}${this.toHex(green)}${this.toHex(blue)}`;
+        }
+
         return color;
+    }
+
+    private toHex(value: number): string {
+        return value.toString(16).padStart(2, '0');
     }
 
     // New method to render premium visualizations
@@ -3408,14 +4169,10 @@ export class ExpensicaDashboardView extends ItemView {
     showBudgetTab() {
         // Only switch to budget tab if budgeting is enabled
         if (this.plugin.settings.enableBudgeting) {
-            this.currentTab = DashboardTab.BUDGET;
-            this.persistDashboardState();
-            this.renderDashboard();
+            this.switchDashboardTab(DashboardTab.BUDGET);
         } else {
             // If budgeting is disabled, stay on overview tab
-            this.currentTab = DashboardTab.OVERVIEW;
-            this.persistDashboardState();
-            this.renderDashboard();
+            this.switchDashboardTab(DashboardTab.OVERVIEW);
             
             // Show a notice that budgeting is disabled
             showExpensicaNotice('Budgeting is disabled. Enable it in settings to use budget features.');
@@ -3493,14 +4250,14 @@ export class DateRangePickerModal extends Modal {
         // Cancel button
         const cancelButton = buttonContainer.createEl('button', {
             text: 'Cancel',
-            cls: 'expensica-btn expensica-btn-secondary',
+            cls: 'expensica-standard-button expensica-btn expensica-btn-secondary',
             attr: { type: 'button' }
         });
         
         // Apply button
         const applyButton = buttonContainer.createEl('button', {
             text: 'Apply',
-            cls: 'expensica-btn expensica-btn-primary',
+            cls: 'expensica-standard-button expensica-btn expensica-btn-primary',
             attr: { type: 'button' }
         });
         
@@ -3673,21 +4430,23 @@ class TransactionModal extends Modal {
         });
 
         // Custom select display element
-        const categoryDisplay = categorySelectContainer.createDiv('expensica-select-display expensica-edit-field');
+        const categoryDisplay = categorySelectContainer.createEl('button', {
+            cls: 'expensica-select-display expensica-edit-field',
+            attr: {
+                type: 'button',
+                'aria-label': 'Choose category'
+            }
+        });
         const categoryDisplayText = categoryDisplay.createSpan('expensica-select-display-text');
         const dropdownIcon = categoryDisplay.createSpan('expensica-select-arrow');
         dropdownIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
-
-        // Category options dropdown
-        const categoryOptions = categorySelectContainer.createDiv('expensica-select-options');
-        categoryOptions.addClass('expensica-select-hidden');
 
         // Add categories as options, filtered by type
         const categoryType = this.getCategoryType();
         const categories = this.plugin.getCategories(categoryType);
 
         // Check if we need to show a warning about deleted category
-        let categoryWarning = null;
+        let categoryWarning: HTMLDivElement | null = null;
         if (this.transaction && !this.plugin.getCategoryById(this.transaction.category)) {
             categoryWarning = categoryGroup.createDiv('category-warning');
             categoryWarning.createEl('p', {
@@ -3724,41 +4483,26 @@ class TransactionModal extends Modal {
             selectedCategoryEmoji = this.plugin.getCategoryEmoji(categories[0].id);
         }
 
-        // Add options to both the hidden select and custom dropdown
+        const updateCategorySelection = (categoryId: string) => {
+            const category = this.plugin.getCategoryById(categoryId);
+            if (!category) {
+                return;
+            }
+
+            hiddenCategorySelect.value = category.id;
+            categoryDisplayText.innerHTML = `<span class="expensica-category-emoji">${this.plugin.getCategoryEmoji(category.id)}</span> ${category.name}`;
+
+            if (categoryWarning) {
+                categoryWarning.remove();
+                categoryWarning = null;
+            }
+        };
+
+        // Add options to hidden select for form submission
         categories.forEach(category => {
-            // Add to the hidden select for form submission
             hiddenCategorySelect.createEl('option', {
                 text: category.name,
                 attr: { value: category.id }
-            });
-
-            // Create custom option item
-            const optionItem = categoryOptions.createDiv('expensica-select-option');
-            optionItem.setAttribute('data-value', category.id);
-            optionItem.innerHTML = `<span class="expensica-category-emoji">${this.plugin.getCategoryEmoji(category.id)}</span> ${category.name}`;
-
-            // Mark as selected if this is the current category
-            if (category.id === selectedCategoryId) {
-                optionItem.addClass('expensica-option-selected');
-            }
-
-            // Handle option selection
-            optionItem.addEventListener('click', () => {
-                // Update the hidden select value
-                hiddenCategorySelect.value = category.id;
-
-                // Update display
-                categoryDisplayText.innerHTML = `<span class="expensica-category-emoji">${this.plugin.getCategoryEmoji(category.id)}</span> ${category.name}`;
-
-                // Update selected class
-                const allOptions = categoryOptions.querySelectorAll('.expensica-select-option');
-                allOptions.forEach(opt => {
-                    opt.removeClass('expensica-option-selected');
-                });
-                optionItem.addClass('expensica-option-selected');
-
-                // Hide the dropdown
-                categoryOptions.addClass('expensica-select-hidden');
             });
         });
 
@@ -3770,18 +4514,21 @@ class TransactionModal extends Modal {
             categoryDisplayText.textContent = 'Select a category';
         }
 
-        // Toggle dropdown on click
-        categoryDisplay.addEventListener('click', () => {
-            const isHidden = categoryOptions.hasClass('expensica-select-hidden');
-            categoryOptions.toggleClass('expensica-select-hidden', !isHidden);
-        });
+        categoryDisplay.addEventListener('click', (event) => {
+            event.preventDefault();
+            showCategoryQuickMenu(categoryDisplay, this.plugin, categoryType, async (categoryId) => {
+                if (!hiddenCategorySelect.querySelector(`option[value="${categoryId}"]`)) {
+                    const category = this.plugin.getCategoryById(categoryId);
+                    if (category) {
+                        hiddenCategorySelect.createEl('option', {
+                            text: category.name,
+                            attr: { value: category.id }
+                        });
+                    }
+                }
 
-        // Close dropdown when clicking outside
-        document.addEventListener('click', (event) => {
-            const target = event.target as Node;
-            if (!categorySelectContainer.contains(target)) {
-                categoryOptions.addClass('expensica-select-hidden');
-            }
+                updateCategorySelection(categoryId);
+            }, hiddenCategorySelect.value || undefined);
         });
 
         // Notes
@@ -3806,18 +4553,18 @@ class TransactionModal extends Modal {
         if (this.transaction) {
             deleteBtn = formFooter.createEl('button', {
                 text: 'Delete',
-                cls: 'expensica-btn expensica-btn-danger expensica-modal-delete-btn',
+                cls: 'expensica-standard-button expensica-btn expensica-btn-danger expensica-modal-delete-btn',
                 attr: { type: 'button' }
             });
         }
         const cancelBtn = formFooter.createEl('button', {
             text: 'Cancel',
-            cls: 'expensica-btn expensica-btn-secondary',
+            cls: 'expensica-standard-button expensica-btn expensica-btn-secondary',
             attr: { type: 'button' }
         });
         const saveBtn = formFooter.createEl('button', {
             text: this.transaction ? 'Update' : 'Save',
-            cls: `expensica-btn ${this.getTransactionType() === TransactionType.EXPENSE ? 'expensica-btn-danger' : 'expensica-btn-success'}`,
+            cls: `expensica-standard-button expensica-btn ${this.getTransactionType() === TransactionType.EXPENSE ? 'expensica-btn-danger' : 'expensica-btn-success'}`,
             attr: { type: 'submit' }
         });
 
@@ -3914,6 +4661,228 @@ export class IncomeModal extends TransactionModal {
     }
 }
 
+class CategoryModal extends Modal {
+    plugin: ExpensicaPlugin;
+    dashboardView: ExpensicaDashboardView;
+    category: Category;
+
+    constructor(app: App, plugin: ExpensicaPlugin, dashboardView: ExpensicaDashboardView, category: Category) {
+        super(app);
+        this.plugin = plugin;
+        this.dashboardView = dashboardView;
+        this.category = category;
+    }
+
+    onOpen() {
+        const { contentEl } = this;
+        contentEl.empty();
+        this.modalEl.addClass('expensica-transaction-modal');
+        contentEl.addClass('expensica-modal');
+        const isProtectedExpenseFallback = this.category.id === 'other_expense';
+
+        const modalTitle = contentEl.createEl('h2', { cls: 'expensica-modal-title' });
+        modalTitle.innerHTML = '<span class="expensica-modal-title-icon">🏷️</span> Edit Category';
+
+        const form = contentEl.createEl('form', { cls: 'expensica-form' });
+        const nameGroup = form.createDiv('expensica-form-group');
+        nameGroup.createEl('label', {
+            text: 'Name',
+            cls: 'expensica-form-label',
+            attr: { for: 'category-name' }
+        });
+        const nameRow = nameGroup.createDiv('expensica-category-name-row');
+        let selectedEmoji = this.plugin.getCategoryEmoji(this.category.id);
+        let selectedColor = this.normalizeColorInputValue(this.plugin.getCategoryColor(this.category.id, this.category.name));
+
+        const colorButton = nameRow.createEl('button', {
+            cls: 'expensica-standard-button expensica-category-color-button',
+            attr: {
+                type: 'button',
+                id: 'category-color',
+                'aria-label': 'Choose color'
+            }
+        });
+        colorButton.style.setProperty('--expensica-category-button-color', selectedColor);
+        colorButton.addEventListener('click', () => {
+            new CategoryColorPaletteModal(this.app, selectedColor, (color) => {
+                selectedColor = this.normalizeColorInputValue(color);
+                colorButton.style.setProperty('--expensica-category-button-color', selectedColor);
+            }).open();
+        });
+
+        const emojiButton = nameRow.createEl('button', {
+            text: selectedEmoji,
+            cls: 'expensica-standard-button expensica-category-picker-trigger expensica-category-modal-emoji-button',
+            attr: {
+                type: 'button',
+                id: 'category-emoji',
+                'aria-label': 'Choose emoji'
+            }
+        });
+        emojiButton.addEventListener('click', () => {
+            new EmojiPickerModal(this.app, this.category, selectedEmoji, (emoji) => {
+                selectedEmoji = emoji;
+                emojiButton.setText(emoji);
+            }).open();
+        });
+
+        const nameInput = nameRow.createEl('input', {
+            cls: 'expensica-form-input expensica-edit-field expensica-category-name-field',
+            attr: {
+                type: 'text',
+                id: 'category-name',
+                name: 'category-name',
+                placeholder: 'Enter category name',
+                required: 'required'
+            }
+        });
+        nameInput.value = this.category.name;
+        if (isProtectedExpenseFallback) {
+            nameInput.disabled = true;
+        }
+
+        const formFooter = form.createDiv('expensica-form-footer');
+        let deleteBtn: HTMLButtonElement | null = null;
+        if (!isProtectedExpenseFallback) {
+            deleteBtn = formFooter.createEl('button', {
+                text: 'Delete',
+                cls: 'expensica-standard-button expensica-btn expensica-btn-danger expensica-modal-delete-btn',
+                attr: { type: 'button' }
+            });
+        }
+        const cancelBtn = formFooter.createEl('button', {
+            text: 'Cancel',
+            cls: 'expensica-standard-button expensica-btn expensica-btn-secondary',
+            attr: { type: 'button' }
+        });
+        formFooter.createEl('button', {
+            text: 'Update',
+            cls: 'expensica-standard-button expensica-btn expensica-btn-primary',
+            attr: { type: 'submit' }
+        });
+
+        cancelBtn.addEventListener('click', () => {
+            this.close();
+        });
+
+        deleteBtn?.addEventListener('click', async () => {
+            const typeCategories = this.plugin.getCategories(this.category.type);
+            if (typeCategories.length <= 1) {
+                showExpensicaNotice(`You must have at least one ${this.category.type} category`);
+                return;
+            }
+
+            const deleted = await this.plugin.deleteCategory(this.category.id);
+            if (deleted) {
+                this.dashboardView.renderDashboard();
+                this.close();
+            }
+        });
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            const nextName = nameInput.value.trim();
+            const nextEmoji = selectedEmoji || this.plugin.getCategoryEmoji(this.category.id);
+            const nextColor = selectedColor;
+
+            if (!nextName) {
+                showExpensicaNotice('Category name is required.');
+                return;
+            }
+
+            const duplicate = this.plugin.getCategories(this.category.type).find(candidate =>
+                candidate.id !== this.category.id && candidate.name.toLowerCase() === nextName.toLowerCase()
+            );
+            if (duplicate) {
+                showExpensicaNotice(`Category "${nextName}" already exists.`);
+                return;
+            }
+
+            await this.plugin.updateCategory({
+                ...this.category,
+                name: nextName
+            });
+            await this.plugin.updateCategoryEmoji(this.category.id, nextEmoji);
+            await this.plugin.updateCategoryColor(this.category.id, nextColor);
+            this.dashboardView.renderDashboard();
+            this.close();
+        });
+    }
+
+    onClose() {
+        const { contentEl } = this;
+        contentEl.empty();
+    }
+
+    private normalizeColorInputValue(color: string): string {
+        if (/^#[0-9a-f]{6}$/i.test(color)) {
+            return color;
+        }
+
+        if (/^#[0-9a-f]{3}$/i.test(color)) {
+            return `#${color.slice(1).split('').map(char => `${char}${char}`).join('')}`;
+        }
+
+        const probe = document.createElement('div');
+        probe.style.color = color;
+        document.body.appendChild(probe);
+        const computed = getComputedStyle(probe).color;
+        probe.remove();
+
+        const match = computed.match(/\d+/g);
+        if (!match || match.length < 3) {
+            return '#000000';
+        }
+
+        return `#${match.slice(0, 3).map(value => Number(value).toString(16).padStart(2, '0')).join('')}`;
+    }
+}
+
+class CategoryColorPaletteModal extends Modal {
+    currentColor: string;
+    onSelect: (color: string) => void;
+
+    constructor(app: App, currentColor: string, onSelect: (color: string) => void) {
+        super(app);
+        this.currentColor = currentColor;
+        this.onSelect = onSelect;
+    }
+
+    onOpen() {
+        const { contentEl } = this;
+        contentEl.empty();
+        contentEl.addClass('expensica-category-color-palette-modal');
+
+        const grid = contentEl.createDiv('expensica-category-color-palette-grid');
+
+        ColorPalette.colors.forEach(color => {
+            const normalizedColor = color.slice(0, 7);
+            const swatch = grid.createEl('button', {
+                cls: 'expensica-category-color-swatch',
+                attr: {
+                    type: 'button',
+                    'aria-label': `Select color ${normalizedColor}`
+                }
+            });
+            swatch.style.backgroundColor = normalizedColor;
+            if (normalizedColor.toLowerCase() === this.currentColor.toLowerCase()) {
+                swatch.addClass('is-selected');
+            }
+
+            swatch.addEventListener('click', () => {
+                this.onSelect(normalizedColor);
+                this.close();
+            });
+        });
+    }
+
+    onClose() {
+        const { contentEl } = this;
+        contentEl.empty();
+    }
+}
+
 // Budget Modal for adding/editing budgets
 class BudgetModal extends Modal {
     plugin: ExpensicaPlugin;
@@ -3977,14 +4946,14 @@ class BudgetModal extends Modal {
         // Cancel button
         const cancelBtn = formFooter.createEl('button', {
             text: 'Cancel',
-            cls: 'expensica-btn expensica-btn-secondary',
+            cls: 'expensica-standard-button expensica-btn expensica-btn-secondary',
             attr: { type: 'button' }
         });
         
         // Save button
         const saveBtn = formFooter.createEl('button', {
             text: this.budget ? 'Update' : 'Save Budget',
-            cls: 'expensica-btn expensica-btn-primary',
+            cls: 'expensica-standard-button expensica-btn expensica-btn-primary',
             attr: { type: 'submit' }
         });
 

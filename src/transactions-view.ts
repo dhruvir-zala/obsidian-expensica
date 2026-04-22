@@ -1,37 +1,23 @@
-import { ItemView, WorkspaceLeaf, setIcon, debounce, ViewStateResult } from 'obsidian';
+import { App } from 'obsidian';
 import {
+    CategoryType,
     Transaction,
     TransactionType,
-    TransactionAggregator,
     formatCurrency,
     formatDate,
     parseLocalDate,
     sortTransactionsByDateTimeDesc,
     getRunningBalanceByTransactionId,
-    Category,
-    getMonthYearString,
-    generateId,
-    calculateBudgetStatus,
     getCurrencyByCode
 } from './models';
 import ExpensicaPlugin from '../main';
 import type { SharedDateRangeState } from '../main';
-import { ExpenseModal, IncomeModal, DateRangeType, DateRange, DateRangePickerModal } from './dashboard-view';
+import { ExpenseModal, IncomeModal, DateRangeType, DateRange } from './dashboard-view';
 import { ConfirmationModal } from './confirmation-modal';
 import { showExpensicaNotice } from './notice';
-import { renderTransactionCard } from './transaction-card';
+import { renderTransactionCard, showTransactionBulkCategoryMenu } from './transaction-card';
 import { renderCategoryChip } from './category-chip';
 
-// Extend the plugin interface to include the new method
-declare module '../main' {
-    interface ExpensicaPlugin {
-        openTransactionsView(): Promise<void>;
-    }
-}
-
-export const EXPENSICA_TRANSACTIONS_VIEW_TYPE = 'expensica-transactions-view';
-
-// Interface to make the view compatible with the transaction modals
 export interface TransactionView {
     plugin: ExpensicaPlugin;
     addTransaction(transaction: Transaction): Promise<void>;
@@ -39,22 +25,8 @@ export interface TransactionView {
     deleteTransaction(id: string): Promise<void>;
 }
 
-interface TransactionsViewState {
-    dateRangeType?: DateRangeType;
-    dateRangeStart?: string;
-    dateRangeEnd?: string;
-    customStartDate?: string | null;
-    customEndDate?: string | null;
-    dateRangeUpdatedAt?: number;
-    searchQuery?: string;
-    selectedCategoryId?: string;
-    selectedCategoryIds?: string[];
-    currentPage?: number;
-    pageSize?: number;
-    scrollTop?: number;
-}
-
-export class ExpensicaTransactionsView extends ItemView implements TransactionView {
+export class ExpensicaTransactionsView implements TransactionView {
+    app: App;
     plugin: ExpensicaPlugin;
     transactions: Transaction[] = [];
     filteredTransactions: Transaction[] = [];
@@ -68,6 +40,8 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
     totalPages: number = 1;
     private scrollTop: number = 0;
     private hasRenderedView = false;
+    private embeddedContentEl: HTMLElement | null = null;
+    private selectedTransactionIds = new Set<string>();
 
     // Date range properties
     dateRange: DateRange;
@@ -75,156 +49,35 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
     customEndDate: Date | null = null;
     dateRangeUpdatedAt: number = 0;
 
-    constructor(leaf: WorkspaceLeaf, plugin: ExpensicaPlugin) {
-        super(leaf);
+    constructor(app: App, plugin: ExpensicaPlugin) {
+        this.app = app;
         this.plugin = plugin;
-        
-        // Initialize with "This Month" as default date range
         this.dateRange = this.getDateRange(DateRangeType.THIS_MONTH);
     }
 
-    getViewType(): string {
-        return EXPENSICA_TRANSACTIONS_VIEW_TYPE;
-    }
-
-    getDisplayText(): string {
-        return 'Expensica Transactions';
-    }
-
-    getIcon(): string {
-        return 'list';
-    }
-
-    async onOpen() {
+    renderDashboardTab(container: HTMLElement, preserveFocus = false) {
         const sharedDateRangeState = this.plugin.getSharedDateRangeState();
         if (sharedDateRangeState) {
             this.applySharedDateRangeStateValues(sharedDateRangeState);
         }
 
-        // Load transactions data
-        await this.loadTransactionsData();
-        
-        // Render the view
-        this.renderView();
-        
-        // Register keyboard handlers
-        this.registerDomEvent(document, 'keydown', (event) => {
-            // If the search input is focused, don't let Obsidian's keyboard shortcuts interfere
-            const searchInput = document.getElementById('expensica-search-input');
-            if (searchInput === document.activeElement) {
-                // Don't let Obsidian handle these keyboard events
-                event.stopPropagation();
-            }
-        }, true);
+        this.embeddedContentEl = container;
+        this.transactions = sortTransactionsByDateTimeDesc(this.plugin.getAllTransactions());
+        this.applyFilters(false);
+        container.addClass('expensica-dashboard-transactions-tab');
+        this.renderTransactionStatsHeader(container);
+        this.renderTransactionsBody(container, preserveFocus);
     }
 
-    async onClose() {
-        // Cleanup
+    private getActiveContentEl(): HTMLElement {
+        if (!this.embeddedContentEl) {
+            throw new Error('Transactions renderer has no active container.');
+        }
+
+        return this.embeddedContentEl;
     }
 
-    getState(): Record<string, unknown> {
-        this.rememberScrollPosition();
-        return {
-            ...super.getState(),
-            dateRangeType: this.dateRange.type,
-            dateRangeStart: formatDate(this.dateRange.startDate),
-            dateRangeEnd: formatDate(this.dateRange.endDate),
-            customStartDate: this.customStartDate ? formatDate(this.customStartDate) : null,
-            customEndDate: this.customEndDate ? formatDate(this.customEndDate) : null,
-            dateRangeUpdatedAt: this.dateRangeUpdatedAt,
-            searchQuery: this.searchQuery,
-            selectedCategoryIds: this.selectedCategoryIds,
-            currentPage: this.currentPage,
-            pageSize: this.pageSize,
-            scrollTop: this.scrollTop
-        };
-    }
-
-    async setState(state: unknown, result: ViewStateResult): Promise<void> {
-        await super.setState(state, result);
-
-        if (!state || typeof state !== 'object') {
-            return;
-        }
-
-        const transactionsState = state as TransactionsViewState;
-
-        if (typeof transactionsState.searchQuery === 'string') {
-            this.searchQuery = transactionsState.searchQuery;
-        }
-
-        if (Array.isArray(transactionsState.selectedCategoryIds)) {
-            this.selectedCategoryIds = transactionsState.selectedCategoryIds
-                .filter((categoryId): categoryId is string => typeof categoryId === 'string');
-        }
-
-        if (!Array.isArray(transactionsState.selectedCategoryIds) && typeof transactionsState.selectedCategoryId === 'string') {
-            this.selectedCategoryIds = transactionsState.selectedCategoryId
-                ? [transactionsState.selectedCategoryId]
-                : [];
-        }
-
-        if (typeof transactionsState.pageSize === 'number' && [10, 20, 50, 100].includes(transactionsState.pageSize)) {
-            this.pageSize = transactionsState.pageSize;
-        }
-
-        if (typeof transactionsState.currentPage === 'number' && transactionsState.currentPage > 0) {
-            this.currentPage = transactionsState.currentPage;
-        }
-
-        if (transactionsState.customStartDate) {
-            this.customStartDate = parseLocalDate(transactionsState.customStartDate);
-        } else if (Object.prototype.hasOwnProperty.call(transactionsState, 'customStartDate')) {
-            this.customStartDate = null;
-        }
-
-        if (transactionsState.customEndDate) {
-            this.customEndDate = parseLocalDate(transactionsState.customEndDate);
-        } else if (Object.prototype.hasOwnProperty.call(transactionsState, 'customEndDate')) {
-            this.customEndDate = null;
-        }
-
-        if (transactionsState.dateRangeType) {
-            const startDate = transactionsState.dateRangeStart ? parseLocalDate(transactionsState.dateRangeStart) : undefined;
-            const endDate = transactionsState.dateRangeEnd ? parseLocalDate(transactionsState.dateRangeEnd) : undefined;
-            this.dateRange = this.createDateRangeFromState(transactionsState.dateRangeType, startDate, endDate);
-            this.dateRangeUpdatedAt = transactionsState.dateRangeUpdatedAt ?? 0;
-
-            if (transactionsState.dateRangeType === DateRangeType.CUSTOM && startDate && endDate) {
-                this.customStartDate = startDate;
-                this.customEndDate = endDate;
-            }
-        }
-
-        const sharedDateRangeState = this.plugin.getSharedDateRangeState();
-        if (sharedDateRangeState && sharedDateRangeState.updatedAt >= this.dateRangeUpdatedAt) {
-            this.applySharedDateRangeStateValues(sharedDateRangeState);
-        } else if (transactionsState.dateRangeType) {
-            await this.plugin.setSharedDateRangeState(this.createSharedDateRangeState(), this);
-        }
-
-        if (typeof transactionsState.scrollTop === 'number') {
-            this.scrollTop = transactionsState.scrollTop;
-        }
-
-        if (this.contentEl.childElementCount > 0) {
-            await this.loadTransactionsData(false);
-            this.renderView();
-        }
-    }
-
-    renderView(preserveFocus = false) {
-        const container = this.contentEl;
-        const isRoutineRender = this.hasRenderedView;
-        this.rememberScrollPosition();
-        container.empty();
-        container.addClass('expensica-container');
-        container.addClass('transactions-container');
-        container.toggleClass('expensica-suppress-motion', isRoutineRender);
-
-        // Header section (always visible at the top)
-        this.renderHeader(container);
-        
+    private renderTransactionsBody(container: HTMLElement, preserveFocus = false) {
         // Search bar section
         const searchSection = container.createDiv('expensica-search-section');
         const searchControls = searchSection.createDiv('expensica-search-controls');
@@ -414,7 +267,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
     }
 
     refreshSelectedFilterChips() {
-        const searchSection = this.contentEl.querySelector('.expensica-search-section') as HTMLElement | null;
+        const searchSection = this.getActiveContentEl().querySelector('.expensica-search-section') as HTMLElement | null;
         if (!searchSection) {
             return;
         }
@@ -424,7 +277,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
     }
 
     refreshCategoryFilterOptions() {
-        this.contentEl.querySelectorAll('.expensica-filter-category-option').forEach(option => {
+        this.getActiveContentEl().querySelectorAll('.expensica-filter-category-option').forEach(option => {
             const categoryId = option.getAttribute('data-category-id');
             const isSelected = !!categoryId && this.selectedCategoryIds.includes(categoryId);
 
@@ -474,53 +327,15 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         }
     }
 
-    renderHeader(container: HTMLElement) {
-        const header = container.createDiv('expensica-header expensica-transactions-view-header');
-        
-        // Title section with count 
-        const titleSection = header.createDiv('expensica-title-section');
-        const titleContainer = titleSection.createDiv('expensica-transactions-header');
-        
-        // Main title
-        const titleEl = titleContainer.createEl('h1', { 
-            cls: 'expensica-title' 
-        });
-        titleEl.textContent = 'Transactions';
-        
+    private renderTransactionStatsHeader(container: HTMLElement) {
         const totals = this.getFilteredTransactionTotals();
-        const statChipsContainer = titleSection.createDiv('expensica-transaction-total-chips');
+        const statChipsContainer = container.createDiv('expensica-transaction-total-chips expensica-transactions-tab-chips');
         statChipsContainer.createEl('span', {
-            text: `${this.filteredTransactions.length} transactions`,
-            cls: 'expensica-transaction-count expensica-transaction-count-chip'
+            text: this.filteredTransactions.length > 0 ? `${this.filteredTransactions.length} total` : '',
+            cls: `expensica-transaction-count expensica-transaction-count-chip ${this.filteredTransactions.length === 0 ? 'is-hidden' : ''}`.trim()
         });
         this.renderTransactionTotalChip(statChipsContainer, 'spent', totals.expenses);
         this.renderTransactionTotalChip(statChipsContainer, 'income', totals.income);
-        
-        // Actions
-        const actionsSection = header.createDiv('shadcn-actions');
-        
-        // Add date range selector
-        this.renderDateRangeSelector(actionsSection);
-        
-        // Add expense button
-        const addExpenseBtn = actionsSection.createEl('button', { 
-            cls: 'shadcn-btn shadcn-btn-danger'
-        });
-        addExpenseBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Add Expense';
-        addExpenseBtn.addEventListener('click', () => {
-            const modal = new ExpenseModal(this.app, this.plugin, this as any);
-            modal.open();
-        });
-        
-        // Add income button
-        const addIncomeBtn = actionsSection.createEl('button', { 
-            cls: 'shadcn-btn shadcn-btn-success'
-        });
-        addIncomeBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Add Income';
-        addIncomeBtn.addEventListener('click', () => {
-            const modal = new IncomeModal(this.app, this.plugin, this as any);
-            modal.open();
-        });
     }
 
     private renderTransactionTotalChip(container: HTMLElement, type: 'spent' | 'income', amount: number) {
@@ -549,131 +364,19 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         this.renderTransactionTotalChip(container, type, amount);
     }
 
-    // New method to render the date range selector
-    private renderDateRangeSelector(container: HTMLElement) {
-        const dateRangeContainer = container.createDiv('shadcn-date-range-container');
-
-        // Create the date range selector dropdown
-        const dateRangeSelector = dateRangeContainer.createDiv('shadcn-date-range-selector');
-        
-        // Current selection display
-        const currentSelection = dateRangeSelector.createDiv('shadcn-date-range-current');
-        currentSelection.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`;
-        
-        const dateRangeText = currentSelection.createSpan({ 
-            text: this.dateRange.label,
-            cls: 'shadcn-date-range-text'
-        });
-        
-        const dropdownIcon = currentSelection.createSpan({ cls: 'shadcn-date-range-icon' });
-        dropdownIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
-
-        // Dropdown options container
-        const optionsContainer = dateRangeSelector.createDiv('shadcn-date-range-options');
-        optionsContainer.addClass('shadcn-date-range-hidden');
-
-        // Add dropdown options
-        const options: { type: DateRangeType, label: string }[] = [
-            { type: DateRangeType.TODAY, label: 'Today' },
-            { type: DateRangeType.THIS_WEEK, label: 'This Week' },
-            { type: DateRangeType.THIS_MONTH, label: 'This Month' },
-            { type: DateRangeType.LAST_MONTH, label: 'Last Month' },
-            { type: DateRangeType.THIS_YEAR, label: 'This Year' },
-            { type: DateRangeType.ALL_TIME, label: 'All Time' },
-            { type: DateRangeType.CUSTOM, label: 'Custom Range' }
-        ];
-
-        options.forEach(option => {
-            const optionItem = optionsContainer.createDiv('shadcn-date-range-option');
-            optionItem.textContent = option.label;
-            
-            // Highlight the active option
-            if (this.dateRange.type === option.type) {
-                optionItem.addClass('shadcn-date-range-option-active');
-            }
-            
-            // Handle option selection
-            optionItem.addEventListener('click', async () => {
-                if (option.type === DateRangeType.CUSTOM) {
-                    // Show custom date picker modal
-                    const modal = new DateRangePickerModal(this.app, this.customStartDate || new Date(), this.customEndDate || new Date(), async (startDate, endDate) => {
-                        if (startDate && endDate) {
-                            this.customStartDate = startDate;
-                            this.customEndDate = endDate;
-                            this.dateRange = this.getDateRange(DateRangeType.CUSTOM, startDate, endDate);
-                            await this.updateSharedDateRange();
-                            
-                            // Update dateRangeText
-                            dateRangeText.textContent = this.dateRange.label;
-                            
-                            // Reload transactions and update view
-                            await this.loadTransactionsData(true);
-                            this.persistTransactionsState();
-                            this.renderView();
-                        }
-                    });
-                    modal.open();
-                } else {
-                    // Set the new date range
-                    this.dateRange = this.getDateRange(option.type);
-                    await this.updateSharedDateRange();
-                    
-                    // Update dateRangeText
-                    dateRangeText.textContent = this.dateRange.label;
-                    
-                    // Reload transactions and update view
-                    await this.loadTransactionsData(true);
-                    this.persistTransactionsState();
-                    this.renderView();
-                }
-                
-                // Hide the dropdown
-                optionsContainer.addClass('shadcn-date-range-hidden');
-                dropdownIcon.removeClass('dropdown-icon-open');
-            });
-        });
-
-        // Toggle dropdown on click
-        currentSelection.addEventListener('click', () => {
-            const isHidden = optionsContainer.hasClass('shadcn-date-range-hidden');
-            optionsContainer.toggleClass('shadcn-date-range-hidden', !isHidden);
-            dropdownIcon.toggleClass('dropdown-icon-open', isHidden);
-        });
-
-        // Close dropdown when clicking outside
-        document.addEventListener('click', (event) => {
-            const target = event.target as HTMLElement;
-            if (!dateRangeSelector.contains(target)) {
-                optionsContainer.addClass('shadcn-date-range-hidden');
-                dropdownIcon.removeClass('dropdown-icon-open');
-            }
-        });
-    }
-
     rememberScrollPosition() {
-        this.scrollTop = this.contentEl.scrollTop;
+        this.scrollTop = this.getActiveContentEl().scrollTop;
     }
 
     restoreScrollPosition() {
         requestAnimationFrame(() => {
-            this.contentEl.scrollTop = this.scrollTop;
+            this.getActiveContentEl().scrollTop = this.scrollTop;
         });
     }
 
     persistTransactionsState() {
         this.rememberScrollPosition();
         this.app.workspace.requestSaveLayout();
-    }
-
-    createSharedDateRangeState(): SharedDateRangeState {
-        return {
-            type: this.dateRange.type,
-            startDate: formatDate(this.dateRange.startDate),
-            endDate: formatDate(this.dateRange.endDate),
-            customStartDate: this.customStartDate ? formatDate(this.customStartDate) : null,
-            customEndDate: this.customEndDate ? formatDate(this.customEndDate) : null,
-            updatedAt: this.dateRangeUpdatedAt
-        };
     }
 
     applySharedDateRangeStateValues(state: SharedDateRangeState) {
@@ -693,12 +396,10 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         this.applySharedDateRangeStateValues(state);
         await this.loadTransactionsData(true);
         this.persistTransactionsState();
-        this.renderView();
-    }
 
-    async updateSharedDateRange() {
-        this.dateRangeUpdatedAt = Date.now();
-        await this.plugin.setSharedDateRangeState(this.createSharedDateRangeState(), this);
+        if (this.embeddedContentEl) {
+            this.refreshTransactionsListOnly();
+        }
     }
 
     createDateRangeFromState(type: DateRangeType, startDate?: Date, endDate?: Date): DateRange {
@@ -720,6 +421,13 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
     }
 
     applyFilters(resetPage = false) {
+        const validTransactionIds = new Set(this.transactions.map(transaction => transaction.id));
+        this.selectedTransactionIds.forEach(id => {
+            if (!validTransactionIds.has(id)) {
+                this.selectedTransactionIds.delete(id);
+            }
+        });
+
         this.selectedCategoryIds = this.selectedCategoryIds.filter(categoryId =>
             !!this.plugin.getCategoryById(categoryId)
         );
@@ -804,6 +512,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         const runningBalances = getRunningBalanceByTransactionId(this.transactions);
         
         this.renderTransactionsToContainer(transactionsContainer, pageTransactions, runningBalances);
+        this.renderBulkSelectionFooter(transactionsSection);
     }
 
     private renderTransactionGroupTitle(container: HTMLElement, text: string, level: 'month' | 'day') {
@@ -835,15 +544,16 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
 
     private getTransactionMonthLabel(transaction: Transaction): string {
         return parseLocalDate(transaction.date).toLocaleDateString('en-US', {
-            month: 'long'
+            month: 'long',
+            year: 'numeric'
         });
     }
 
     private getTransactionDayLabel(transaction: Transaction): string {
         return parseLocalDate(transaction.date).toLocaleDateString('en-US', {
+            weekday: 'long',
             month: 'long',
-            day: 'numeric',
-            year: 'numeric'
+            day: 'numeric'
         });
     }
 
@@ -870,7 +580,131 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
                     ...transaction,
                     category: categoryId
                 });
+            },
+            selectable: true,
+            selected: this.selectedTransactionIds.has(transaction.id),
+            onSelectionToggle: (transaction, selected) => {
+                if (selected) {
+                    this.selectedTransactionIds.add(transaction.id);
+                } else {
+                    this.selectedTransactionIds.delete(transaction.id);
+                }
+                this.maybeShowMixedTransactionTypeSelectionNotice();
+                this.syncBulkSelectionFooter();
             }
+        });
+    }
+
+    private renderBulkSelectionFooter(container: HTMLElement) {
+        container.querySelector('.expensica-transaction-bulk-footer')?.remove();
+        const selectedTransactions = this.getSelectedTransactions();
+        if (selectedTransactions.length === 0) {
+            return;
+        }
+
+        const footer = container.createDiv('expensica-transaction-bulk-footer');
+        footer.createSpan({
+            text: `${selectedTransactions.length} selected`,
+            cls: 'expensica-transaction-bulk-count'
+        });
+
+        const hasMixedTypes = new Set(selectedTransactions.map(transaction => transaction.type)).size > 1;
+        const categoryButton = footer.createEl('button', {
+            text: 'Category',
+            cls: 'expensica-standard-button expensica-transaction-bulk-category-btn',
+            attr: {
+                type: 'button',
+                'aria-label': hasMixedTypes ? 'Category unavailable for mixed transaction types' : 'Change category for selected transactions'
+            }
+        });
+
+        if (hasMixedTypes) {
+            categoryButton.disabled = true;
+            categoryButton.title = 'Select only income or only expense transactions to bulk change category.';
+        } else {
+            categoryButton.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const categoryType = selectedTransactions[0].type === TransactionType.INCOME
+                    ? CategoryType.INCOME
+                    : CategoryType.EXPENSE;
+                showTransactionBulkCategoryMenu(categoryButton, this.plugin, categoryType, async (categoryId) => {
+                    await this.bulkUpdateSelectedTransactionsCategory(categoryId);
+                });
+            });
+        }
+
+        const clearButton = footer.createEl('button', {
+            cls: 'expensica-transaction-bulk-clear',
+            attr: {
+                type: 'button',
+                'aria-label': 'Clear selected transactions',
+                title: 'Clear selected transactions'
+            }
+        });
+        clearButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+        clearButton.addEventListener('click', () => {
+            this.clearSelectedTransactions();
+        });
+    }
+
+    private getSelectedTransactions(): Transaction[] {
+        return this.transactions.filter(transaction => this.selectedTransactionIds.has(transaction.id));
+    }
+
+    private clearSelectedTransactions() {
+        this.selectedTransactionIds.clear();
+        this.syncVisibleTransactionSelectionState();
+        this.syncBulkSelectionFooter();
+    }
+
+    private maybeShowMixedTransactionTypeSelectionNotice() {
+        const selectedTransactions = this.getSelectedTransactions();
+        const hasMixedTypes = new Set(selectedTransactions.map(transaction => transaction.type)).size > 1;
+        if (hasMixedTypes) {
+            showExpensicaNotice('You can only change one transaction type at a time: Income or Expenses.');
+        }
+    }
+
+    private async bulkUpdateSelectedTransactionsCategory(categoryId: string) {
+        const selectedTransactions = this.getSelectedTransactions();
+        if (selectedTransactions.length === 0) {
+            return;
+        }
+
+        await Promise.all(selectedTransactions.map(transaction =>
+            this.plugin.updateTransaction({
+                ...transaction,
+                category: categoryId
+            }, this)
+        ));
+
+        await this.loadTransactionsData(false);
+        this.selectedTransactionIds.clear();
+        this.persistTransactionsState();
+        this.refreshTransactionsListOnly();
+        showExpensicaNotice('Transactions updated successfully');
+    }
+
+    private syncBulkSelectionFooter() {
+        const container = this.getActiveContentEl().querySelector('.expensica-transactions-section') as HTMLElement | null;
+        if (!container) {
+            return;
+        }
+
+        this.renderBulkSelectionFooter(container);
+    }
+
+    private syncVisibleTransactionSelectionState() {
+        const container = this.getActiveContentEl();
+        container.querySelectorAll<HTMLElement>('.expensica-transaction[data-transaction-id]').forEach(card => {
+            const transactionId = card.getAttribute('data-transaction-id');
+            const isSelected = !!transactionId && this.selectedTransactionIds.has(transactionId);
+            card.toggleClass('is-selected', isSelected);
+
+            const selector = card.querySelector<HTMLElement>('.expensica-transaction-selector');
+            selector?.toggleClass('is-selected', isSelected);
+            selector?.setAttribute('aria-pressed', String(isSelected));
         });
     }
 
@@ -901,7 +735,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
         extraClass = ''
     ) {
         const button = container.createEl('button', {
-            cls: `expensica-pagination-btn ${extraClass} ${isDisabled ? 'disabled' : ''}`.trim(),
+            cls: `expensica-standard-button expensica-pagination-btn ${extraClass} ${isDisabled ? 'disabled' : ''}`.trim(),
             text: label,
             attr: {
                 'aria-label': ariaLabel,
@@ -1027,36 +861,39 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
 
         // Items per page selector container
         const itemsPerPageContainer = paginationSection.createDiv('expensica-items-per-page');
-        itemsPerPageContainer.createEl('span', { text: 'Items Per Page:' });
+        itemsPerPageContainer.createEl('span', { text: 'Per Page:' });
         this.renderPageSizeSelector(itemsPerPageContainer);
     }
 
     refreshTransactionsListOnly() {
-        this.contentEl.addClass('expensica-suppress-motion');
+        const container = this.getActiveContentEl();
+        this.rememberScrollPosition();
+        container.addClass('expensica-suppress-motion');
 
-        const countEl = this.contentEl.querySelector('.expensica-transaction-count-chip');
+        const countEl = container.querySelector('.expensica-transaction-count-chip');
         if (countEl) {
-            countEl.textContent = `${this.filteredTransactions.length} transactions`;
+            countEl.textContent = this.filteredTransactions.length > 0 ? `${this.filteredTransactions.length} total` : '';
+            countEl.classList.toggle('is-hidden', this.filteredTransactions.length === 0);
         }
 
         const totals = this.getFilteredTransactionTotals();
-        const titleContainer = this.contentEl.querySelector('.expensica-transactions-view-header .expensica-transaction-total-chips') as HTMLElement | null;
+        const titleContainer = container.querySelector('.expensica-transaction-total-chips') as HTMLElement | null;
         if (titleContainer) {
             this.syncTransactionTotalChip(titleContainer, 'spent', totals.expenses);
             this.syncTransactionTotalChip(titleContainer, 'income', totals.income);
         }
 
-        this.contentEl.querySelector('.expensica-transactions-section')?.remove();
-        this.contentEl.querySelectorAll('.expensica-pagination').forEach(section => section.remove());
+        container.querySelector('.expensica-transactions-section')?.remove();
+        container.querySelectorAll('.expensica-pagination').forEach(section => section.remove());
 
-        this.renderPagination(this.contentEl, 'top');
-        this.renderTransactionsList(this.contentEl);
-        this.renderPagination(this.contentEl, 'bottom');
+        this.renderPagination(container, 'top');
+        this.renderTransactionsList(container);
+        this.renderPagination(container, 'bottom');
         this.restoreScrollPosition();
     }
 
     async addTransaction(transaction: Transaction) {
-        await this.plugin.addTransaction(transaction);
+        await this.plugin.addTransaction(transaction, this);
         
         // Refresh transactions without resetting the user's current filter/page context.
         await this.loadTransactionsData(false);
@@ -1065,7 +902,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
     }
 
     async updateTransaction(transaction: Transaction) {
-        await this.plugin.updateTransaction(transaction);
+        await this.plugin.updateTransaction(transaction, this);
         
         // Refresh transactions without resetting the user's current filter/page context.
         await this.loadTransactionsData(false);
@@ -1083,7 +920,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
             `Are you sure you want to delete this ${transaction.type.toLowerCase()} transaction? This action cannot be undone.`,
             async (confirmed) => {
                 if (confirmed) {
-                    await this.plugin.deleteTransaction(id);
+                    await this.plugin.deleteTransaction(id, this);
                     // Refresh transactions without resetting the user's current filter/page context.
                     await this.loadTransactionsData(false);
                     this.persistTransactionsState();
@@ -1115,6 +952,14 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
                 end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (6 - dayOfWeek), 23, 59, 59, 999);
                 label = 'This Week';
                 break;
+
+            case DateRangeType.LAST_WEEK:
+                // Get the previous week (Sunday through Saturday)
+                const currentDayOfWeek = now.getDay();
+                start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - currentDayOfWeek - 7);
+                end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - currentDayOfWeek - 1, 23, 59, 59, 999);
+                label = 'Last Week';
+                break;
                 
             case DateRangeType.THIS_MONTH:
                 start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -1132,6 +977,12 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
                 start = new Date(now.getFullYear(), 0, 1);
                 end = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
                 label = 'This Year';
+                break;
+
+            case DateRangeType.LAST_YEAR:
+                start = new Date(now.getFullYear() - 1, 0, 1);
+                end = new Date(now.getFullYear() - 1, 11, 31, 23, 59, 59, 999);
+                label = 'Last Year';
                 break;
 
             case DateRangeType.ALL_TIME:
@@ -1216,7 +1067,7 @@ export class ExpensicaTransactionsView extends ItemView implements TransactionVi
 
             // Restore focus to search input if it was previously focused
             if (wasFocused) {
-                const searchInput = this.contentEl.querySelector('#expensica-search-input') as HTMLInputElement;
+                const searchInput = this.getActiveContentEl().querySelector('#expensica-search-input') as HTMLInputElement;
                 if (searchInput) {
                     searchInput.focus();
                 }

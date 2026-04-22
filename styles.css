@@ -40,6 +40,15 @@
   --expensica-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
   --expensica-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
   --expensica-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --expensica-shadow-focus: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.2);
+  --expensica-shadow-focus-subtle: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.1);
+  --expensica-shadow-control: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --expensica-shadow-panel-rest: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px,
+    rgba(15, 15, 15, 0.05) 0px 2px 4px;
+  --expensica-shadow-panel-hover: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px,
+    rgba(15, 15, 15, 0.08) 0px 4px 6px;
+  --expensica-shadow-dropdown: 0 10px 25px -5px rgba(0, 0, 0, 0.1),
+    0 8px 10px -6px rgba(0, 0, 0, 0.1);
   
   /* Transitions */
   --expensica-transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -47,7 +56,7 @@
   
   /* Border Radius */
   --expensica-radius-sm: 6px;
-  --expensica-radius: 12px;
+  --expensica-radius: 8px;
   --expensica-radius-lg: 16px;
   --expensica-radius-xl: 24px;
   --expensica-chart-bar-radius: var(--radius-s, var(--expensica-radius-sm));
@@ -58,30 +67,13 @@
   --expensica-gap-md: var(--size-4-2, 8px);
   --expensica-gap-lg: var(--size-4-4, 16px);
   --expensica-gap-xl: var(--size-4-6, 24px);
-  --expensica-gap-section: var(--size-4-8, 32px);
-  --expensica-gap-page: var(--size-4-8, 32px);
-
-  /* Semantic layout gaps */
-  --expensica-panel-gap: var(--expensica-gap-lg);
-  --expensica-section-gap: var(--expensica-gap-section);
-  --expensica-card-gap: var(--expensica-gap-lg);
-  --expensica-list-gap: var(--expensica-gap-sm);
-  --expensica-control-gap: var(--expensica-gap-md);
-  --expensica-title-gap: var(--expensica-gap-md);
-  --expensica-meta-gap: var(--expensica-gap-md);
+  --expensica-gap-2xl: var(--size-4-8, 32px);
+  --expensica-gap-3xl: var(--size-4-12, 48px);
+  --expensica-card-title-margin-block-start: 0;
+  --expensica-card-title-margin-inline: 0;
+  --expensica-card-value-margin: 0;
   --expensica-transactions-filter-gap: max(var(--size-4-3, 12px), 8px);
-  --expensica-transactions-filter-chip-gap: max(var(--expensica-control-gap), 8px);
-  --expensica-transactions-edge-gap: var(--expensica-panel-gap);
   --expensica-transaction-mobile-inline-padding: var(--size-4-2, 8px);
-  --expensica-calendar-transaction-meta-gap: var(--expensica-gap-sm);
-
-  /* Legacy spacing aliases */
-  --expensica-spacing-xs: var(--expensica-gap-sm);
-  --expensica-spacing-sm: var(--expensica-gap-md);
-  --expensica-spacing: var(--expensica-gap-lg);
-  --expensica-spacing-lg: var(--expensica-gap-xl);
-  --expensica-spacing-xl: var(--expensica-gap-section);
-  --expensica-spacing-2xl: var(--size-4-12, 48px);
   
   /* Typography */
   --expensica-font-size-xs: 12px;
@@ -90,6 +82,9 @@
   --expensica-font-size-lg: 18px;
   --expensica-font-size-xl: 20px;
   --expensica-font-size-2xl: 24px;
+  --expensica-card-trend-font-size: var(--font-smallest, var(--font-ui-smallest, var(--expensica-font-size-xs)));
+  --expensica-card-trend-icon-size: 1em;
+  --expensica-card-trend-icon-stroke-width: 3;
   
   /* Line Heights */
   --expensica-line-height-tight: 1.25;
@@ -118,10 +113,6 @@
   --expensica-category-chip-text-alpha: 92%;
   --expensica-doughnut-chart-height: 310px;
   --expensica-doughnut-chart-aspect-ratio: 400 / 310;
-  --expensica-chart-spacing: var(--expensica-panel-gap);
-  --expensica-calendar-panel-spacing: var(--expensica-panel-gap);
-  --expensica-calendar-panel-gap: var(--expensica-panel-gap);
-  --expensica-header-action-gap: var(--expensica-control-gap);
 }
 
 .notice:has(.expensica-notice-content) {
@@ -137,12 +128,12 @@
 
 /* Dashboard Layout */
 .expensica-dashboard {
-  padding: var(--expensica-gap-page);
+  padding: var(--expensica-gap-2xl);
   max-width: 1200px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: var(--expensica-section-gap);
+  gap: var(--expensica-gap-lg);
   background-color: transparent;
 }
 
@@ -151,7 +142,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--expensica-panel-gap);
+  padding: var(--expensica-gap-lg);
   background-color: var(--background-primary);
   border-radius: var(--expensica-radius-lg);
   margin-bottom: 0;
@@ -199,7 +190,7 @@
 
 .expensica-actions {
   display: flex;
-  gap: var(--expensica-control-gap);
+  gap: var(--expensica-gap-md);
   align-items: center;
   position: relative;
 }
@@ -210,8 +201,8 @@
   align-items: center;
   background-color: var(--expensica-bg-secondary);
   border-radius: var(--expensica-radius-xl);
-  padding: var(--expensica-spacing-xs);
-  margin-right: var(--expensica-spacing);
+  padding: var(--expensica-gap-sm);
+  margin-right: var(--expensica-gap-lg);
   box-shadow: var(--expensica-shadow-sm);
 }
 
@@ -238,7 +229,7 @@
 .expensica-month-display {
   font-size: var(--expensica-font-size);
   font-weight: 500;
-  padding: 0 var(--expensica-spacing);
+  padding: 0 var(--expensica-gap-lg);
   min-width: 130px;
   text-align: center;
   color: var(--expensica-text-primary);
@@ -350,14 +341,14 @@
 .expensica-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
-  gap: var(--expensica-card-gap);
+  gap: var(--expensica-gap-lg);
   margin-bottom: 0;
 }
 
 .expensica-card {
   background-color: var(--background-primary);
   border-radius: 4px;
-  padding: var(--expensica-panel-gap);
+  padding: var(--expensica-gap-md);
   position: relative;
   min-width: 0;
   overflow: hidden;
@@ -374,12 +365,14 @@
 }
 
 .expensica-card-title {
-  font-size: 12px;
+  font-size: var(--expensica-font-size-xs);
   color: var(--text-muted);
-  margin: 0 0 8px 0;
+  margin-block-start: var(--expensica-card-title-margin-block-start);
+  margin-block-end: var(--expensica-gap-md);
+  margin-inline: var(--expensica-card-title-margin-inline);
   display: flex;
   align-items: center;
-  gap: var(--expensica-spacing-xs);
+  gap: var(--expensica-gap-sm);
   font-weight: 500;
   letter-spacing: 0.02em;
 }
@@ -394,7 +387,7 @@
 .expensica-card-value {
   font-size: clamp(20px, 2.6vw, 28px);
   font-weight: 600;
-  margin: 0;
+  margin: var(--expensica-card-value-margin);
   line-height: 1.2;
   color: var(--text-normal);
   overflow-wrap: anywhere;
@@ -402,11 +395,11 @@
 }
 
 .expensica-card-trend {
-  font-size: 12px;
-  margin-top: 8px;
+  font-size: var(--expensica-card-trend-font-size);
+  margin-block-start: var(--expensica-gap-md);
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--expensica-gap-sm);
   color: var(--text-muted);
 }
 
@@ -416,15 +409,6 @@
 
 .expensica-trend-down {
   color: var(--text-error);
-}
-
-.expensica-card-bg-icon {
-  position: absolute;
-  right: -5px;
-  bottom: -5px;
-  font-size: 50px;
-  opacity: 0.04;
-  transform: rotate(-5deg);
 }
 
 .expensica-income {
@@ -459,7 +443,7 @@
 .expensica-dashboard-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--expensica-panel-gap);
+  gap: var(--expensica-gap-lg);
   margin-bottom: 0;
   align-items: stretch;
 }
@@ -471,26 +455,24 @@
 .expensica-chart-container {
   background-color: var(--expensica-bg-primary);
   border-radius: var(--expensica-radius-lg);
-  padding: var(--expensica-chart-spacing);
+  padding: var(--expensica-gap-lg);
   border: 1px solid var(--expensica-border-primary);
-  box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px,
-              rgba(15, 15, 15, 0.05) 0px 2px 4px;
+  box-shadow: var(--expensica-shadow-panel-rest);
   display: flex;
   flex-direction: column;
-  transition: box-shadow 0.15s ease, transform 0.15s ease;
+  transition: box-shadow 0.15s ease;
 }
 
 .expensica-chart-container:hover {
-  transform: translateY(-2px);
-  box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px,
-              rgba(15, 15, 15, 0.08) 0px 4px 6px;
+  transform: none;
+  box-shadow: var(--expensica-shadow-panel-hover);
 }
 
 .expensica-chart-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--expensica-title-gap);
+  margin-bottom: var(--expensica-gap-md);
 }
 
 .expensica-chart-title {
@@ -506,7 +488,7 @@
 
 .expensica-chart-options {
   display: flex;
-  gap: var(--expensica-control-gap);
+  gap: var(--expensica-gap-md);
 }
 
 .expensica-chart-option {
@@ -530,6 +512,71 @@
   font-weight: 500;
 }
 
+.expensica-chart-type-selector {
+  position: relative;
+}
+
+.expensica-chart-type-current {
+  appearance: none;
+}
+
+.expensica-chart-type-text {
+  display: inline-block;
+}
+
+.expensica-chart-type-icon {
+  display: inline-flex;
+}
+
+.expensica-chart-type-options {
+  left: 0;
+  right: auto;
+  background: var(--background-primary);
+  background-color: var(--background-primary);
+}
+
+.expensica-chart-type-option {
+  display: block;
+  width: 100%;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-normal);
+  text-align: left;
+}
+
+.expensica-chart-type-options button.expensica-chart-type-option,
+.expensica-chart-type-options button.shadcn-date-range-option {
+  box-shadow: none;
+  border: none;
+  background: transparent;
+  background-color: transparent;
+  color: var(--text-normal);
+}
+
+.expensica-chart-type-option:hover,
+.expensica-chart-type-option:focus-visible,
+.expensica-chart-type-option.is-active {
+  background: var(--background-modifier-hover);
+  background-color: var(--background-modifier-hover);
+  outline: none;
+}
+
+.expensica-chart-type-options button.expensica-chart-type-option:hover,
+.expensica-chart-type-options button.expensica-chart-type-option:focus-visible,
+.expensica-chart-type-options button.expensica-chart-type-option.is-active,
+.expensica-chart-type-options button.shadcn-date-range-option:hover,
+.expensica-chart-type-options button.shadcn-date-range-option:focus-visible,
+.expensica-chart-type-options button.shadcn-date-range-option.shadcn-date-range-option-active {
+  background: var(--background-modifier-hover);
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.expensica-chart-type-option.is-active {
+  font-weight: 600;
+}
+
 .expensica-canvas-container {
   aspect-ratio: var(--expensica-chart-aspect-ratio);
   flex: 0 1 auto;
@@ -542,6 +589,7 @@
 }
 
 .expensica-canvas-container canvas {
+  display: block;
   width: 100%;
   height: 100%;
   min-width: var(--expensica-panel-min-width, 75%);
@@ -590,7 +638,7 @@
   align-items: center;
   flex-direction: column;
   flex-wrap: nowrap;
-  gap: var(--expensica-panel-gap);
+  gap: var(--expensica-gap-sm);
 }
 
 .expensica-category-chart-layout .expensica-canvas-container {
@@ -608,9 +656,54 @@
   height: 100%;
 }
 
+.expensica-mini-donut-canvas-container {
+  --expensica-mini-donut-min-size: 128px;
+  --expensica-mini-donut-max-size: 160px;
+  --expensica-mini-donut-size: var(--expensica-mini-donut-max-size);
+
+  align-items: center;
+  align-self: center;
+  box-sizing: border-box;
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: center;
+  margin: 0;
+  min-height: var(--expensica-mini-donut-min-size);
+  min-width: var(--expensica-mini-donut-min-size);
+  overflow: visible;
+  padding: 0;
+  position: relative;
+  width: min(100%, var(--expensica-mini-donut-size));
+}
+
+.expensica-mini-donut-canvas-container .mini-donut__content {
+  display: block;
+  flex: 0 0 auto;
+  aspect-ratio: 1 / 1;
+  height: var(--expensica-mini-donut-size);
+  max-height: var(--expensica-mini-donut-max-size);
+  max-width: var(--expensica-mini-donut-max-size);
+  min-height: var(--expensica-mini-donut-min-size);
+  min-width: var(--expensica-mini-donut-min-size);
+  width: var(--expensica-mini-donut-size);
+}
+
 .expensica-category-chart-layout.is-narrow .expensica-canvas-container {
   height: auto;
   max-height: var(--expensica-doughnut-chart-height);
+}
+
+.expensica-category-chart-layout.is-narrow .expensica-mini-donut-canvas-container {
+  --expensica-mini-donut-size: var(--expensica-mini-donut-min-size);
+}
+
+.expensica-chart-html-legend {
+  display: flex;
+  flex: 0 0 130px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--expensica-gap-sm);
+  max-width: 130px;
 }
 
 .expensica-category-chip {
@@ -618,7 +711,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
-  gap: var(--expensica-control-gap);
+  gap: var(--expensica-gap-md);
   min-width: 0;
   max-width: 100%;
   min-height: 0;
@@ -687,7 +780,7 @@ button.expensica-category-chip {
   flex: 0 0 130px;
   flex-direction: column;
   align-items: stretch;
-  gap: var(--expensica-list-gap);
+  gap: var(--expensica-gap-sm);
   max-width: 130px;
 }
 
@@ -709,7 +802,7 @@ button.expensica-category-chip {
   line-height: 1.1;
   display: inline-flex;
   align-items: center;
-  gap: var(--expensica-control-gap);
+  gap: var(--expensica-gap-md);
   min-width: 0;
   width: 100%;
   max-width: 100%;
@@ -775,9 +868,9 @@ button.expensica-category-chip {
   grid-template-columns: repeat(var(--expensica-category-chip-columns, 3), minmax(0, 130px));
   justify-content: center;
   justify-items: stretch;
-  column-gap: var(--expensica-control-gap);
-  row-gap: var(--expensica-list-gap);
-  margin-top: var(--expensica-title-gap);
+  column-gap: var(--expensica-gap-md);
+  row-gap: var(--expensica-gap-sm);
+  margin-top: var(--expensica-gap-md);
   width: 100%;
   max-width: 100%;
 }
@@ -792,8 +885,8 @@ button.expensica-category-chip {
   grid-template-columns: repeat(3, minmax(0, 130px));
   justify-content: center;
   justify-items: stretch;
-  column-gap: var(--expensica-control-gap);
-  margin-top: var(--expensica-title-gap);
+  column-gap: var(--expensica-gap-md);
+  margin-top: var(--expensica-gap-md);
   max-width: 100%;
   width: 100%;
   flex: none;
@@ -802,7 +895,7 @@ button.expensica-category-chip {
 .expensica-income-expense-legend .expensica-chart-legend-column {
   display: flex;
   flex-direction: column;
-  gap: var(--expensica-list-gap);
+  gap: var(--expensica-gap-sm);
 }
 
 .expensica-income-expense-legend .expensica-chart-legend-item {
@@ -841,19 +934,53 @@ button.expensica-category-chip {
   opacity: 0.6;
 }
 
+.expensica-donut-category-legend .expensica-category-chip {
+  width: 100%;
+  min-width: 0;
+  max-width: 130px;
+  border-color: var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+}
+
+.expensica-donut-category-legend .expensica-category-chip:hover,
+.expensica-donut-category-legend .expensica-category-chip:focus,
+.expensica-donut-category-legend .expensica-category-chip:focus-visible,
+.expensica-donut-category-legend .expensica-category-chip:active {
+  border-color: var(--background-modifier-border-hover, var(--background-modifier-border));
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.expensica-donut-category-legend .expensica-category-chip.is-hidden {
+  border-color: var(--background-modifier-border);
+  background: var(--background-modifier-border);
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+.expensica-donut-category-legend .expensica-category-chip.is-hidden .expensica-category-chip-swatch {
+  background-color: var(--text-muted) !important;
+  opacity: 0.6;
+}
+
+.expensica-donut-legend-emoji {
+  flex: 0 0 auto;
+}
+
 /* Transactions Section */
 .expensica-transactions {
     background-color: var(--expensica-bg-primary);
     border-radius: var(--expensica-radius-lg);
     display: flex;
     flex-direction: column;
-    gap: var(--expensica-list-gap);
+    gap: var(--expensica-gap-sm);
     overflow: hidden;
 }
 
 .expensica-transaction-group-title {
     margin: 0;
-    padding-inline: var(--expensica-panel-gap);
+    padding-inline: var(--expensica-gap-lg);
     line-height: var(--expensica-line-height-tight);
     letter-spacing: 0;
 }
@@ -861,7 +988,7 @@ button.expensica-category-chip {
 .expensica-transaction-group-title-month {
     margin-top: var(--expensica-gap-xl);
     padding-top: var(--expensica-gap-md);
-    color: var(--expensica-text-primary);
+    color: var(--text-muted);
     font-size: var(--expensica-font-size-xl);
     font-weight: 650;
 }
@@ -893,19 +1020,19 @@ button.expensica-category-chip {
 }
 
 .expensica-transaction {
-    --expensica-transaction-icon-size: 48px;
-    --expensica-transaction-amount-column-width: 128px;
+    --expensica-transaction-icon-size: 18px;
+    --expensica-transaction-amount-column-width: 64px;
     background-color: var(--expensica-bg-primary);
-    padding: var(--expensica-spacing);
+    padding-block: var(--expensica-gap-md);
+    padding-inline: var(--expensica-gap-md);
     display: grid;
     grid-template-columns: var(--expensica-transaction-icon-size) minmax(0, 1fr) minmax(var(--expensica-transaction-amount-column-width), max-content);
     align-items: center;
-    gap: var(--expensica-card-gap);
+    gap: var(--expensica-gap-md);
     container-type: inline-size;
     border: 1px solid var(--expensica-border-secondary);
     border-radius: var(--expensica-radius);
-    box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px,
-                rgba(15, 15, 15, 0.05) 0px 2px 4px;
+    box-shadow: var(--expensica-shadow-panel-rest);
     transition: box-shadow 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
 }
 
@@ -913,10 +1040,14 @@ button.expensica-category-chip {
   border-bottom: 1px solid var(--expensica-border-secondary);
 }
 
+.expensica-transaction.is-selected {
+  border-color: var(--interactive-accent);
+  background-color: var(--background-modifier-hover);
+}
+
 .expensica-transaction:hover {
   background-color: var(--expensica-bg-secondary);
-  box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px,
-              rgba(15, 15, 15, 0.08) 0px 4px 6px;
+  box-shadow: var(--expensica-shadow-panel-hover);
 }
 
 .expensica-transaction-interactive {
@@ -935,39 +1066,53 @@ button.expensica-category-chip {
   outline-offset: var(--size-2-1, 2px);
 }
 
-.expensica-transaction-icon {
+.expensica-transaction-selector {
   grid-column: 1;
-  margin-right: 0;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   width: var(--expensica-transaction-icon-size);
   height: var(--expensica-transaction-icon-size);
-  border-radius: var(--expensica-radius);
-  background-color: var(--expensica-bg-secondary);
-  font-size: var(--expensica-font-size-xl);
+  min-width: var(--expensica-transaction-icon-size);
+  min-height: var(--expensica-transaction-icon-size);
+  padding: 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--expensica-radius-sm);
+  background: transparent;
+  color: var(--text-faint);
+  font-size: var(--expensica-font-size-sm);
+  line-height: 1;
+  box-shadow: none;
+  cursor: pointer;
   transition: var(--expensica-transition);
 }
 
-.expensica-transaction:hover .expensica-transaction-icon {
-  transform: scale(1.05);
+.expensica-transaction-selector svg {
+  opacity: 0;
 }
 
-.expensica-transaction-icon-editable {
-  cursor: pointer;
+.expensica-transaction-selector:hover,
+.expensica-transaction-selector:focus-visible {
+  border-color: var(--background-modifier-border-hover);
+  color: var(--text-accent);
+  background: var(--background-modifier-hover);
+  outline: none;
+  transform: none;
 }
 
-.expensica-transaction-icon-editable:focus-visible {
-  outline: var(--size-2-1, 2px) solid var(--interactive-accent);
-  outline-offset: var(--size-2-1, 2px);
+.expensica-transaction-selector.is-selected {
+  border-color: var(--interactive-accent);
+  background: var(--background-modifier-hover);
+  color: var(--text-accent);
 }
 
-.expensica-income-icon {
-  background-color: var(--expensica-success-light);
+.expensica-transaction-selector.is-selected svg {
+  opacity: 1;
 }
 
-.expensica-expense-icon {
-  background-color: var(--expensica-error-light);
+.expensica-transaction-selector.is-disabled {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .expensica-transaction-details {
@@ -991,11 +1136,95 @@ button.expensica-category-chip {
 
 .expensica-transaction-meta {
   display: grid;
-  grid-template-columns: minmax(0, max(0px, calc(50cqw - var(--expensica-transaction-icon-size) - var(--expensica-card-gap)))) minmax(0, max-content);
+  grid-template-columns: minmax(0, max(0px, calc(50cqw - var(--expensica-gap-sm)))) minmax(0, max-content);
   align-items: center;
-  column-gap: var(--expensica-meta-gap);
-  row-gap: var(--expensica-meta-gap);
+  column-gap: var(--expensica-gap-sm);
+  row-gap: var(--expensica-gap-sm);
   width: 100%;
+}
+
+.expensica-transaction-bulk-footer {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--expensica-gap-lg) + var(--expensica-mobile-footer-safe-space) + env(safe-area-inset-bottom));
+  z-index: calc(var(--expensica-z-modal) + 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--expensica-gap-md);
+  width: fit-content;
+  max-width: calc(100vw - (var(--expensica-gap-lg) * 2));
+  padding: var(--expensica-gap-md);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--expensica-radius);
+  background: transparent;
+  box-shadow: var(--shadow-s);
+  overflow: hidden;
+  transform: translate(-50%, 100%);
+}
+
+.expensica-transaction-bulk-footer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background: rgba(28, 28, 32, 0.72);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  backdrop-filter: blur(24px) saturate(140%);
+  pointer-events: none;
+}
+
+.expensica-transaction-bulk-footer > * {
+  position: relative;
+  z-index: 1;
+}
+
+.expensica-transaction-bulk-category-btn,
+.expensica-transaction-bulk-clear {
+  background: var(--background-secondary);
+  background-color: var(--background-secondary);
+}
+
+.expensica-transaction-bulk-count {
+  margin-right: auto;
+  color: var(--text-muted);
+  font-size: var(--expensica-font-size-sm);
+  white-space: nowrap;
+}
+
+.expensica-transaction-bulk-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--expensica-radius-sm);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  box-shadow: var(--expensica-shadow-control);
+  cursor: pointer;
+  transition: var(--expensica-transition);
+}
+
+.expensica-transaction-bulk-clear:hover,
+.expensica-transaction-bulk-clear:focus-visible {
+  border-color: var(--background-modifier-border-hover);
+  background: var(--background-modifier-hover);
+  outline: none;
+}
+
+.expensica-transaction-bulk-category-btn:hover,
+.expensica-transaction-bulk-category-btn:focus-visible {
+  background: var(--background-modifier-hover);
+  background-color: var(--background-modifier-hover);
+}
+
+.is-mobile .expensica-transaction-bulk-footer {
+  bottom: calc(var(--expensica-gap-md) + var(--expensica-mobile-footer-safe-space) + 32px + env(safe-area-inset-bottom));
 }
 
 .expensica-transaction-date {
@@ -1008,6 +1237,170 @@ button.expensica-category-chip {
 .expensica-transaction-category {
   grid-column: 2;
   justify-self: start;
+}
+
+.expensica-category-quick-menu {
+  position: fixed;
+  min-width: 200px;
+  max-width: 230px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--expensica-radius-sm);
+  background: var(--background-primary);
+  background-color: var(--background-primary);
+  box-shadow: var(--expensica-shadow-dropdown);
+  z-index: calc(var(--expensica-z-modal) + 2);
+  overflow: hidden;
+}
+
+.expensica-category-quick-menu-section + .expensica-category-quick-menu-section {
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.expensica-category-quick-menu-search {
+  padding: var(--expensica-gap-sm);
+  background-color: var(--background-primary);
+}
+
+.expensica-category-quick-menu-search-input,
+.expensica-category-quick-menu .expensica-category-quick-menu-search-input.expensica-form-input {
+  width: 100%;
+  background-color: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--expensica-radius-sm);
+  box-shadow: none;
+  color: var(--text-normal);
+  font-size: var(--expensica-font-size);
+  line-height: var(--expensica-line-height-tight);
+  outline: none;
+  transition: var(--expensica-transition);
+}
+
+.expensica-category-quick-menu-search-input:hover,
+.expensica-category-quick-menu .expensica-category-quick-menu-search-input.expensica-form-input:hover {
+  border-color: var(--interactive-accent);
+  background-color: var(--background-primary-alt);
+  box-shadow: none;
+}
+
+.expensica-category-quick-menu-search-input:focus,
+.expensica-category-quick-menu-search-input:focus-visible,
+.expensica-category-quick-menu .expensica-category-quick-menu-search-input.expensica-form-input:focus,
+.expensica-category-quick-menu .expensica-category-quick-menu-search-input.expensica-form-input:focus-visible {
+  border-color: var(--interactive-accent);
+  background-color: var(--background-primary);
+  box-shadow: var(--expensica-shadow-focus);
+  outline: none;
+}
+
+.expensica-category-quick-menu-list {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.expensica-category-quick-menu button.expensica-category-quick-menu-item {
+  all: unset;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--expensica-gap-md);
+  min-height: var(--expensica-gap-2xl);
+  width: 100%;
+  padding: var(--expensica-gap-md);
+  border: 0;
+  border-radius: 0;
+  background: var(--background-primary) !important;
+  background-color: var(--background-primary) !important;
+  background-image: none !important;
+  color: var(--text-normal);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  filter: none !important;
+  font-size: var(--expensica-font-size);
+  font-weight: 400;
+  transition: background-color 0.1s;
+}
+
+.expensica-category-quick-menu button.expensica-category-quick-menu-item:hover,
+.expensica-category-quick-menu button.expensica-category-quick-menu-item:focus-visible {
+  background: var(--background-modifier-hover) !important;
+  background-color: var(--background-modifier-hover) !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  outline: none;
+}
+
+.expensica-category-quick-menu button.expensica-category-quick-menu-item.is-selected {
+  font-weight: 600;
+  background: var(--background-modifier-hover) !important;
+  background-color: var(--background-modifier-hover) !important;
+}
+
+.expensica-category-quick-menu-item-emoji {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--expensica-font-size);
+}
+
+.expensica-category-quick-menu-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.expensica-category-quick-menu-empty {
+  padding: var(--expensica-gap-md);
+  color: var(--text-muted);
+}
+
+.expensica-category-quick-menu button.expensica-category-quick-menu-new-button {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--expensica-gap-md);
+  width: 100%;
+  min-height: var(--expensica-gap-xl);
+  padding: var(--expensica-gap-md);
+  border: 0;
+  border-radius: 0;
+  background: var(--background-primary) !important;
+  background-color: var(--background-primary) !important;
+  background-image: none !important;
+  color: var(--text-normal);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  filter: none !important;
+  font-size: var(--expensica-font-size);
+  font-weight: 400;
+  transition: background-color 0.1s;
+}
+
+.expensica-category-quick-menu button.expensica-category-quick-menu-new-button:hover,
+.expensica-category-quick-menu button.expensica-category-quick-menu-new-button:focus-visible {
+  background: var(--background-modifier-hover) !important;
+  background-color: var(--background-modifier-hover) !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  outline: none;
+}
+
+.expensica-category-quick-menu-new-icon {
+  display: inline-flex;
+  align-items: left;
+  justify-content: left;
+  color: var(--text-faint);
+}
+
+.expensica-category-quick-menu-new-label {
+  color: var(--text-normal);
 }
 
 .expensica-transaction-amount {
@@ -1028,10 +1421,6 @@ button.expensica-category-chip {
   font-style: italic;
   font-weight: 500;
   white-space: nowrap;
-}
-
-.expensica-transaction:hover .expensica-transaction-amount {
-  transform: scale(1.05);
 }
 
 /* Empty state */
@@ -1180,7 +1569,7 @@ button.expensica-category-chip {
   align-items: center;
   justify-content: space-between;
   transition: var(--expensica-transition);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  box-shadow: var(--expensica-shadow-control);
 }
 
 .expensica-select-display:hover {
@@ -1212,11 +1601,16 @@ button.expensica-category-chip {
   transform: none;
 }
 
+.expensica-modal .expensica-category-name-field:hover {
+  border-color: var(--background-modifier-border);
+  background-color: var(--background-primary);
+}
+
 .expensica-modal .expensica-edit-field:focus,
 .expensica-modal .expensica-edit-field:focus-within {
   border-color: var(--interactive-accent);
   background-color: var(--background-primary);
-  box-shadow: 0 0 0 var(--size-2-1, 2px) rgba(var(--interactive-accent-rgb), 0.2);
+  box-shadow: var(--expensica-shadow-focus);
   outline: none;
 }
 
@@ -1342,7 +1736,7 @@ button.expensica-category-chip {
 .expensica-import-input:focus,
 .emoji-input:focus {
   border-color: var(--interactive-accent);
-  box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.2);
+  box-shadow: var(--expensica-shadow-focus);
   outline: none;
 }
 
@@ -1359,7 +1753,7 @@ button.expensica-category-chip {
 
 .expensica-form-row {
   display: flex;
-  gap: var(--expensica-control-gap);
+  gap: var(--expensica-gap-md);
 }
 
 .expensica-form-row .expensica-form-group {
@@ -1716,13 +2110,13 @@ to { opacity: 1; transform: translateY(0); }
 
 @media screen and (max-width: 768px) {
   .expensica-dashboard {
-    padding: var(--expensica-spacing);
+    padding: var(--expensica-gap-lg);
   }
   
   .expensica-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: var(--expensica-spacing);
+    gap: var(--expensica-gap-lg);
   }
   
   .expensica-actions {
@@ -1735,7 +2129,7 @@ to { opacity: 1; transform: translateY(0); }
   }
   
   .expensica-transaction {
-    --expensica-transaction-icon-size: 40px;
+    --expensica-transaction-icon-size: 18px;
     --expensica-transaction-amount-column-width: 88px;
     display: grid;
     grid-template-columns: var(--expensica-transaction-icon-size) minmax(0, 1fr) minmax(var(--expensica-transaction-amount-column-width), max-content);
@@ -1763,14 +2157,14 @@ to { opacity: 1; transform: translateY(0); }
 .expensica-calendar-container {
   background-color: var(--expensica-bg-primary);
   border-radius: var(--expensica-radius-lg);
-  padding: var(--expensica-calendar-panel-spacing);
+  padding: var(--expensica-gap-lg);
   border: 1px solid var(--expensica-border-primary);
   margin-bottom: 0;
 }
 
 .expensica-calendar-flex-container {
   display: flex;
-  gap: var(--expensica-calendar-panel-gap);
+  gap: var(--expensica-gap-lg);
   align-items: flex-start;
   flex-wrap: wrap;
   margin-bottom: 0;
@@ -2369,26 +2763,26 @@ to {
 .expensica-calendar-container {
   background-color: var(--expensica-bg-primary);
   border-radius: var(--expensica-radius-lg);
-  padding: var(--expensica-calendar-panel-spacing);
+  padding: var(--expensica-gap-lg);
   border: 1px solid var(--expensica-border-primary);
-  margin-bottom: var(--expensica-spacing-2xl);
+  margin-bottom: var(--expensica-gap-3xl);
 }
 
 /* Calendar Grid */
 .expensica-calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: var(--expensica-spacing-sm);
-  margin-bottom: var(--expensica-spacing-lg);
+  gap: var(--expensica-gap-md);
+  margin-bottom: var(--expensica-gap-xl);
 }
 
 /* Calendar Header */
 .expensica-calendar-header {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: var(--expensica-spacing-sm);
-  margin-bottom: var(--expensica-spacing);
-  padding-bottom: var(--expensica-spacing);
+  gap: var(--expensica-gap-md);
+  margin-bottom: var(--expensica-gap-lg);
+  padding-bottom: var(--expensica-gap-lg);
   border-bottom: 1px solid var(--expensica-border-secondary);
 }
 
@@ -2397,7 +2791,7 @@ to {
   font-size: var(--expensica-font-size);
   color: var(--expensica-text-secondary);
   font-weight: 500;
-  padding: var(--expensica-spacing-xs);
+  padding: var(--expensica-gap-sm);
 }
 
 /* Calendar Days */
@@ -2476,7 +2870,7 @@ to {
   .expensica-calendar-day {
     min-width: 42px;
     min-height: 42px;
-    padding: var(--expensica-spacing-xs);
+    padding: var(--expensica-gap-sm);
   }
 
   .expensica-calendar-day-number {
@@ -2492,8 +2886,8 @@ to {
 .expensica-calendar-details {
   background-color: var(--expensica-bg-primary);
   border-radius: var(--expensica-radius-lg);
-  padding: var(--expensica-spacing-lg);
-  margin-top: var(--expensica-spacing-lg);
+  padding: var(--expensica-gap-xl);
+  margin-top: var(--expensica-gap-xl);
   border: 1px solid var(--expensica-border-primary);
   box-shadow: var(--expensica-shadow-sm);
 }
@@ -2502,8 +2896,8 @@ to {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--expensica-spacing);
-  padding-bottom: var(--expensica-spacing);
+  margin-bottom: var(--expensica-gap-lg);
+  padding-bottom: var(--expensica-gap-lg);
   border-bottom: 1px solid var(--expensica-border-secondary);
 }
 
@@ -2524,14 +2918,14 @@ to {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: var(--expensica-spacing-xl);
+  padding: var(--expensica-gap-2xl);
   text-align: center;
   color: var(--expensica-text-secondary);
 }
 
 .expensica-calendar-details-empty-icon {
   font-size: 32px;
-  margin-bottom: var(--expensica-spacing);
+  margin-bottom: var(--expensica-gap-lg);
 }
 
 .expensica-calendar-details-empty-text {
@@ -2541,16 +2935,16 @@ to {
 
 /* Category Breakdown */
 .expensica-calendar-categories {
-  margin-top: var(--expensica-spacing-lg);
+  margin-top: var(--expensica-gap-xl);
 }
 
 .expensica-calendar-category {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--expensica-spacing);
+  padding: var(--expensica-gap-lg);
   border-radius: var(--expensica-radius);
-  margin-bottom: var(--expensica-spacing-xs);
+  margin-bottom: var(--expensica-gap-sm);
   background-color: var(--expensica-bg-secondary);
   transition: var(--expensica-transition);
 }
@@ -2563,7 +2957,7 @@ to {
 .expensica-calendar-category-name {
   display: flex;
   align-items: center;
-  gap: var(--expensica-spacing-xs);
+  gap: var(--expensica-gap-sm);
   font-weight: 500;
   color: var(--expensica-text-primary);
 }
@@ -2577,16 +2971,16 @@ to {
 .expensica-calendar-legend {
   display: flex;
   align-items: center;
-  gap: var(--expensica-spacing);
-  margin-top: var(--expensica-spacing-lg);
-  padding-top: var(--expensica-spacing);
+  gap: var(--expensica-gap-lg);
+  margin-top: var(--expensica-gap-xl);
+  padding-top: var(--expensica-gap-lg);
   border-top: 1px solid var(--expensica-border-secondary);
 }
 
 .expensica-calendar-legend-item {
   display: flex;
   align-items: center;
-  gap: var(--expensica-spacing-xs);
+  gap: var(--expensica-gap-sm);
   font-size: var(--expensica-font-size-sm);
   color: var(--expensica-text-secondary);
 }
@@ -2599,19 +2993,13 @@ to {
 
 /* View All Transactions button */
 .expensica-view-all-btn {
-    background-color: var(--background-secondary);
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 400;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    background: var(--background-primary);
+    background-color: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    color: var(--text-normal);
+    font-size: var(--expensica-font-size-sm);
+    font-weight: 500;
     gap: 4px;
-    padding: 6px 12px;
-    border-radius: 4px;
-    transition: background-color 0.2s ease-in-out;
     margin-left: auto;
 }
 
@@ -2620,11 +3008,13 @@ to {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: var(--expensica-title-gap);
+    margin-bottom: var(--expensica-gap-md);
 }
 
 .expensica-view-all-btn:hover {
+    background: var(--background-modifier-hover);
     background-color: var(--background-modifier-hover);
+    border-color: var(--background-modifier-border-hover);
 }
 
 .expensica-view-all-btn svg {
@@ -2634,7 +3024,7 @@ to {
 .expensica-transactions-footer {
     display: flex;
     justify-content: center;
-    margin-top: var(--expensica-gap-section);
+    margin-top: var(--expensica-gap-2xl);
 }
 
 .expensica-view-all-footer-btn {
@@ -2644,42 +3034,23 @@ to {
 
 /* Transactions View Styles */
 .expensica-container {
-    padding: var(--expensica-gap-page);
+    padding: var(--expensica-gap-2xl);
     max-width: 100%;
     display: flex;
     flex-direction: column;
-    gap: var(--expensica-section-gap);
+    gap: var(--expensica-gap-2xl);
     height: auto;
     overflow: visible;
 }
 
 .is-mobile .expensica-dashboard {
-  --expensica-panel-gap: var(--size-4-3, 12px);
-  --expensica-section-gap: var(--size-4-4, 16px);
-  --expensica-card-gap: var(--size-4-2, 8px);
-  --expensica-list-gap: var(--size-2-2, 4px);
-  --expensica-control-gap: var(--size-2-2, 4px);
-  --expensica-title-gap: var(--size-4-2, 8px);
-  --expensica-gap-page: var(--size-4-4, 16px);
-  --expensica-chart-spacing: var(--expensica-panel-gap);
-  --expensica-calendar-panel-spacing: var(--size-4-2, 8px);
-  --expensica-calendar-panel-gap: var(--expensica-panel-gap);
-  --expensica-header-action-gap: var(--expensica-control-gap);
-  padding-bottom: calc(var(--expensica-gap-page) + var(--expensica-mobile-footer-safe-space) + env(safe-area-inset-bottom));
+  padding-bottom: calc(var(--expensica-gap-2xl) + var(--expensica-mobile-footer-safe-space) + env(safe-area-inset-bottom));
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
 }
 
 .is-mobile .expensica-container {
-  --expensica-panel-gap: var(--size-4-3, 12px);
-  --expensica-section-gap: var(--size-4-4, 16px);
-  --expensica-card-gap: var(--size-4-2, 8px);
-  --expensica-list-gap: var(--size-2-2, 4px);
-  --expensica-control-gap: var(--size-2-2, 4px);
-  --expensica-title-gap: var(--size-4-2, 8px);
-  --expensica-gap-page: var(--size-4-4, 16px);
-  --expensica-header-action-gap: var(--expensica-control-gap);
 }
 
 .is-mobile .expensica-dashboard,
@@ -2692,7 +3063,7 @@ to {
 .is-mobile .expensica-container {
   padding-left: 0;
   padding-right: 0;
-  padding-bottom: calc(var(--expensica-gap-page) + var(--expensica-mobile-footer-safe-space) + env(safe-area-inset-bottom));
+  padding-bottom: calc(var(--expensica-gap-2xl) + var(--expensica-mobile-footer-safe-space) + env(safe-area-inset-bottom));
 }
 
 .is-mobile .expensica-section,
@@ -2737,11 +3108,11 @@ to {
 }
 
 .is-mobile .expensica-card {
-  padding: 12px;
+  padding: var(--expensica-gap-md);
 }
 
 .is-mobile .expensica-card-title {
-  margin-bottom: 4px;
+  margin-block-end: var(--expensica-gap-sm);
 }
 
 .is-mobile .expensica-card-value {
@@ -2758,8 +3129,8 @@ to {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 112px));
   justify-content: center;
-  column-gap: var(--expensica-control-gap);
-  margin-top: var(--expensica-title-gap);
+  column-gap: var(--expensica-gap-md);
+  margin-top: var(--expensica-gap-md);
   max-width: 100%;
   max-height: none;
   overflow-y: visible;
@@ -2771,7 +3142,7 @@ to {
 
 .is-mobile .expensica-income-expense-legend {
   grid-template-columns: repeat(3, minmax(0, 130px));
-  column-gap: var(--expensica-control-gap);
+  column-gap: var(--expensica-gap-md);
 }
 
 .is-mobile .expensica-income-expense-legend .expensica-category-chip {
@@ -2783,7 +3154,7 @@ to {
 .is-mobile .expensica-chart-legend-column {
   display: flex;
   flex-direction: column;
-  gap: var(--expensica-list-gap);
+  gap: var(--expensica-gap-sm);
 }
 
 .is-mobile .expensica-chart-legend-item {
@@ -2813,8 +3184,8 @@ to {
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
-    gap: var(--expensica-header-action-gap);
-    margin-bottom: var(--expensica-title-gap);
+    gap: var(--expensica-gap-md);
+    margin-bottom: var(--expensica-gap-md);
 }
 
 .expensica-title-section {
@@ -2829,7 +3200,7 @@ to {
 
 .expensica-stats-section {
     display: flex;
-    gap: var(--expensica-card-gap);
+    gap: var(--expensica-gap-lg);
 }
 
 .expensica-stat {
@@ -2848,49 +3219,7 @@ to {
 
 .expensica-actions-section {
     display: flex;
-    gap: var(--expensica-control-gap);
-}
-
-.expensica-transactions-view-header {
-    align-items: flex-start;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: var(--expensica-radius);
-    flex-direction: column;
-    gap: var(--expensica-header-action-gap);
-    padding: var(--expensica-spacing);
-}
-
-.expensica-transactions-view-header .expensica-title-section {
-    align-items: flex-start;
-    display: flex;
-    flex-direction: column;
-    gap: var(--expensica-gap-sm);
-    margin-bottom: 0;
-    width: 100%;
-}
-
-.expensica-transactions-view-header .expensica-transactions-header {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    flex-wrap: wrap;
-    gap: var(--expensica-list-gap);
-    margin-bottom: 0;
-    text-align: left;
-    width: 100%;
-}
-
-.expensica-transactions-view-header .expensica-transaction-count {
-    margin-left: 0;
-}
-
-.expensica-transactions-view-header .expensica-transaction-total-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--expensica-control-gap);
-    justify-content: flex-start;
-    margin-top: var(--expensica-gap-sm);
-    width: 100%;
+    gap: var(--expensica-gap-md);
 }
 
 .expensica-transaction-total-spent {
@@ -2901,14 +3230,10 @@ to {
     color: var(--expensica-success);
 }
 
-.expensica-transactions-view-header .shadcn-actions {
-    width: 100%;
-}
-
 .shadcn-header {
     align-items: flex-start;
     flex-direction: column;
-    gap: var(--expensica-header-action-gap);
+    gap: var(--expensica-gap-md);
 }
 
 .shadcn-header .shadcn-title-section,
@@ -2921,9 +3246,9 @@ to {
 /* Filter Section */
 .expensica-filter-section {
     background-color: var(--background-primary);
-    padding: var(--expensica-panel-gap);
+    padding: var(--expensica-gap-lg);
     border-radius: var(--expensica-radius);
-    margin-bottom: var(--expensica-section-gap);
+    margin-bottom: var(--expensica-gap-2xl);
     position: relative;
     border: 1px solid var(--expensica-border-primary);
     box-shadow: var(--expensica-shadow-sm);
@@ -2933,15 +3258,15 @@ to {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: var(--expensica-title-gap);
-    padding-bottom: var(--expensica-title-gap);
+    margin-bottom: var(--expensica-gap-md);
+    padding-bottom: var(--expensica-gap-md);
     border-bottom: 1px solid var(--expensica-border-secondary);
 }
 
 .expensica-section-title-container {
     display: flex;
     align-items: center;
-    gap: var(--expensica-title-gap);
+    gap: var(--expensica-gap-md);
 }
 
 .expensica-section-title-icon {
@@ -2974,23 +3299,23 @@ to {
 .expensica-filter-form {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: var(--expensica-panel-gap);
+    gap: var(--expensica-gap-lg);
 }
 
 .expensica-filter-row-container {
     grid-column: 1 / -1;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: var(--expensica-panel-gap);
+    gap: var(--expensica-gap-lg);
 }
 
 .expensica-filter-card {
     background-color: var(--background-secondary);
     border-radius: var(--expensica-radius);
-    padding: var(--expensica-panel-gap);
+    padding: var(--expensica-gap-lg);
     display: flex;
     flex-direction: column;
-    gap: var(--expensica-title-gap);
+    gap: var(--expensica-gap-md);
     border: 1px solid var(--expensica-border-secondary);
     transition: var(--expensica-transition);
 }
@@ -3010,19 +3335,19 @@ to {
 .expensica-filter-group {
     display: flex;
     flex-direction: column;
-    gap: var(--expensica-title-gap);
+    gap: var(--expensica-gap-md);
 }
 
 .expensica-filter-row {
     display: flex;
-    gap: var(--expensica-panel-gap);
+    gap: var(--expensica-gap-lg);
 }
 
 .expensica-filter-col {
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: var(--expensica-control-gap);
+    gap: var(--expensica-gap-md);
 }
 
 .expensica-field-label {
@@ -3271,14 +3596,14 @@ to {
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
-    gap: var(--expensica-control-gap);
-    padding: var(--expensica-panel-gap);
-    margin-top: var(--expensica-title-gap);
+    gap: var(--expensica-gap-md);
+    padding: var(--expensica-gap-lg);
+    margin-top: var(--expensica-gap-md);
     border-top: 1px solid var(--background-modifier-border);
 }
 
 .expensica-pagination-top {
-    margin-bottom: var(--expensica-title-gap);
+    margin-bottom: var(--expensica-gap-md);
     border-top: none;
     border-bottom: 1px solid var(--background-modifier-border);
 }
@@ -3286,41 +3611,45 @@ to {
 .expensica-pagination-nav {
     display: flex;
     align-items: center;
-    gap: var(--expensica-control-gap);
+    gap: var(--expensica-gap-md);
     flex-wrap: wrap;
 }
 
 .expensica-pagination-btn {
-    padding: 6px 12px;
     min-width: 36px;
     border: 1px solid var(--background-modifier-border);
     background: var(--background-primary);
+    background-color: var(--background-primary);
     color: var(--text-normal);
     border-radius: var(--expensica-radius-sm);
-    cursor: pointer;
     font-size: var(--expensica-font-size-sm);
-    transition: var(--expensica-transition);
 }
 
 .expensica-pagination-btn.active {
-    background: var(--interactive-accent);
-    border-color: var(--interactive-accent);
-    color: var(--text-on-accent);
+    background: var(--background-modifier-hover);
+    background-color: var(--background-modifier-hover);
+    border-color: var(--background-modifier-border);
+    color: var(--text-normal);
 }
 
 .expensica-pagination-btn:hover:not(.disabled) {
     background: var(--background-modifier-hover);
+    background-color: var(--background-modifier-hover);
     border-color: var(--background-modifier-border-hover);
+    color: var(--text-normal);
 }
 
 .expensica-pagination-btn.disabled {
     opacity: 0.5;
     cursor: not-allowed;
     color: var(--text-muted);
+    background: var(--background-primary);
+    background-color: var(--background-primary);
+    border-color: var(--background-modifier-border);
 }
 
 .expensica-pagination-info {
-    padding: 0 var(--expensica-control-gap);
+    padding: 0 var(--expensica-gap-md);
     color: var(--text-muted);
     font-size: var(--expensica-font-size-sm);
 }
@@ -3328,7 +3657,7 @@ to {
 .expensica-items-per-page {
     display: flex;
     align-items: center;
-    gap: var(--expensica-control-gap);
+    gap: var(--expensica-gap-md);
     color: var(--text-muted);
     font-size: var(--expensica-font-size-sm);
 }
@@ -3381,15 +3710,15 @@ to {
     justify-content: flex-start;
     flex-wrap: wrap;
     overflow: visible;
-    padding: var(--expensica-control-gap) var(--expensica-gap-page);
-    row-gap: var(--expensica-section-gap);
+    padding: var(--expensica-gap-md) var(--expensica-gap-2xl);
+    row-gap: var(--expensica-gap-2xl);
 }
 
 .is-mobile .expensica-pagination-nav {
     justify-content: flex-start;
     flex: 0 0 auto;
     flex-wrap: nowrap;
-    gap: var(--expensica-control-gap);
+    gap: var(--expensica-gap-md);
 }
 
 .is-mobile .expensica-pagination-btn {
@@ -3427,11 +3756,6 @@ to {
     overflow: visible;
 }
 
-/* The app's leaf container should handle scrolling */
-.workspace-leaf-content[data-type="expensica-transactions-view"] {
-    overflow-y: auto;
-}
-
 .expensica-note {
   display: flex;
   align-items: center;
@@ -3452,7 +3776,7 @@ to {
 
 /* Confirmation Modal */
 .expensica-confirmation-modal {
-    padding: var(--expensica-spacing-xl);
+    padding: var(--expensica-gap-lg);
     max-width: 400px;
     margin: 0 auto;
 }
@@ -3461,19 +3785,19 @@ to {
     font-size: var(--expensica-font-size-lg);
     font-weight: 600;
     color: var(--expensica-text-primary);
-    margin-bottom: var(--expensica-spacing);
+    margin: 0 0 var(--expensica-gap-md);
 }
 
 .expensica-confirmation-modal .expensica-modal-message {
     font-size: var(--expensica-font-size);
     color: var(--expensica-text-secondary);
-    margin-bottom: var(--expensica-spacing-xl);
+    margin: 0 0 var(--expensica-gap-md);
     line-height: 1.5;
 }
 
 .expensica-confirmation-modal .expensica-modal-buttons {
     display: flex;
-    gap: var(--expensica-spacing);
+    gap: var(--expensica-gap-md);
     justify-content: flex-end;
 }
 
@@ -3727,15 +4051,15 @@ to {
 .expensica-links-container {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--expensica-card-gap);
+  gap: var(--expensica-gap-lg);
 }
 
 /* Enhanced category containers */
 .categories-container {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: var(--expensica-card-gap);
-  margin: var(--expensica-panel-gap) 0 var(--expensica-section-gap) 0;
+  gap: var(--expensica-gap-lg);
+  margin: var(--expensica-gap-lg) 0 var(--expensica-gap-2xl) 0;
 }
 
 .category-item {
@@ -3998,7 +4322,7 @@ to {
     display: flex;
     gap: 8px;
     padding: 0;
-    margin-bottom: var(--expensica-spacing-xl);
+    margin-bottom: var(--expensica-gap-sm);
     position: relative;
     border-bottom: 1px solid var(--background-modifier-border);
     transition: border-color 0.2s ease;
@@ -4053,13 +4377,13 @@ to {
 }
 
 .expensica-budget-summary {
-    margin-bottom: var(--expensica-section-gap);
+    margin-bottom: var(--expensica-gap-2xl);
 }
 
 .expensica-summary-flex {
     display: flex;
-    gap: var(--expensica-card-gap);
-    margin-bottom: var(--expensica-section-gap);
+    gap: var(--expensica-gap-lg);
+    margin-bottom: var(--expensica-gap-2xl);
     flex-wrap: wrap;
 }
 
@@ -4180,6 +4504,160 @@ to {
 
 .expensica-budget-list {
     margin-top: 30px;
+}
+
+.expensica-categories-tab {
+    padding: 0;
+    display: grid;
+    column-gap: var(--expensica-gap-lg);
+    row-gap: var(--expensica-gap-sm);
+}
+
+.expensica-categories-chart-container {
+    padding: 0;
+    position: relative;
+    width: 100%;
+    height: fit-content;
+    max-width: 100%;
+    overflow: visible;
+}
+
+.expensica-categories-chart-layout {
+    display: grid;
+    gap: 0;
+    justify-items: center;
+    width: 100%;
+    overflow: visible;
+}
+
+.expensica-categories-canvas-container {
+    overflow: visible;
+}
+
+.expensica-categories-list {
+    display: grid;
+    gap: var(--expensica-gap-sm);
+}
+
+.expensica-category-card {
+    --expensica-category-card-graph-width: 178px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(160px, var(--expensica-category-card-graph-width));
+    gap: var(--expensica-gap-lg);
+    align-items: center;
+    padding: var(--expensica-gap-md);
+    border: 1px solid var(--expensica-border-secondary);
+    border-radius: var(--expensica-radius);
+    background-color: var(--expensica-bg-primary);
+    font-size: var(--expensica-font-size-xs);
+    line-height: var(--expensica-line-height-tight);
+    box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px,
+                rgba(15, 15, 15, 0.05) 0px 2px 4px;
+    transition: all 0.2s ease;
+}
+
+.expensica-category-card:hover {
+    border-color: var(--background-modifier-border-hover);
+    background: var(--background-modifier-hover);
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.expensica-category-card.is-hovered {
+    border-color: var(--background-modifier-border-hover);
+    background: var(--background-modifier-hover);
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.expensica-category-card-interactive {
+    cursor: pointer;
+}
+
+.expensica-category-card-interactive:focus-visible {
+    outline: none;
+    border-color: var(--interactive-accent);
+    box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.2);
+}
+
+.expensica-category-card-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--expensica-gap-md);
+    min-width: 0;
+}
+
+.expensica-category-card-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    flex: 0 0 auto;
+}
+
+.expensica-category-card-emoji {
+    flex: 0 0 auto;
+    font-size: var(--expensica-font-size-xs);
+}
+
+.expensica-category-card-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+    font-size: var(--expensica-font-size-xs);
+}
+
+.expensica-category-card-graph {
+    display: grid;
+    grid-template-columns: 4.5ch minmax(0, 1fr) 11ch;
+    gap: var(--expensica-gap-sm);
+    align-items: center;
+}
+
+.expensica-category-card-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--background-modifier-border);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.expensica-category-card-fill {
+    height: 100%;
+    border-radius: 999px;
+}
+
+.expensica-category-card-percentage {
+    font-size: var(--expensica-font-size-xs);
+    font-weight: 400;
+    color: var(--text-muted);
+    white-space: nowrap;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.expensica-category-card-amount {
+    font-size: var(--expensica-font-size-xs);
+    font-weight: 400;
+    color: var(--text-normal);
+    white-space: nowrap;
+    text-align: right;
+    min-width: 11ch;
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 900px) {
+    .expensica-category-card {
+        --expensica-category-card-graph-width: 148px;
+        grid-template-columns: minmax(0, 1fr) minmax(132px, var(--expensica-category-card-graph-width));
+        gap: var(--expensica-gap-md);
+    }
+
+    .expensica-category-card-graph {
+        width: 100%;
+        max-width: none;
+    }
 }
 
 .expensica-budget-list-table {
@@ -4464,16 +4942,315 @@ to {
 
 .expensica-form-footer .expensica-modal-delete-btn {
   margin-right: auto;
+  min-width: 80px;
 }
 
-.expensica-form-footer .expensica-modal-delete-btn,
-.expensica-form-footer .expensica-modal-delete-btn:hover {
+.expensica-form-footer .expensica-modal-delete-btn {
   background-color: var(--expensica-error);
+  border-color: var(--expensica-error);
   color: var(--text-on-accent);
+}
+
+.expensica-form-footer .expensica-modal-delete-btn:hover,
+.expensica-form-footer .expensica-modal-delete-btn:focus-visible {
+  background-color: var(--expensica-error);
+  border-color: var(--expensica-error);
+  color: var(--text-on-accent);
+  transform: translateY(-1px);
+  box-shadow: var(--expensica-shadow-lg);
+  outline: none;
 }
 
 .expensica-form-footer .expensica-btn-primary {
   background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.expensica-category-modal-emoji-input {
+  text-align: center;
+  font-size: 24px;
+}
+
+.expensica-category-name-field {
+  color: rgba(var(--text-normal-rgb), 0.5);
+}
+
+.expensica-category-name-field:disabled {
+  color: rgba(var(--text-normal-rgb), 0.5);
+  opacity: 1;
+  -webkit-text-fill-color: rgba(var(--text-normal-rgb), 0.5);
+}
+
+.expensica-category-name-row {
+  display: flex;
+  align-items: center;
+  gap: var(--expensica-gap-sm);
+}
+
+.expensica-category-name-row .expensica-category-name-field {
+  flex: 1 1 auto;
+}
+
+.expensica-category-picker-trigger,
+.expensica-category-color-button {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.expensica-category-modal-emoji-button {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.expensica-category-color-button {
+  position: relative;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.expensica-category-color-button::before {
+  content: "";
+  display: block;
+  box-sizing: border-box;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  border-radius: 999px;
+  background: var(--expensica-category-button-color, var(--background-modifier-border));
+  border: 1px solid color-mix(in srgb, var(--background-modifier-border) 70%, transparent);
+}
+
+.expensica-category-color-preview {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid var(--background-modifier-border);
+  flex: 0 0 auto;
+}
+
+.expensica-category-color-input {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.expensica-category-color-palette-modal {
+  width: fit-content !important;
+  min-width: 0 !important;
+  height: fit-content !important;
+  min-height: 0 !important;
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  background: var(--background-primary);
+  border-radius: var(--expensica-radius);
+  box-sizing: border-box;
+  overflow: visible;
+  flex: 0 0 auto;
+}
+
+.modal:has(.expensica-category-color-palette-modal),
+.modal-content:has(.expensica-category-color-palette-modal) {
+  width: fit-content !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: fit-content !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.modal:has(.expensica-category-color-palette-modal) .modal-close-button {
+  display: none;
+}
+
+.modal-content:has(.expensica-category-color-palette-modal) {
+  padding: var(--expensica-gap-sm) !important;
+}
+
+.expensica-category-color-palette-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 24px);
+  grid-auto-rows: 24px;
+  gap: var(--expensica-gap-sm);
+  width: fit-content;
+  height: fit-content;
+}
+
+.expensica-category-color-swatch {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--expensica-radius-sm);
+  cursor: pointer;
+}
+
+.expensica-category-color-swatch.is-selected {
+  border-color: var(--text-normal);
+}
+
+@media screen and (max-width: 768px) {
+  .expensica-category-color-palette-grid {
+    grid-template-columns: repeat(4, 32px);
+    grid-auto-rows: 32px;
+  }
+}
+
+.expensica-emoji-picker-modal {
+  box-sizing: border-box;
+  padding: var(--expensica-gap-lg);
+  width: fit-content;
+  min-width: 0;
+  height: fit-content;
+  min-height: 0;
+  max-width: none;
+  max-height: none;
+}
+
+.expensica-emoji-picker-modal .expensica-modal-title {
+  margin: 0 0 var(--expensica-gap-md);
+}
+
+.modal:has(.expensica-emoji-picker-modal),
+.modal-content:has(.expensica-emoji-picker-modal) {
+  width: fit-content !important;
+  min-width: 0 !important;
+  height: fit-content !important;
+  min-height: 0 !important;
+  max-width: none !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.expensica-emoji-picker-modal .emoji-picker-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--expensica-gap-md);
+}
+
+.expensica-emoji-picker-modal .emoji-input {
+  margin: 0;
+  width: 100%;
+  box-sizing: border-box;
+  height: var(--size-4-8, 32px);
+  min-height: var(--size-4-8, 32px);
+  padding: var(--size-2-2, 4px) var(--size-4-2, 8px);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--expensica-radius-sm);
+  background-color: var(--background-primary);
+  box-shadow: none;
+  color: var(--text-normal);
+  font-size: var(--expensica-font-size-sm);
+  line-height: var(--expensica-line-height-tight);
+  outline: none;
+  transition: var(--expensica-transition);
+  text-align: center;
+}
+
+.expensica-emoji-picker-modal .emoji-input:hover {
+  border-color: var(--background-modifier-border);
+  background-color: var(--background-primary);
+  box-shadow: none;
+  transform: none;
+}
+
+.expensica-emoji-picker-modal .emoji-input:focus,
+.expensica-emoji-picker-modal .emoji-input:focus-within {
+  border-color: var(--interactive-accent);
+  background-color: var(--background-primary);
+  box-shadow: 0 0 0 var(--size-2-1, 2px) rgba(var(--interactive-accent-rgb), 0.2);
+  outline: none;
+}
+
+.expensica-emoji-picker-modal .common-emojis {
+  display: flex;
+  flex-direction: column;
+  gap: var(--expensica-gap-sm);
+}
+
+.expensica-emoji-picker-modal .common-emojis p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--expensica-font-size-sm);
+  line-height: var(--expensica-line-height-tight);
+}
+
+.expensica-emoji-picker-modal .emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--expensica-gap-sm);
+  width: fit-content;
+}
+
+.expensica-emoji-picker-modal .emoji-button {
+  width: auto;
+  min-width: 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--expensica-radius-sm);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: var(--expensica-font-size-xl);
+  box-shadow: none;
+  cursor: pointer;
+  transition: var(--expensica-transition);
+}
+
+.expensica-emoji-picker-modal .emoji-button:hover,
+.expensica-emoji-picker-modal .emoji-button:focus-visible {
+  border-color: var(--interactive-accent);
+  background: var(--background-primary-alt);
+  outline: none;
+}
+
+.expensica-emoji-picker-modal .button-container {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--expensica-gap-md);
+  margin-top: var(--expensica-gap-sm);
+  padding-top: var(--expensica-gap-md);
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.expensica-emoji-picker-modal .emoji-input,
+.expensica-emoji-picker-modal .button-container .expensica-btn {
+  background-color: var(--background-primary);
+  border-color: var(--background-modifier-border);
+  color: var(--text-normal);
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  font-size: var(--expensica-font-size-sm);
+  font-weight: 500;
+  line-height: 1;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.expensica-emoji-picker-modal .button-container .expensica-btn:hover,
+.expensica-emoji-picker-modal .button-container .expensica-btn:focus-visible {
+  border-color: var(--background-modifier-border-hover);
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+  outline: none;
+}
+
+.expensica-emoji-picker-modal .button-container .expensica-btn-primary {
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.expensica-emoji-picker-modal .button-container .expensica-btn-primary:hover {
+  background-color: var(--interactive-accent-hover);
   color: var(--text-on-accent);
 }
 
@@ -5301,13 +6078,59 @@ to {
     }
 }
 
-/* Search styling - more specific selectors to ensure they're applied */
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-search-section {
-    margin: 1.5rem 0;
-    padding: 0 var(--expensica-transactions-edge-gap);
+.expensica-dashboard-transactions-tab > .expensica-search-section {
+    margin: 0;
+    padding: 0;
 }
 
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-search-controls {
+.expensica-dashboard-transactions-tab > .expensica-transactions-tab-chips,
+.expensica-dashboard-transactions-tab > .expensica-search-section {
+    margin-block: 0;
+}
+
+.expensica-dashboard-transactions-tab > .expensica-transactions-tab-chips,
+.expensica-dashboard-transactions-tab > .expensica-search-section,
+.expensica-dashboard-transactions-tab > .expensica-pagination,
+.expensica-dashboard-transactions-tab > .expensica-transactions-section {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.expensica-dashboard-transactions-tab > .expensica-transactions-tab-chips {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: var(--expensica-gap-sm);
+    row-gap: var(--size-4-3, 12px);
+    justify-content: flex-start;
+    padding: 0;
+    width: 100%;
+}
+
+.is-mobile .expensica-dashboard.expensica-dashboard-transactions-tab > .expensica-search-section,
+.is-mobile .expensica-dashboard.expensica-dashboard-transactions-tab > .expensica-transactions-tab-chips {
+    padding: 0;
+}
+
+.expensica-dashboard-transactions-tab > .expensica-transactions-tab-chips .expensica-transaction-count {
+    margin-left: 0;
+    padding: 2px 6px;
+    font-size: var(--font-smallest, calc(var(--expensica-font-size-xs) - 1px));
+    line-height: var(--expensica-line-height-tight);
+}
+
+.expensica-dashboard-transactions-tab > .expensica-pagination {
+    padding: var(--size-4-4, 16px) 0;
+}
+
+.is-mobile .expensica-dashboard.expensica-dashboard-transactions-tab > .expensica-pagination {
+    padding: var(--size-4-2, 8px) 0;
+}
+
+.expensica-dashboard-transactions-tab .expensica-transactions {
+    gap: var(--expensica-gap-sm);
+}
+
+.expensica-dashboard-transactions-tab .expensica-search-controls {
     display: flex;
     align-items: center;
     gap: 0;
@@ -5315,7 +6138,7 @@ to {
     width: 100%;
 }
 
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-search-container {
+.expensica-dashboard-transactions-tab .expensica-search-container {
     position: relative;
     width: 100%;
     max-width: 100%;
@@ -5324,7 +6147,7 @@ to {
     min-width: 0;
 }
 
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-category-filter-container {
+.expensica-dashboard-transactions-tab .expensica-category-filter-container {
     display: flex;
     align-items: center;
     position: absolute;
@@ -5334,7 +6157,7 @@ to {
     z-index: 3;
 }
 
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-category-filter-button {
+.expensica-dashboard-transactions-tab .expensica-category-filter-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -5346,86 +6169,66 @@ to {
     background-color: var(--background-primary);
     color: var(--text-normal);
     cursor: pointer;
-    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-category-filter-button:hover,
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-category-filter-button:focus-visible,
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-category-filter-container.is-open .expensica-category-filter-button {
+.expensica-dashboard-transactions-tab .expensica-category-filter-button:hover,
+.expensica-dashboard-transactions-tab .expensica-category-filter-button:focus-visible,
+.expensica-dashboard-transactions-tab .expensica-category-filter-container.is-open .expensica-category-filter-button {
     background-color: var(--background-modifier-hover);
     border-color: var(--background-modifier-border-hover);
     color: var(--text-normal);
     outline: none;
 }
 
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-filter-menu,
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-filter-submenu {
+.expensica-dashboard-transactions-tab .expensica-filter-menu,
+.expensica-dashboard-transactions-tab .expensica-filter-submenu {
     min-width: 190px;
     padding: var(--expensica-gap-sm);
     border: 1px solid var(--background-modifier-border);
     border-radius: var(--expensica-radius-sm);
+    background: var(--background-primary);
     background-color: var(--background-primary);
-    box-shadow: var(--shadow-l, 0 8px 24px rgba(0, 0, 0, 0.14));
+    box-shadow: var(--expensica-shadow-dropdown);
 }
 
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-filter-menu {
+.expensica-dashboard-transactions-tab .expensica-filter-menu {
     position: absolute;
     right: 0;
     top: calc(100% + var(--expensica-gap-sm));
     display: flex;
     flex-direction: column;
-    gap: var(--expensica-list-gap);
+    gap: var(--expensica-gap-sm);
     z-index: var(--expensica-z-dropdown);
 }
 
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-filter-menu.is-hidden {
+.expensica-dashboard-transactions-tab .expensica-filter-menu.is-hidden,
+.expensica-dashboard-transactions-tab .expensica-filter-submenu {
     display: none;
 }
 
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-filter-menu-title {
+.expensica-dashboard-transactions-tab .expensica-filter-menu-title,
+.expensica-dashboard-transactions-tab .expensica-filter-menu-item,
+.expensica-dashboard-transactions-tab .expensica-filter-category-option,
+.expensica-dashboard-transactions-tab .expensica-filter-menu-empty {
     padding: var(--expensica-gap-md);
-    color: var(--text-muted);
-    font-size: var(--expensica-font-size-xs);
-    font-weight: 600;
-    line-height: var(--expensica-line-height-tight);
 }
 
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-filter-menu-item {
+.expensica-dashboard-transactions-tab .expensica-filter-menu-item {
     position: relative;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: var(--expensica-control-gap);
+    gap: var(--expensica-gap-md);
     min-height: 34px;
-    padding: var(--expensica-gap-md);
     border-radius: var(--expensica-radius-sm);
     color: var(--text-normal);
 }
 
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-filter-menu-item:hover {
+.expensica-dashboard-transactions-tab .expensica-filter-menu-item:hover {
     background-color: var(--background-modifier-hover);
 }
 
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-filter-menu-value {
-    font-size: var(--expensica-font-size-sm);
-    font-weight: 500;
-}
-
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-filter-menu-arrow {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 14px;
-    height: 14px;
-    color: var(--text-muted);
-}
-
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-filter-menu-arrow svg {
-    display: block;
-}
-
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-filter-submenu {
-    display: none;
+.expensica-dashboard-transactions-tab .expensica-filter-submenu {
     position: absolute;
     max-height: min(320px, calc(100vh - 160px));
     overflow-y: auto;
@@ -5433,115 +6236,71 @@ to {
     top: 0;
 }
 
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-filter-menu-parent:hover .expensica-filter-submenu,
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-filter-menu-parent:focus-within .expensica-filter-submenu,
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-filter-menu-parent.is-open .expensica-filter-submenu {
+.expensica-dashboard-transactions-tab .expensica-filter-menu-parent:hover .expensica-filter-submenu,
+.expensica-dashboard-transactions-tab .expensica-filter-menu-parent:focus-within .expensica-filter-submenu,
+.expensica-dashboard-transactions-tab .expensica-filter-menu-parent.is-open .expensica-filter-submenu {
     display: flex;
     flex-direction: column;
-    gap: var(--expensica-list-gap);
+    gap: var(--expensica-gap-sm);
 }
 
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-filter-category-option {
+.expensica-dashboard-transactions-tab .expensica-filter-category-option {
+    all: unset;
+    box-sizing: border-box;
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
-    gap: var(--expensica-control-gap);
+    gap: var(--expensica-gap-md);
     min-height: 32px;
+    width: 100%;
     padding: var(--expensica-gap-md);
     border: 0;
-    border-radius: var(--expensica-radius-sm);
-    background: transparent;
+    border-radius: 0;
+    background: var(--background-primary);
     color: var(--text-normal);
     cursor: pointer;
     font-size: var(--expensica-font-size-sm);
     text-align: left;
+    box-shadow: none;
+    text-shadow: none;
+    filter: none;
+    transition: background-color 0.1s;
 }
 
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-filter-category-option:hover,
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-filter-category-option.is-selected {
+.expensica-dashboard-transactions-tab .expensica-filter-category-option:hover,
+.expensica-dashboard-transactions-tab .expensica-filter-category-option.is-selected {
+    background: var(--background-modifier-hover);
     background-color: var(--background-modifier-hover);
 }
 
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-filter-category-option.is-selected {
+.expensica-dashboard-transactions-tab .expensica-filter-category-option.is-selected {
     color: var(--text-accent);
     font-weight: 600;
 }
 
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-filter-category-name {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-filter-menu-empty {
-    padding: var(--expensica-gap-md);
-    color: var(--text-muted);
-    font-size: var(--expensica-font-size-sm);
-}
-
-.workspace-leaf-content[data-type="expensica-transactions-view"] #expensica-search-input,
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-search-input {
-    width: 100%;
-    height: 48px;
-    padding: 0.85rem 3.5rem 0.85rem 3rem;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 8px;
-    background-color: var(--background-primary);
-    color: var(--text-normal);
-    font-size: 1rem;
-    line-height: 1.5;
-    transition: all 0.2s ease;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-}
-
-.workspace-leaf-content[data-type="expensica-transactions-view"] #expensica-search-input:focus,
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-search-input:focus {
-    outline: none;
-    border-color: var(--interactive-accent);
-    box-shadow: 0 0 0 2px var(--interactive-accent-tint);
-}
-
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-search-icon {
-    position: absolute;
-    left: 1rem;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--text-muted);
-    pointer-events: none;
-    transition: color 0.2s ease;
-    z-index: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-search-input:focus + .expensica-search-icon {
-    color: var(--interactive-accent);
-}
-
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-selected-filters {
+.expensica-dashboard-transactions-tab .expensica-selected-filters {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--expensica-transactions-filter-chip-gap);
+    gap: max(var(--expensica-gap-md), 8px);
     margin-top: var(--expensica-transactions-filter-gap);
 }
 
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-selected-filters.is-hidden {
+.expensica-dashboard-transactions-tab .expensica-selected-filters.is-hidden {
     display: none;
 }
 
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-selected-filter-chip {
+.expensica-dashboard-transactions-tab .expensica-selected-filter-chip {
     width: auto;
     min-width: 0;
     max-width: 100%;
     gap: var(--expensica-gap-sm);
 }
 
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-selected-filter-chip .expensica-category-chip-label {
+.expensica-dashboard-transactions-tab .expensica-selected-filter-chip .expensica-category-chip-label {
     max-width: 100%;
 }
 
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-selected-filter-remove {
+.expensica-dashboard-transactions-tab .expensica-selected-filter-remove {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -5552,9 +6311,30 @@ to {
     opacity: 0.7;
 }
 
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-selected-filter-remove svg {
+.expensica-dashboard-transactions-tab .expensica-selected-filter-remove svg {
     width: 12px;
     height: 12px;
+}
+
+.expensica-dashboard-transactions-tab #expensica-search-input,
+.expensica-dashboard-transactions-tab .expensica-search-input {
+    width: 100%;
+    height: 48px;
+    padding: 0.85rem 3.5rem 0.85rem 3rem;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    background-color: var(--background-primary);
+    color: var(--text-normal);
+    font-size: 1rem;
+    line-height: 1.5;
+}
+
+.expensica-dashboard-transactions-tab .expensica-search-icon {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
 }
 
 /* Additional more specific selectors for the search input */
@@ -5616,11 +6396,11 @@ to {
   .expensica-header {
     flex-direction: column;
     align-items: flex-start;
-    padding: var(--expensica-spacing) var(--expensica-spacing-lg);
+    padding: var(--expensica-gap-lg) var(--expensica-gap-xl);
   }
   
   .expensica-title-section {
-    margin-bottom: var(--expensica-spacing);
+    margin-bottom: var(--expensica-gap-lg);
   }
   
   .expensica-actions {
@@ -5689,7 +6469,7 @@ to {
 .expensica-calendar-container {
   background-color: var(--background-primary);
   border-radius: 8px;
-  padding: var(--expensica-calendar-panel-spacing);
+  padding: var(--expensica-gap-lg);
   border: 1px solid var(--background-modifier-border);
   margin-bottom: 0;
   box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px, 
@@ -5704,7 +6484,7 @@ to {
 
 .expensica-calendar-flex-container {
   display: flex;
-  gap: var(--expensica-calendar-panel-gap);
+  gap: var(--expensica-gap-lg);
   align-items: flex-start;
   flex-wrap: wrap;
   margin-bottom: 0;
@@ -5810,7 +6590,7 @@ to {
   max-width: 100%;
   background-color: var(--background-primary);
   border-radius: 8px;
-  padding: var(--expensica-panel-gap);
+  padding: var(--expensica-gap-lg);
   border: 1px solid var(--background-modifier-border);
   max-height: none;
   overflow-y: visible;
@@ -5895,7 +6675,7 @@ to {
   }
   
   .expensica-calendar-flex-container {
-    gap: var(--expensica-calendar-panel-gap);
+    gap: var(--expensica-gap-lg);
   }
   
   .expensica-calendar-title {
@@ -6010,7 +6790,7 @@ h4.expensica-transactions-title {
 .expensica-calendar-transaction-list {
   display: flex;
   flex-direction: column;
-  gap: var(--expensica-list-gap);
+  gap: var(--expensica-gap-sm);
   margin-top: 16px;
 }
 
@@ -6030,8 +6810,8 @@ h4.expensica-transactions-title {
 .expensica-calendar-transaction-item.expensica-transaction .expensica-transaction-meta {
   display: flex;
   align-items: center;
-  column-gap: var(--expensica-calendar-transaction-meta-gap);
-  row-gap: var(--expensica-calendar-transaction-meta-gap);
+  column-gap: var(--expensica-gap-sm);
+  row-gap: var(--expensica-gap-sm);
   flex-wrap: nowrap;
 }
 
@@ -6587,7 +7367,7 @@ h4.expensica-transactions-title {
   justify-content: space-between;
   align-items: flex-start;
   flex-direction: column;
-  padding: var(--expensica-panel-gap);
+  padding: var(--expensica-gap-lg);
   border-radius: var(--expensica-radius);
   background-color: var(--background-primary);
   border: 1px solid var(--background-modifier-border);
@@ -6595,13 +7375,13 @@ h4.expensica-transactions-title {
   position: relative;
   animation: fadeIn 0.3s ease;
   flex-wrap: wrap;
-  gap: var(--expensica-header-action-gap);
+  gap: var(--expensica-gap-md);
 }
 
 .shadcn-title-section {
   display: flex;
   align-items: center;
-  gap: var(--expensica-title-gap);
+  gap: var(--expensica-gap-md);
   width: 100%;
 }
 
@@ -6614,12 +7394,12 @@ h4.expensica-transactions-title {
   line-height: 1;
   display: flex;
   align-items: center;
-  gap: var(--expensica-title-gap);
+  gap: var(--expensica-gap-md);
 }
 
 .shadcn-actions {
   display: flex;
-  gap: var(--expensica-control-gap);
+  gap: var(--expensica-gap-md);
   align-items: center;
   flex-wrap: wrap;
   width: 100%;
@@ -6634,7 +7414,7 @@ h4.expensica-transactions-title {
   font-weight: 500;
   height: 36px;
   padding: 0 12px;
-  gap: var(--expensica-control-gap);
+  gap: var(--expensica-gap-md);
   cursor: pointer;
   transition: background-color 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s;
   border: 1px solid var(--background-modifier-border);
@@ -6744,7 +7524,7 @@ h4.expensica-transactions-title {
   z-index: var(--expensica-z-dropdown);
   background-color: var(--background-primary);
   border-radius: var(--expensica-radius-sm);
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--expensica-shadow-dropdown);
   border: 1px solid var(--background-modifier-border);
   overflow: hidden;
   animation: dropdown-in 0.2s ease;
@@ -6819,6 +7599,29 @@ h4.expensica-transactions-title {
   margin-bottom: 0;
 }
 
+.expensica-dashboard > .expensica-categories-tab {
+  margin-top: calc(var(--expensica-gap-sm) - var(--expensica-gap-lg));
+  margin-bottom: 0;
+}
+
+.expensica-category-chart-type-selector-overlay {
+  position: absolute;
+  top: var(--expensica-gap-md);
+  right: var(--expensica-gap-md);
+  z-index: var(--expensica-z-dropdown);
+  margin: 0;
+  margin-bottom: 0;
+  padding: 0;
+  border-bottom: 0;
+  background: transparent;
+  width: auto;
+  display: block;
+}
+
+.expensica-category-chart-type-selector-overlay .expensica-chart-type-current {
+  min-width: 0;
+}
+
 .expensica-summary,
 .expensica-dashboard-grid,
 .expensica-calendar-container,
@@ -6830,70 +7633,30 @@ h4.expensica-transactions-title {
 
 .expensica-dashboard-grid,
 .expensica-calendar-flex-container {
-  gap: var(--expensica-panel-gap);
+  gap: var(--expensica-gap-lg);
 }
 
 .expensica-chart-container,
 .expensica-calendar-container,
 .shadcn-header,
 .expensica-filter-section {
-  padding: var(--expensica-panel-gap);
+  padding: var(--expensica-gap-lg);
 }
 
-.expensica-card,
-.expensica-transaction {
-  padding: var(--expensica-panel-gap);
+.expensica-card {
+  padding: var(--expensica-gap-md);
 }
 
 .expensica-summary {
-  gap: var(--expensica-card-gap);
+  gap: var(--expensica-gap-lg);
 }
 
 .expensica-transactions {
-  gap: var(--expensica-list-gap);
+  gap: var(--expensica-gap-sm);
 }
 
 .expensica-pagination {
-  gap: var(--expensica-control-gap);
-}
-
-/* Transactions view spacing contract: the view container owns vertical gaps. */
-.workspace-leaf-content[data-type="expensica-transactions-view"] .transactions-container {
-  gap: var(--expensica-section-gap);
-}
-
-.workspace-leaf-content[data-type="expensica-transactions-view"] .transactions-container > .expensica-header,
-.workspace-leaf-content[data-type="expensica-transactions-view"] .transactions-container > .expensica-search-section,
-.workspace-leaf-content[data-type="expensica-transactions-view"] .transactions-container > .expensica-pagination,
-.workspace-leaf-content[data-type="expensica-transactions-view"] .transactions-container > .expensica-transactions-section {
-  margin-top: 0;
-  margin-bottom: 0;
-}
-
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-search-section {
-  padding: 0 var(--expensica-transactions-edge-gap);
-}
-
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-search-container,
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-custom-search {
-  margin: 0;
-}
-
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-transactions-view-header,
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-pagination {
-  padding: var(--expensica-panel-gap);
-}
-
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-transactions-section {
-  overflow: visible;
-}
-
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-transactions {
-  gap: var(--expensica-list-gap);
-}
-
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-transaction {
-  padding: var(--expensica-panel-gap);
+  gap: var(--expensica-gap-md);
 }
 
 /* Calendar navigation buttons mirror pagination controls. */
@@ -6901,7 +7664,7 @@ h4.expensica-transactions-title {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: var(--expensica-control-gap);
+  gap: var(--expensica-gap-md);
   margin: 0;
   padding: 0;
 }
@@ -6939,9 +7702,201 @@ h4.expensica-transactions-title {
   font-size: var(--expensica-font-size-sm);
 }
 
+.expensica-standard-button,
+button.expensica-standard-button,
+.shadcn-date-range-current,
+.shadcn-btn,
+.expensica-btn,
+.expensica-tab,
+.expensica-chart-option,
+.expensica-chart-type-current,
+.expensica-pagination-btn,
+.expensica-calendar-nav-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--expensica-gap-md);
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--expensica-radius-sm);
+  appearance: none;
+  background: var(--background-primary);
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+  font-size: var(--expensica-font-size-sm);
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: var(--expensica-shadow-control);
+  transition: all 0.2s ease;
+}
+
+.expensica-standard-button.expensica-btn-primary,
+.expensica-standard-button.expensica-btn-secondary,
+.expensica-standard-button.expensica-btn-success,
+.expensica-standard-button.expensica-btn-danger,
+.expensica-standard-button.shadcn-btn-primary,
+.expensica-standard-button.shadcn-btn-success,
+.expensica-standard-button.shadcn-btn-danger {
+  border-color: var(--background-modifier-border);
+  background: var(--background-primary);
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+}
+
+.expensica-standard-button:hover,
+.expensica-standard-button:focus-visible,
+button.expensica-standard-button:hover,
+button.expensica-standard-button:focus-visible,
+.shadcn-date-range-current:hover,
+.shadcn-date-range-current:focus-visible,
+.shadcn-btn:hover,
+.shadcn-btn:focus-visible,
+.expensica-btn:hover,
+.expensica-btn:focus-visible,
+.expensica-tab:hover,
+.expensica-tab:focus-visible,
+.expensica-chart-option:hover,
+.expensica-chart-option:focus-visible,
+.expensica-chart-type-current:hover,
+.expensica-chart-type-current:focus-visible,
+.expensica-pagination-btn:hover:not(.disabled),
+.expensica-pagination-btn:focus-visible:not(.disabled),
+.expensica-calendar-nav-button:hover,
+.expensica-calendar-nav-button:focus-visible {
+  border-color: var(--background-modifier-border-hover);
+  background: var(--background-modifier-hover);
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+  outline: none;
+}
+
+.expensica-standard-button.expensica-btn-primary:hover,
+.expensica-standard-button.expensica-btn-secondary:hover,
+.expensica-standard-button.expensica-btn-success:hover,
+.expensica-standard-button.expensica-btn-danger:hover,
+.expensica-standard-button.shadcn-btn-primary:hover,
+.expensica-standard-button.shadcn-btn-success:hover,
+.expensica-standard-button.shadcn-btn-danger:hover,
+.expensica-standard-button.expensica-btn-primary:focus-visible,
+.expensica-standard-button.expensica-btn-secondary:focus-visible,
+.expensica-standard-button.expensica-btn-success:focus-visible,
+.expensica-standard-button.expensica-btn-danger:focus-visible,
+.expensica-standard-button.shadcn-btn-primary:focus-visible,
+.expensica-standard-button.shadcn-btn-success:focus-visible,
+.expensica-standard-button.shadcn-btn-danger:focus-visible {
+  border-color: var(--background-modifier-border-hover);
+  background: var(--background-modifier-hover);
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.expensica-standard-button.active,
+.expensica-tab.active,
+.expensica-chart-option.active,
+.expensica-pagination-btn.active {
+  border-color: var(--background-modifier-border);
+  background: var(--background-modifier-hover);
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
 /* Dashboard titles share one left alignment; panel padding owns the offset. */
 .expensica-chart-header,
 .expensica-section-header {
   padding-left: 0;
   padding-right: 0;
+}
+
+.expensica-dashboard > .expensica-overview-summary.expensica-summary,
+.expensica-overview-summary.expensica-summary.expensica-budget-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--expensica-gap-md);
+}
+
+.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card,
+.expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card {
+  flex: 1 1 max-content;
+  height: auto;
+  min-height: min-content;
+  min-width: max-content;
+  padding: var(--expensica-gap-md);
+}
+
+.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-title,
+.expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card > .expensica-card-title {
+  gap: var(--expensica-gap-md);
+  margin-block-end: var(--expensica-gap-sm);
+  font-size: var(--font-smallest, var(--font-ui-smallest));
+  font-weight: 400;
+  line-height: var(--expensica-line-height-normal);
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-title svg,
+.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-title span.emoji,
+.expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card > .expensica-card-title svg,
+.expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card > .expensica-card-title span.emoji {
+  width: var(--size-2-3);
+  height: var(--size-2-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  margin-inline-end: var(--expensica-gap-xs);
+}
+
+.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-value,
+.expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card > .expensica-card-value {
+  font-size: var(--font-ui-large);
+  line-height: var(--expensica-line-height-normal);
+  padding-block: var(--expensica-gap-sm);
+  white-space: nowrap;
+}
+
+.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-trend,
+.expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card > .expensica-card-trend {
+  gap: var(--expensica-gap-md);
+  margin-block-start: var(--expensica-gap-sm);
+  font-size: var(--expensica-card-trend-font-size);
+  font-weight: 400;
+  line-height: var(--expensica-line-height-normal);
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-trend svg,
+.expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card > .expensica-card-trend svg {
+  width: var(--expensica-card-trend-icon-size);
+  height: var(--expensica-card-trend-icon-size);
+  stroke-width: var(--expensica-card-trend-icon-stroke-width);
+  flex: 0 0 var(--expensica-card-trend-icon-size);
+}
+
+.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-title,
+.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-value,
+.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-trend,
+.expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card > .expensica-card-title,
+.expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card > .expensica-card-value,
+.expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card > .expensica-card-trend {
+  position: relative;
+  z-index: 1;
+}
+
+.expensica-modal .expensica-category-name-row > .expensica-category-picker-trigger,
+.expensica-modal .expensica-category-name-row > .expensica-category-color-button {
+  box-sizing: border-box;
+  width: var(--size-4-8, 32px);
+  min-width: var(--size-4-8, 32px);
+  height: var(--size-4-8, 32px);
+  min-height: var(--size-4-8, 32px);
+  padding: 0;
+  flex: 0 0 var(--size-4-8, 32px);
+  align-self: center;
 }

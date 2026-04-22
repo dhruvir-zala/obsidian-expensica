@@ -8,7 +8,7 @@ import {
 } from './models';
 import type ExpensicaPlugin from '../main';
 import { renderCategoryChip } from './category-chip';
-import { EmojiPickerModal } from './emoji-picker-modal';
+import { showCategoryQuickMenu } from './category-quick-menu';
 
 interface TransactionCardOptions {
     plugin: ExpensicaPlugin;
@@ -16,11 +16,16 @@ interface TransactionCardOptions {
     runningBalance: number;
     onEdit?: (transaction: Transaction) => void;
     onCategoryChange?: (transaction: Transaction, categoryId: string) => void | Promise<void>;
+    selectable?: boolean;
+    selected?: boolean;
+    onSelectionToggle?: (transaction: Transaction, selected: boolean) => void;
 }
 
 export function renderTransactionCard(container: HTMLElement, options: TransactionCardOptions): HTMLElement {
-    const { plugin, transaction, runningBalance, onEdit, onCategoryChange } = options;
+    const { plugin, transaction, runningBalance, onEdit, onCategoryChange, selectable, selected, onSelectionToggle } = options;
     const transactionEl = container.createDiv('expensica-transaction');
+    transactionEl.setAttribute('data-transaction-id', transaction.id);
+    transactionEl.toggleClass('is-selected', !!selected);
 
     if (onEdit) {
         transactionEl.addClass('expensica-transaction-interactive');
@@ -48,27 +53,30 @@ export function renderTransactionCard(container: HTMLElement, options: Transacti
             type: transaction.type === TransactionType.INCOME ? CategoryType.INCOME : CategoryType.EXPENSE
         };
 
-    const iconEl = transactionEl.createDiv('expensica-transaction-icon');
-    iconEl.setText(categoryDisplay.emoji);
-    iconEl.addClass(transaction.type === TransactionType.INCOME ? 'expensica-income-icon' : 'expensica-expense-icon');
-    if (category) {
-        iconEl.addClass('expensica-transaction-icon-editable');
-        iconEl.setAttribute('role', 'button');
-        iconEl.setAttribute('tabindex', '0');
-        iconEl.setAttribute('title', `Change emoji for ${category.name}`);
-        iconEl.addEventListener('click', (event) => {
+    const selectorEl = transactionEl.createEl('button', {
+        cls: 'expensica-transaction-selector',
+        attr: {
+            type: 'button',
+            'aria-label': `${selected ? 'Unselect' : 'Select'} transaction ${transaction.description}`,
+            'aria-pressed': String(!!selected)
+        }
+    });
+    selectorEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+    selectorEl.toggleClass('is-selected', !!selected);
+    selectorEl.toggleClass('is-disabled', !selectable);
+    if (!selectable) {
+        selectorEl.disabled = true;
+        selectorEl.setAttribute('aria-hidden', 'true');
+        selectorEl.setAttribute('tabindex', '-1');
+    } else {
+        selectorEl.addEventListener('click', (event) => {
             event.preventDefault();
             event.stopPropagation();
-            showCategoryEmojiPicker(plugin, category);
-        });
-        iconEl.addEventListener('keydown', (event) => {
-            if (event.key !== 'Enter' && event.key !== ' ') {
-                return;
-            }
-
-            event.preventDefault();
-            event.stopPropagation();
-            showCategoryEmojiPicker(plugin, category);
+            const nextSelected = !selectorEl.classList.contains('is-selected');
+            transactionEl.toggleClass('is-selected', nextSelected);
+            selectorEl.toggleClass('is-selected', nextSelected);
+            selectorEl.setAttribute('aria-pressed', String(nextSelected));
+            onSelectionToggle?.(transaction, nextSelected);
         });
     }
 
@@ -178,15 +186,6 @@ function stripCurrencyAbbreviation(symbol: string): string {
     return symbol.replace(/[A-Za-z]+/g, '').trim();
 }
 
-function showCategoryEmojiPicker(
-    plugin: ExpensicaPlugin,
-    category: { id: string; name: string; type: CategoryType }
-) {
-    new EmojiPickerModal(plugin.app, category, plugin.getCategoryEmoji(category.id), async (emoji) => {
-        await plugin.updateCategoryEmoji(category.id, emoji);
-    }).open();
-}
-
 function showTransactionCategoryMenu(
     event: MouseEvent | KeyboardEvent,
     plugin: ExpensicaPlugin,
@@ -194,38 +193,25 @@ function showTransactionCategoryMenu(
     categoryType: CategoryType,
     onCategoryChange: (transaction: Transaction, categoryId: string) => void | Promise<void>
 ) {
-    const menu = new Menu();
-    const categories = plugin.getCategories(categoryType);
-
-    if (categories.length === 0) {
-        menu.addItem(item => item
-            .setTitle('No categories')
-            .setDisabled(true));
-    } else {
-        categories.forEach(category => {
-            menu.addItem(item => item
-                .setTitle(`${plugin.getCategoryEmoji(category.id)} ${category.name}`)
-                .setChecked(category.id === transaction.category)
-                .onClick(() => {
-                    if (category.id === transaction.category) {
-                        return;
-                    }
-
-                    void onCategoryChange(transaction, category.id);
-                }));
-        });
-    }
-
-    if (event instanceof MouseEvent) {
-        menu.showAtMouseEvent(event);
+    const target = event.currentTarget as HTMLElement | null;
+    if (!target) {
         return;
     }
 
-    const target = event.currentTarget as HTMLElement | null;
-    const rect = target?.getBoundingClientRect();
+    showCategoryQuickMenu(target, plugin, categoryType, async (categoryId) => {
+        if (categoryId === transaction.category) {
+            return;
+        }
 
-    menu.showAtPosition({
-        x: rect?.left ?? 0,
-        y: rect?.bottom ?? 0
-    });
+        await onCategoryChange(transaction, categoryId);
+    }, transaction.category);
+}
+
+export function showTransactionBulkCategoryMenu(
+    target: HTMLElement,
+    plugin: ExpensicaPlugin,
+    categoryType: CategoryType,
+    onCategoryChange: (categoryId: string) => void | Promise<void>
+) {
+    showCategoryQuickMenu(target, plugin, categoryType, onCategoryChange);
 }

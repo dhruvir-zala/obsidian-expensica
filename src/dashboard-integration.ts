@@ -51,7 +51,7 @@ export class PremiumVisualizations {
         
         // Previous month button
         const prevButton = navContainer.createEl('button', {
-            cls: 'expensica-calendar-nav-button',
+            cls: 'expensica-standard-button expensica-calendar-nav-button',
             text: '<'
         });
         prevButton.onclick = () => {
@@ -62,7 +62,7 @@ export class PremiumVisualizations {
         
         // Today button
         const todayButton = navContainer.createEl('button', {
-            cls: 'expensica-calendar-nav-button',
+            cls: 'expensica-standard-button expensica-calendar-nav-button',
             text: 'Today'
         });
         todayButton.onclick = () => {
@@ -75,7 +75,7 @@ export class PremiumVisualizations {
         
         // Next month button
         const nextButton = navContainer.createEl('button', {
-            cls: 'expensica-calendar-nav-button',
+            cls: 'expensica-standard-button expensica-calendar-nav-button',
             text: '>'
         });
         nextButton.onclick = () => {

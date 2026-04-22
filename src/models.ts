@@ -28,6 +28,90 @@ export enum TransactionType {
   }
 
   export type CategoryEmojiSettings = Record<string, string>;
+
+  export class ColorPalette {
+    static readonly lightCoral = '#e96767ff';
+    static readonly darkGoldenrod = '#c08f1bff';
+    static readonly lightSeaGreen = '#0eaaaaff';
+    static readonly orchid = '#cb5ae2ff';
+    static readonly burntPeach = '#e26b3cff';
+    static readonly metallicGold = '#cba50bff';
+    static readonly dodgerBlue = '#429efaff';
+    static readonly cottonBloom = '#f04cd5ff';
+    static readonly goldenChestnut = '#db7c2fff';
+    static readonly limeMoss = '#7da72aff';
+    static readonly softPeriwinkle = '#9288fcff';
+    static readonly wildStrawberry = '#f25a8cff';
+    static readonly bronze = '#c08635ff';
+    static readonly jadeGreen = '#42ae42ff';
+    static readonly brightLavender = '#b271f4ff';
+    static readonly coolSteel = '#9e9e9eff';
+
+    static readonly colors = [
+      ColorPalette.lightCoral,
+      ColorPalette.darkGoldenrod,
+      ColorPalette.lightSeaGreen,
+      ColorPalette.orchid,
+      ColorPalette.burntPeach,
+      ColorPalette.metallicGold,
+      ColorPalette.dodgerBlue,
+      ColorPalette.cottonBloom,
+      ColorPalette.goldenChestnut,
+      ColorPalette.limeMoss,
+      ColorPalette.softPeriwinkle,
+      ColorPalette.wildStrawberry,
+      ColorPalette.bronze,
+      ColorPalette.jadeGreen,
+      ColorPalette.brightLavender,
+      ColorPalette.coolSteel
+    ] as const;
+  }
+
+  const CATEGORY_COLORS_BY_ID: Record<string, string> = {
+    food: ColorPalette.metallicGold,
+    groceries: ColorPalette.jadeGreen,
+    transportation: ColorPalette.dodgerBlue,
+    rent: ColorPalette.orchid,
+    utilities: ColorPalette.lightSeaGreen,
+    internet: ColorPalette.jadeGreen,
+    entertainment: ColorPalette.brightLavender,
+    shopping: ColorPalette.wildStrawberry,
+    health: ColorPalette.limeMoss,
+    education: ColorPalette.dodgerBlue,
+    travel: ColorPalette.lightSeaGreen,
+    fitness: ColorPalette.goldenChestnut,
+    pets: ColorPalette.bronze,
+    gifts: ColorPalette.cottonBloom,
+    personal: ColorPalette.burntPeach,
+    childcare: ColorPalette.lightCoral,
+    subscriptions: ColorPalette.softPeriwinkle,
+    insurance: ColorPalette.bronze,
+    taxes: ColorPalette.lightCoral,
+    other_expense: ColorPalette.coolSteel
+  };
+
+  const CATEGORY_COLORS_BY_NAME: Record<string, string> = {
+    'food & dining': CATEGORY_COLORS_BY_ID.food,
+    groceries: CATEGORY_COLORS_BY_ID.groceries,
+    transportation: CATEGORY_COLORS_BY_ID.transportation,
+    'rent/mortgage': CATEGORY_COLORS_BY_ID.rent,
+    utilities: CATEGORY_COLORS_BY_ID.utilities,
+    'internet & phone': CATEGORY_COLORS_BY_ID.internet,
+    entertainment: CATEGORY_COLORS_BY_ID.entertainment,
+    shopping: CATEGORY_COLORS_BY_ID.shopping,
+    healthcare: CATEGORY_COLORS_BY_ID.health,
+    education: CATEGORY_COLORS_BY_ID.education,
+    travel: CATEGORY_COLORS_BY_ID.travel,
+    fitness: CATEGORY_COLORS_BY_ID.fitness,
+    pets: CATEGORY_COLORS_BY_ID.pets,
+    'gifts & donations': CATEGORY_COLORS_BY_ID.gifts,
+    'personal care': CATEGORY_COLORS_BY_ID.personal,
+    childcare: CATEGORY_COLORS_BY_ID.childcare,
+    subscriptions: CATEGORY_COLORS_BY_ID.subscriptions,
+    insurance: CATEGORY_COLORS_BY_ID.insurance,
+    taxes: CATEGORY_COLORS_BY_ID.taxes,
+    'other expenses': CATEGORY_COLORS_BY_ID.other_expense
+  };
   
   export interface Currency {
     code: string;  // ISO 4217 code (e.g. USD, EUR)
@@ -174,9 +258,12 @@ function fallbackRandomIdPart(): string {
     return new Date(year, month - 1, day);
   }
 
-  // Deterministic category color shared by dashboard and calendar views.
-  export function getCategoryColor(categoryName: string): string {
-    return `hsl(${stringToHue(categoryName)}, 70%, 60%)`;
+  // Shared category colors for dashboard, chips, and calendar breakdowns.
+  export function getCategoryColor(categoryNameOrId: string): string {
+    const colorKey = categoryNameOrId.trim().toLowerCase();
+    return CATEGORY_COLORS_BY_ID[colorKey]
+      || CATEGORY_COLORS_BY_NAME[colorKey]
+      || `hsl(${stringToHue(categoryNameOrId)}, 70%, 60%)`;
   }
 
   export function stringToHue(str: string): number {
@@ -448,31 +535,40 @@ function fallbackRandomIdPart(): string {
     rent: '🔑',
     utilities: '💡',
     internet: '📱',
-    entertainment: '🎬',
+    entertainment: '🎮',
     shopping: '🛍️',
-    health: '🏥',
-    education: '📚',
+    health: '💚',
+    education: '🎓',
     travel: '✈️',
-    fitness: '🏋️',
-    pets: '🐾',
+    fitness: '👟',
+    pets: '🐶',
     gifts: '🎁',
-    personal: '💇',
-    childcare: '👶',
-    subscriptions: '📺',
-    insurance: '🔒',
+    personal: '✂️',
+    childcare: '🍼',
+    subscriptions: '💳',
+    insurance: '☂️',
     taxes: '📝',
-    other_expense: '💼',
-    salary: '💰',
+    other_expense: '🤷‍♂️',
+    salary: '💵',
     freelance: '💻',
     business: '🏢',
     investments: '📈',
-    dividends: '💵',
+    dividends: '💰',
     rental: '🏘️',
     gifts_received: '🎀',
     tax_returns: '📋',
     other_income: '💸'
   };
   
+  export function getCommonCategoryEmojis(type: CategoryType): string[] {
+    const emojis = DEFAULT_CATEGORIES
+      .filter(category => category.type === type)
+      .map(category => DEFAULT_CATEGORY_EMOJIS[category.id])
+      .filter((emoji): emoji is string => !!emoji);
+
+    return Array.from(new Set(emojis));
+  }
+
   // Combine all default categories
   export const DEFAULT_CATEGORIES: Category[] = [
     ...DEFAULT_EXPENSE_CATEGORIES,

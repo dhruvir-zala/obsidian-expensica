@@ -974,6 +974,7 @@ export class CalendarHeatmap {
 
         this.updateCalendarHorizontalPadding(width);
         this.updateStackedLayout(width);
+        this.updateDetailsPanelHeight();
         this.lastMeasuredContainerSizeKey = this.getContainerSizeKey(this.container);
         return false;
     }
@@ -1018,8 +1019,12 @@ export class CalendarHeatmap {
             return;
         }
 
-        this.detailsContainer.style.height = `${this.height}px`;
-        this.detailsContainer.style.maxHeight = `${this.height}px`;
+        const calendarHeight = this.calendarContainer.getBoundingClientRect().height;
+        const detailsHeight = calendarHeight > 0 ? calendarHeight : this.height;
+
+        this.detailsContainer.style.boxSizing = 'border-box';
+        this.detailsContainer.style.height = `${detailsHeight}px`;
+        this.detailsContainer.style.maxHeight = `${detailsHeight}px`;
     }
 
     private getLayoutKey(svgWidth: number, svgHeight: number) {
