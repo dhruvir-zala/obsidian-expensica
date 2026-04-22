@@ -154,6 +154,9 @@ export class ExpensicaDashboardView extends ItemView {
     private chartAnimationResetTimeout: number | null = null;
     private incomeExpenseToggleAnimationFrame: number | null = null;
     private incomeExpenseHoverAnimationFrame: number | null = null;
+    private paneResizeObserver: ResizeObserver | null = null;
+    private lastObservedDashboardWidth = 0;
+    private lastObservedDashboardHeight = 0;
     private shouldAnimateExpensesChartOnNextRender = true;
     private shouldAnimateIncomeExpenseChartOnNextRender = true;
     private animateExpensesChartThisRender = false;
@@ -199,6 +202,7 @@ export class ExpensicaDashboardView extends ItemView {
 
         // Add resize event listener
         window.addEventListener('resize', this.boundHandleResize);
+        this.setupPaneResizeObserver();
         this.registerEvent(this.app.workspace.on('active-leaf-change', () => {
             this.handleWorkspaceVisibilityChange();
         }));
@@ -225,6 +229,10 @@ export class ExpensicaDashboardView extends ItemView {
 
         // Remove resize event listener
         window.removeEventListener('resize', this.boundHandleResize);
+        if (this.paneResizeObserver) {
+            this.paneResizeObserver.disconnect();
+            this.paneResizeObserver = null;
+        }
 
         if (this.themeObserver) {
             this.themeObserver.disconnect();
@@ -393,6 +401,43 @@ export class ExpensicaDashboardView extends ItemView {
             });
             this.resizeRefreshTimeout = null;
         }, this.getChartResizeDelay());
+    }
+
+    private setupPaneResizeObserver() {
+        if (typeof ResizeObserver === 'undefined') {
+            return;
+        }
+
+        const dashboardContainer = this.containerEl.children[1] as HTMLElement | undefined;
+        if (!dashboardContainer) {
+            return;
+        }
+
+        this.paneResizeObserver?.disconnect();
+        this.lastObservedDashboardWidth = 0;
+        this.lastObservedDashboardHeight = 0;
+        this.paneResizeObserver = new ResizeObserver((entries) => {
+            const entry = entries[0];
+            if (!entry) {
+                return;
+            }
+
+            const width = Math.round(entry.contentRect.width);
+            const height = Math.round(entry.contentRect.height);
+
+            if (width <= 0 || height <= 0) {
+                return;
+            }
+
+            if (width === this.lastObservedDashboardWidth && height === this.lastObservedDashboardHeight) {
+                return;
+            }
+
+            this.lastObservedDashboardWidth = width;
+            this.lastObservedDashboardHeight = height;
+            this.handleResize();
+        });
+        this.paneResizeObserver.observe(dashboardContainer);
     }
 
     private scheduleCalendarResize() {
