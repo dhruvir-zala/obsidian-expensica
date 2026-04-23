@@ -1034,7 +1034,7 @@ button.expensica-category-chip {
 
 .expensica-transaction {
     --expensica-transaction-icon-size: 18px;
-    --expensica-transaction-amount-column-width: 64px;
+    --expensica-transaction-amount-column-width: 112px;
     background-color: var(--expensica-bg-primary);
     padding-block: var(--expensica-gap-md);
     padding-inline: var(--expensica-gap-md);
@@ -1149,7 +1149,7 @@ button.expensica-category-chip {
 
 .expensica-transaction-meta {
   display: grid;
-  grid-template-columns: repeat(3, max-content);
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
   align-items: center;
   column-gap: var(--expensica-gap-sm);
   row-gap: var(--expensica-gap-sm);
@@ -1291,13 +1291,20 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  min-width: 0;
+  max-width: 100%;
   font-size: var(--expensica-font-size-sm);
   color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .expensica-transaction-category {
   grid-column: 3;
-  justify-self: start;
+  justify-self: end;
+  margin-left: auto;
+  max-width: 100%;
 }
 
 .expensica-category-quick-menu {
@@ -1477,6 +1484,10 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
 }
 
 .expensica-transaction-balance {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
   color: var(--text-faint);
   font-size: 11px;
   font-style: italic;
@@ -3222,6 +3233,34 @@ to {
   line-height: 1.15;
 }
 
+.is-mobile .expensica-tabs {
+  display: flex !important;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  gap: var(--expensica-gap-sm);
+  padding-bottom: 2px;
+}
+
+.is-mobile .expensica-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.is-mobile .expensica-tab {
+  display: inline-flex !important;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  min-width: max-content;
+  visibility: visible;
+  opacity: 1;
+}
+
 .is-mobile .expensica-category-chart-layout {
   flex-direction: column;
   align-items: center;
@@ -4595,6 +4634,7 @@ to {
 .expensica-account-card-credit-limit {
     color: var(--text-faint);
     font-size: 0.8rem;
+    font-style: italic;
     line-height: 1.2;
 }
 

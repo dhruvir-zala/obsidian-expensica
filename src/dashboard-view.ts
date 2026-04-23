@@ -185,6 +185,38 @@ function getRunningBalanceByTransactionIdForAccount(
         }, {} as Record<string, number>);
 }
 
+function formatRunningBalanceLabel(plugin: ExpensicaPlugin, balance: number, accountReference?: string): string {
+    const currency = getCurrencyByCode(plugin.settings.defaultCurrency) || getCurrencyByCode('USD');
+    const code = currency?.code || 'USD';
+    const fallbackSymbol = currency?.symbol || '$';
+    let symbol = fallbackSymbol;
+
+    try {
+        symbol = new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: code,
+            currencyDisplay: 'narrowSymbol'
+        }).formatToParts(0).find(part => part.type === 'currency')?.value || fallbackSymbol;
+    } catch {
+        symbol = fallbackSymbol;
+    }
+
+    const normalizedSymbol = symbol.replace(/[A-Za-z]+/g, '').trim() || '$';
+    const absoluteAmount = Math.abs(balance);
+    const fractionDigits = new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(absoluteAmount);
+    const sign = balance < 0 ? '-' : '';
+    const amount = `${sign}${normalizedSymbol}${fractionDigits}`;
+    if (!accountReference) {
+        return amount;
+    }
+
+    const account = plugin.getTransactionAccountDisplay(accountReference);
+    return `${account.name}: ${amount}`;
+}
+
 function getCreditLimitExceededAccount(plugin: ExpensicaPlugin, transaction: Transaction, existingTransactions: Transaction[]): Account | null {
     const candidateReferences = new Set<string>();
     if (transaction.account) {
@@ -1760,7 +1792,10 @@ export class ExpensicaDashboardView extends ItemView {
                 runningBalance,
                 currency: currency || { code: 'USD', name: 'US Dollar', symbol: '$' },
                 creditLimitLabel: account.type === AccountType.CREDIT && typeof account.creditLimit === 'number'
-                    ? `${formatCurrency(account.creditLimit, (currency || { code: 'USD' }).code)}`
+                    ? `${formatCurrency(
+                        Math.max(0, account.creditLimit - Math.max(0, runningBalance)),
+                        (currency || { code: 'USD' }).code
+                    )}`
                     : undefined,
                 lastTransactionDateLabel: lastTransaction
                     ? parseLocalDate(lastTransaction.date).toLocaleDateString('en-GB', {
@@ -4083,11 +4118,25 @@ export class ExpensicaDashboardView extends ItemView {
 
         // Sort transactions by date and creation time (most recent first)
         const sortedTransactions = sortTransactionsByDateTimeDesc(this.transactions);
+        const defaultAccountReference = this.plugin.normalizeTransactionAccountReference(undefined);
         const runningBalances = getRunningBalanceByTransactionIdForAccount(
             this.plugin,
-            this.plugin.normalizeTransactionAccountReference(undefined),
+            defaultAccountReference,
             this.plugin.getAllTransactions()
         );
+        const internalBalanceMaps = new Map<string, Record<string, number>>();
+        const ensureBalanceMap = (accountReference: string): Record<string, number> => {
+            const existing = internalBalanceMaps.get(accountReference);
+            if (existing) {
+                return existing;
+            }
+
+            const balances = accountReference === defaultAccountReference
+                ? runningBalances
+                : getRunningBalanceByTransactionIdForAccount(this.plugin, accountReference, this.plugin.getAllTransactions());
+            internalBalanceMaps.set(accountReference, balances);
+            return balances;
+        };
 
         // Limit to 10 most recent transactions
         const recentTransactions = sortedTransactions.slice(0, 10);
@@ -4118,10 +4167,34 @@ export class ExpensicaDashboardView extends ItemView {
                     this.renderTransactionGroupTitle(transactionsContainer, this.getTransactionDayLabel(transaction), 'day');
                 }
 
+                let runningBalanceLabel = formatRunningBalanceLabel(
+                    this.plugin,
+                    runningBalances[transaction.id] ?? 0
+                );
+                let secondaryRunningBalanceLabel: string | undefined;
+
+                if (this.plugin.settings.enableAccounts && transaction.type === TransactionType.INTERNAL) {
+                    const fromAccountReference = this.plugin.normalizeTransactionAccountReference(transaction.fromAccount);
+                    const toAccountReference = this.plugin.normalizeTransactionAccountReference(transaction.toAccount);
+                    const fromBalances = ensureBalanceMap(fromAccountReference);
+                    const toBalances = ensureBalanceMap(toAccountReference);
+                    runningBalanceLabel = formatRunningBalanceLabel(
+                        this.plugin,
+                        fromBalances[transaction.id] ?? 0,
+                        fromAccountReference
+                    );
+                    secondaryRunningBalanceLabel = formatRunningBalanceLabel(
+                        this.plugin,
+                        toBalances[transaction.id] ?? 0,
+                        toAccountReference
+                    );
+                }
+
                 renderTransactionCard(transactionsContainer, {
                     plugin: this.plugin,
                     transaction,
-                    runningBalance: runningBalances[transaction.id] ?? 0,
+                    runningBalanceLabel,
+                    secondaryRunningBalanceLabel,
                     onEdit: (transaction) => {
                         this.openTransactionModal(transaction);
                     },

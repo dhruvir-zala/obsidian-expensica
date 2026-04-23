@@ -70,6 +70,38 @@ function getRunningBalanceByTransactionIdForAccount(
         }, {} as Record<string, number>);
 }
 
+function formatRunningBalanceLabel(plugin: ExpensicaPlugin, balance: number, accountReference?: string): string {
+    const currency = getCurrencyByCode(plugin.settings.defaultCurrency) || getCurrencyByCode('USD');
+    const code = currency?.code || 'USD';
+    const fallbackSymbol = currency?.symbol || '$';
+    let symbol = fallbackSymbol;
+
+    try {
+        symbol = new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: code,
+            currencyDisplay: 'narrowSymbol'
+        }).formatToParts(0).find(part => part.type === 'currency')?.value || fallbackSymbol;
+    } catch {
+        symbol = fallbackSymbol;
+    }
+
+    const normalizedSymbol = symbol.replace(/[A-Za-z]+/g, '').trim() || '$';
+    const absoluteAmount = Math.abs(balance);
+    const fractionDigits = new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(absoluteAmount);
+    const sign = balance < 0 ? '-' : '';
+    const amount = `${sign}${normalizedSymbol}${fractionDigits}`;
+    if (!accountReference) {
+        return amount;
+    }
+
+    const account = plugin.getTransactionAccountDisplay(accountReference);
+    return `${account.name}: ${amount}`;
+}
+
 export interface TransactionView {
     plugin: ExpensicaPlugin;
     addTransaction(transaction: Transaction): Promise<void>;
@@ -853,12 +885,14 @@ export class ExpensicaTransactionsView implements TransactionView {
     private renderTransactionCardWithEditHandler(
         container: HTMLElement,
         transaction: Transaction,
-        runningBalance: number
+        runningBalanceLabel: string,
+        secondaryRunningBalanceLabel?: string
     ) {
         renderTransactionCard(container, {
             plugin: this.plugin,
             transaction,
-            runningBalance,
+            runningBalanceLabel,
+            secondaryRunningBalanceLabel,
             onEdit: (transaction) => {
                 const modal = new TransactionModal(this.app, this.plugin, this as any, transaction, transaction.type);
                 modal.open();
@@ -1456,12 +1490,31 @@ export class ExpensicaTransactionsView implements TransactionView {
         transactions: Transaction[],
         runningBalances: Record<string, number> = getRunningBalanceByTransactionIdForAccount(
             this.plugin,
-            this.plugin.normalizeTransactionAccountReference(undefined),
+            this.selectedAccountReferences.length === 1
+                ? this.selectedAccountReferences[0]
+                : this.plugin.normalizeTransactionAccountReference(undefined),
             this.transactions
         )
     ) {
         let currentMonthKey = '';
         let currentDayKey = '';
+        const defaultAccountReference = this.plugin.normalizeTransactionAccountReference(undefined);
+        const selectedAccountReference = this.selectedAccountReferences.length === 1
+            ? this.selectedAccountReferences[0]
+            : defaultAccountReference;
+        const internalBalanceMaps = new Map<string, Record<string, number>>();
+        const ensureBalanceMap = (accountReference: string): Record<string, number> => {
+            const existing = internalBalanceMaps.get(accountReference);
+            if (existing) {
+                return existing;
+            }
+
+            const balances = accountReference === selectedAccountReference
+                ? runningBalances
+                : getRunningBalanceByTransactionIdForAccount(this.plugin, accountReference, this.transactions);
+            internalBalanceMaps.set(accountReference, balances);
+            return balances;
+        };
 
         transactions.forEach(transaction => {
             const monthKey = this.getTransactionMonthKey(transaction);
@@ -1478,10 +1531,34 @@ export class ExpensicaTransactionsView implements TransactionView {
                 this.renderTransactionGroupTitle(container, this.getTransactionDayLabel(transaction), 'day');
             }
 
+            let runningBalanceLabel = formatRunningBalanceLabel(
+                this.plugin,
+                runningBalances[transaction.id] ?? 0
+            );
+            let secondaryRunningBalanceLabel: string | undefined;
+
+            if (this.plugin.settings.enableAccounts && transaction.type === TransactionType.INTERNAL) {
+                const fromAccountReference = this.plugin.normalizeTransactionAccountReference(transaction.fromAccount);
+                const toAccountReference = this.plugin.normalizeTransactionAccountReference(transaction.toAccount);
+                const fromBalances = ensureBalanceMap(fromAccountReference);
+                const toBalances = ensureBalanceMap(toAccountReference);
+                runningBalanceLabel = formatRunningBalanceLabel(
+                    this.plugin,
+                    fromBalances[transaction.id] ?? 0,
+                    fromAccountReference
+                );
+                secondaryRunningBalanceLabel = formatRunningBalanceLabel(
+                    this.plugin,
+                    toBalances[transaction.id] ?? 0,
+                    toAccountReference
+                );
+            }
+
             this.renderTransactionCardWithEditHandler(
                 container,
                 transaction,
-                runningBalances[transaction.id] ?? 0
+                runningBalanceLabel,
+                secondaryRunningBalanceLabel
             );
         });
     }

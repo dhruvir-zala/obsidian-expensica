@@ -17,7 +17,8 @@ import { showExpensicaNotice } from './notice';
 interface TransactionCardOptions {
     plugin: ExpensicaPlugin;
     transaction: Transaction;
-    runningBalance: number;
+    runningBalanceLabel: string;
+    secondaryRunningBalanceLabel?: string;
     onEdit?: (transaction: Transaction) => void;
     onCategoryChange?: (transaction: Transaction, categoryId: string) => void | Promise<void>;
     selectable?: boolean;
@@ -26,7 +27,7 @@ interface TransactionCardOptions {
 }
 
 export function renderTransactionCard(container: HTMLElement, options: TransactionCardOptions): HTMLElement {
-    const { plugin, transaction, runningBalance, onEdit, onCategoryChange, selectable, selected, onSelectionToggle } = options;
+    const { plugin, transaction, runningBalanceLabel, secondaryRunningBalanceLabel, onEdit, onCategoryChange, selectable, selected, onSelectionToggle } = options;
     const transactionEl = container.createDiv('expensica-transaction');
     transactionEl.setAttribute('data-transaction-id', transaction.id);
     transactionEl.toggleClass('is-selected', !!selected);
@@ -159,10 +160,17 @@ export function renderTransactionCard(container: HTMLElement, options: Transacti
         text: `${amountPrefix}${formattedAmount}`,
         cls: amountClass
     });
-    amountEl.createEl('span', {
-        text: formatTransactionCardCurrency(runningBalance, plugin.settings.defaultCurrency),
-        cls: 'expensica-transaction-balance'
+    const balanceEl = amountEl.createDiv('expensica-transaction-balance');
+    balanceEl.createEl('span', {
+        text: runningBalanceLabel,
+        cls: 'expensica-transaction-balance-label'
     });
+    if (secondaryRunningBalanceLabel) {
+        balanceEl.createEl('span', {
+            text: secondaryRunningBalanceLabel,
+            cls: 'expensica-transaction-balance-label'
+        });
+    }
 
     return transactionEl;
 }
