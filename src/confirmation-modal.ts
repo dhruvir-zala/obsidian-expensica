@@ -29,12 +29,12 @@ export class ConfirmationModal extends Modal {
         
         const cancelBtn = buttonContainer.createEl('button', {
             text: 'Cancel',
-            cls: 'expensica-btn expensica-btn-secondary'
+            cls: 'expensica-standard-button expensica-btn expensica-btn-secondary'
         });
         
         const confirmBtn = buttonContainer.createEl('button', {
             text: 'Delete',
-            cls: 'expensica-btn expensica-btn-danger'
+            cls: 'expensica-standard-button expensica-btn expensica-btn-danger-solid'
         });
 
         cancelBtn.addEventListener('click', () => {

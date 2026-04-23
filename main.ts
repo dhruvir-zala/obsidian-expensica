@@ -1,6 +1,6 @@
 import { App, Editor, MarkdownView, Modal, Plugin, PluginSettingTab, Setting, WorkspaceLeaf, TFile } from 'obsidian';
 
-import { ExpensicaDashboardView, EXPENSICA_VIEW_TYPE, ExpenseModal, IncomeModal, DateRangeType, DashboardTab } from './src/dashboard-view';
+import { ExpensicaDashboardView, EXPENSICA_VIEW_TYPE, TransactionModal, DateRangeType, DashboardTab } from './src/dashboard-view';
 import { ExpensicaTransactionsView } from './src/transactions-view';
 
 import {
@@ -22,11 +22,20 @@ import {
     Budget,
     BudgetData,
     DEFAULT_BUDGET_DATA,
+    Account,
+    AccountType,
+    DEFAULT_ACCOUNT,
+    DEFAULT_ACCOUNT_ID,
     BudgetPeriod,
     TransactionAggregator,
     formatCurrency,
     calculateBudgetStatus,
-    sortTransactionsByDateTimeDesc
+    sortTransactionsByDateTimeDesc,
+    compareAccounts,
+    formatAccountReference,
+    normalizeAccountName,
+    parseAccountReference,
+    INTERNAL_CATEGORY_ID
 } from './src/models';
 
 import { ExportModal } from './src/export-modal';
@@ -64,6 +73,7 @@ interface ExpensicaSettings {
     customCalendarColor: string;
     showWeekNumbers: boolean;
     showTransactionCategoryLabels: boolean;
+    enableAccounts: boolean;
     enableBudgeting: boolean;
     enableDailyFinanceReview: boolean;
     enableDailyFinanceReviewForAnyDate: boolean;
@@ -78,6 +88,12 @@ const LEADING_CATEGORY_EMOJI_PATTERN = /^([\p{Extended_Pictographic}\uFE0F\u200D
 // Define a separate interface for our transactions data
 interface TransactionsData {
     transactions: Transaction[];
+    accounts: Account[];
+    lastUpdated: string; // ISO timestamp
+}
+
+interface AccountsData {
+    accounts: Account[];
     lastUpdated: string; // ISO timestamp
 }
 
@@ -100,6 +116,7 @@ const DEFAULT_SETTINGS: ExpensicaSettings = {
     customCalendarColor: '#2196f3',
     showWeekNumbers: false,
     showTransactionCategoryLabels: true,
+    enableAccounts: true,
     enableBudgeting: true,
     enableDailyFinanceReview: true,
     enableDailyFinanceReviewForAnyDate: true,
@@ -110,6 +127,12 @@ const DEFAULT_SETTINGS: ExpensicaSettings = {
 // Default transactions data
 const DEFAULT_TRANSACTIONS_DATA: TransactionsData = {
     transactions: [],
+    accounts: [DEFAULT_ACCOUNT],
+    lastUpdated: new Date().toISOString()
+};
+
+const DEFAULT_ACCOUNTS_DATA: AccountsData = {
+    accounts: [DEFAULT_ACCOUNT],
     lastUpdated: new Date().toISOString()
 };
 
@@ -120,6 +143,7 @@ export default class ExpensicaPlugin extends Plugin {
     budgetData: BudgetData;
     dataFolderPath: string = 'expensica-data';
     transactionsFilePath: string = 'expensica-data/transactions.json';
+    accountsFilePath: string = 'expensica-data/accounts.json';
     budgetFilePath: string = 'expensica-data/budgets.json';
     settingTab: ExpensicaSettingTab | null = null;
     private dashboardTransactionsViews = new WeakMap<ExpensicaDashboardView, ExpensicaTransactionsView>();
@@ -132,6 +156,7 @@ export default class ExpensicaPlugin extends Plugin {
 
         // Load transactions data
         await this.loadTransactionsData();
+        await this.loadAccountsData();
         
         // Load budget data
         await this.loadBudgetData();
@@ -253,7 +278,6 @@ export default class ExpensicaPlugin extends Plugin {
         try {
             const fileExists = await this.app.vault.adapter.exists(this.transactionsFilePath);
             if (!fileExists) {
-                // If file doesn't exist, initialize with default data
                 this.transactionsData = DEFAULT_TRANSACTIONS_DATA;
                 await this.saveTransactionsData();
                 return;
@@ -263,21 +287,27 @@ export default class ExpensicaPlugin extends Plugin {
             const fileContent = await this.app.vault.adapter.read(this.transactionsFilePath);
 
             // Parse the JSON content
-            this.transactionsData = JSON.parse(fileContent);
+            const parsedData = JSON.parse(fileContent) as Partial<TransactionsData>;
+            this.transactionsData = {
+                transactions: Array.isArray(parsedData.transactions) ? parsedData.transactions : [],
+                accounts: [...DEFAULT_ACCOUNTS_DATA.accounts],
+                lastUpdated: parsedData.lastUpdated || new Date().toISOString()
+            };
 
-            // Validate the data structure
-            if (!this.transactionsData.transactions) {
-                this.transactionsData.transactions = [];
+            const normalizedSnapshotBeforeLoad = JSON.stringify({
+                transactions: this.transactionsData.transactions
+            });
+            this.normalizeTransactionsData();
+            const normalizedSnapshotAfterLoad = JSON.stringify({
+                transactions: this.transactionsData.transactions
+            });
+
+            if (normalizedSnapshotBeforeLoad !== normalizedSnapshotAfterLoad) {
+                await this.saveTransactionsData();
             }
 
-            if (!this.transactionsData.lastUpdated) {
-                this.transactionsData.lastUpdated = new Date().toISOString();
-            }
-
-            // Log success
             console.log('Expensica: Transactions loaded successfully', this.transactionsData.transactions.length, 'transactions found');
         } catch (error) {
-            // If there's an error, initialize with default data
             console.error('Expensica: Error loading transactions data', error);
             showExpensicaNotice('Error loading transactions data. Using default data.');
             this.transactionsData = DEFAULT_TRANSACTIONS_DATA;
@@ -287,15 +317,64 @@ export default class ExpensicaPlugin extends Plugin {
 
     async saveTransactionsData() {
         try {
-            // Update timestamp
+            this.normalizeTransactionsData();
             this.transactionsData.lastUpdated = new Date().toISOString();
+            const persistedData = {
+                transactions: this.transactionsData.transactions,
+                lastUpdated: this.transactionsData.lastUpdated
+            };
             await this.app.vault.adapter.write(
                 this.transactionsFilePath,
-                JSON.stringify(this.transactionsData, null, 2)
+                JSON.stringify(persistedData, null, 2)
             );
         } catch (error) {
             console.error('Failed to save transactions data:', error);
             showExpensicaNotice('Failed to save transactions data');
+        }
+    }
+
+    async loadAccountsData() {
+        try {
+            const fileExists = await this.app.vault.adapter.exists(this.accountsFilePath);
+            if (!fileExists) {
+                this.transactionsData.accounts = [...DEFAULT_ACCOUNTS_DATA.accounts];
+                this.normalizeTransactionsData();
+                await this.saveAccountsData();
+                return;
+            }
+
+            const fileContent = await this.app.vault.adapter.read(this.accountsFilePath);
+            const parsedData = JSON.parse(fileContent) as Partial<AccountsData>;
+            this.transactionsData.accounts = Array.isArray(parsedData.accounts) && parsedData.accounts.length > 0
+                ? parsedData.accounts
+                : [...DEFAULT_ACCOUNTS_DATA.accounts];
+
+            this.normalizeTransactionsData();
+
+            console.log('Expensica: Accounts loaded successfully', this.transactionsData.accounts.length, 'accounts found');
+        } catch (error) {
+            console.error('Expensica: Error loading accounts data', error);
+            showExpensicaNotice('Error loading accounts data. Using default data.');
+            this.transactionsData.accounts = [...DEFAULT_ACCOUNTS_DATA.accounts];
+            this.normalizeTransactionsData();
+            await this.saveAccountsData();
+        }
+    }
+
+    async saveAccountsData() {
+        try {
+            this.normalizeTransactionsData();
+            const accountsData: AccountsData = {
+                accounts: this.transactionsData.accounts,
+                lastUpdated: new Date().toISOString()
+            };
+            await this.app.vault.adapter.write(
+                this.accountsFilePath,
+                JSON.stringify(accountsData, null, 2)
+            );
+        } catch (error) {
+            console.error('Failed to save accounts data:', error);
+            showExpensicaNotice('Failed to save accounts data');
         }
     }
 
@@ -390,12 +469,16 @@ export default class ExpensicaPlugin extends Plugin {
         transactionsView.renderDashboardTab(container);
     }
 
+    renderDashboardAccountsTab(dashboard: ExpensicaDashboardView, container: HTMLElement) {
+        dashboard.renderAccountsTab(container);
+    }
+
     async openExpenseModal() {
         // Find the dashboard view if it exists
         const leaves = this.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE);
         if (leaves.length > 0 && leaves[0].view instanceof ExpensicaDashboardView) {
             const dashboardView = leaves[0].view as ExpensicaDashboardView;
-            const modal = new ExpenseModal(this.app, this, dashboardView);
+            const modal = new TransactionModal(this.app, this, dashboardView, null, TransactionType.EXPENSE);
             modal.open();
         } else {
             // Open the dashboard first, then open the modal
@@ -404,7 +487,7 @@ export default class ExpensicaPlugin extends Plugin {
                 const newLeaves = this.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE);
                 if (newLeaves.length > 0 && newLeaves[0].view instanceof ExpensicaDashboardView) {
                     const dashboardView = newLeaves[0].view as ExpensicaDashboardView;
-                    const modal = new ExpenseModal(this.app, this, dashboardView);
+                    const modal = new TransactionModal(this.app, this, dashboardView, null, TransactionType.EXPENSE);
                     modal.open();
                 }
             }, 300); // Give some time for the view to initialize
@@ -416,7 +499,7 @@ export default class ExpensicaPlugin extends Plugin {
         const leaves = this.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE);
         if (leaves.length > 0 && leaves[0].view instanceof ExpensicaDashboardView) {
             const dashboardView = leaves[0].view as ExpensicaDashboardView;
-            const modal = new IncomeModal(this.app, this, dashboardView);
+            const modal = new TransactionModal(this.app, this, dashboardView, null, TransactionType.INCOME);
             modal.open();
         } else {
             // Open the dashboard first, then open the modal
@@ -425,7 +508,7 @@ export default class ExpensicaPlugin extends Plugin {
                 const newLeaves = this.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE);
                 if (newLeaves.length > 0 && newLeaves[0].view instanceof ExpensicaDashboardView) {
                     const dashboardView = newLeaves[0].view as ExpensicaDashboardView;
-                    const modal = new IncomeModal(this.app, this, dashboardView);
+                    const modal = new TransactionModal(this.app, this, dashboardView, null, TransactionType.INCOME);
                     modal.open();
                 }
             }, 300); // Give some time for the view to initialize
@@ -484,7 +567,7 @@ export default class ExpensicaPlugin extends Plugin {
             ...categoryEmojis
         });
 
-        this.settings.categories = legacyCategories.map(category => {
+        const normalizedCategories = legacyCategories.map(category => {
             const normalizedName = this.normalizeCategoryName(category.name);
             if (normalizedName.leadingEmoji && !this.settings.categoryEmojis[category.id]) {
                 this.settings.categoryEmojis[category.id] = normalizedName.leadingEmoji;
@@ -497,20 +580,25 @@ export default class ExpensicaPlugin extends Plugin {
             };
         });
 
+        this.settings.categories = normalizedCategories;
+
         this.settings.categoryEmojis = this.getCategoryEmojiOverridesForSave();
     }
 
     normalizeCategoryName(name: string): { name: string; leadingEmoji: string | null } {
         const match = name.match(LEADING_CATEGORY_EMOJI_PATTERN);
+        const canonicalize = (value: string) => value
+            .trim()
+            .replace(/\bGifts\s+and\s+Donations\b/gi, 'Gifts & Donations');
         if (!match) {
             return {
-                name,
+                name: canonicalize(name),
                 leadingEmoji: null
             };
         }
 
         return {
-            name: name.slice(match[0].length).trim(),
+            name: canonicalize(name.slice(match[0].length)),
             leadingEmoji: match[1]
         };
     }
@@ -633,7 +721,19 @@ export default class ExpensicaPlugin extends Plugin {
 
     // Add a new category
     async addCategory(category: Category): Promise<void> {
-        this.settings.categories.push(category);
+        const normalizedName = this.normalizeCategoryName(category.name).name;
+        const duplicate = this.settings.categories.find(existing =>
+            existing.type === category.type
+            && this.normalizeCategoryName(existing.name).name.toLowerCase() === normalizedName.toLowerCase()
+        );
+        if (duplicate) {
+            throw new Error('Category already exists');
+        }
+
+        this.settings.categories.push({
+            ...category,
+            name: normalizedName
+        });
         await this.saveSettings();
     }
 
@@ -655,7 +755,20 @@ export default class ExpensicaPlugin extends Plugin {
     async updateCategory(updatedCategory: Category): Promise<void> {
         const index = this.settings.categories.findIndex(c => c.id === updatedCategory.id);
         if (index !== -1) {
-            this.settings.categories[index] = updatedCategory;
+            const normalizedName = this.normalizeCategoryName(updatedCategory.name).name;
+            const duplicate = this.settings.categories.find(existing =>
+                existing.id !== updatedCategory.id
+                && existing.type === updatedCategory.type
+                && this.normalizeCategoryName(existing.name).name.toLowerCase() === normalizedName.toLowerCase()
+            );
+            if (duplicate) {
+                throw new Error('Category already exists');
+            }
+
+            this.settings.categories[index] = {
+                ...updatedCategory,
+                name: normalizedName
+            };
             await this.saveSettings();
         }
     }
@@ -691,7 +804,7 @@ export default class ExpensicaPlugin extends Plugin {
         // Store the category for reference
         const category = this.getCategoryById(id);
         if (!category) return false;
-        if (category.id === 'other_expense') return false;
+        if (category.id === 'other_expense' || category.id === INTERNAL_CATEGORY_ID) return false;
 
         const fallbackCategoryId = category.type === CategoryType.EXPENSE ? 'other_expense' : this.getCategories(category.type)[0]?.id;
         if (!fallbackCategoryId) return false;
@@ -730,10 +843,7 @@ export default class ExpensicaPlugin extends Plugin {
 
     // Methods for transaction management
     async addTransaction(transaction: Transaction, sourceView?: unknown) {
-        this.transactionsData.transactions.push({
-            ...transaction,
-            description: formatTransactionDescriptionForBanking(transaction.description)
-        });
+        this.transactionsData.transactions.push(this.normalizeTransactionForSave(transaction));
         await this.saveTransactionsData();
         await this.refreshExpensicaViews(sourceView);
     }
@@ -741,7 +851,7 @@ export default class ExpensicaPlugin extends Plugin {
     async updateTransaction(transaction: Transaction, sourceView?: unknown) {
         const index = this.transactionsData.transactions.findIndex(t => t.id === transaction.id);
         if (index !== -1) {
-            this.transactionsData.transactions[index] = transaction;
+            this.transactionsData.transactions[index] = this.normalizeTransactionForSave(transaction);
             await this.saveTransactionsData();
             await this.refreshExpensicaViews(sourceView);
         }
@@ -767,6 +877,245 @@ export default class ExpensicaPlugin extends Plugin {
     // Get all transactions
     getAllTransactions(): Transaction[] {
         return [...this.transactionsData.transactions];
+    }
+
+    getAccounts(): Account[] {
+        return [...this.transactionsData.accounts].sort(compareAccounts);
+    }
+
+    getDefaultAccount(): Account {
+        return this.transactionsData.accounts.find(account => account.isDefault)
+            || DEFAULT_ACCOUNT;
+    }
+
+    findAccountByReference(accountReference?: string | null): Account | null {
+        const normalizedReference = accountReference
+            ? this.normalizeTransactionAccountReference(accountReference)
+            : formatAccountReference(this.getDefaultAccount().type, this.getDefaultAccount().name);
+        return this.transactionsData.accounts.find(account =>
+            formatAccountReference(account.type, account.name) === normalizedReference
+        ) || null;
+    }
+
+    getTransactionAccountDisplay(accountReference?: string | null): Account {
+        return this.findAccountByReference(accountReference) || this.getDefaultAccount();
+    }
+
+    async addAccount(account: Account, sourceView?: unknown) {
+        const normalizedAccount: Account = {
+            ...account,
+            name: normalizeAccountName(account.name)
+        };
+
+        if (normalizedAccount.type !== AccountType.CREDIT) {
+            delete normalizedAccount.creditLimit;
+        }
+
+        this.transactionsData.accounts.push(normalizedAccount);
+        this.transactionsData.accounts.sort(compareAccounts);
+        await this.saveAccountsData();
+        await this.refreshExpensicaViews(sourceView);
+    }
+
+    async updateAccount(previousReference: string, account: Account, sourceView?: unknown) {
+        const nextReference = formatAccountReference(account.type, account.name);
+        const duplicateAccount = this.transactionsData.accounts.find(existing =>
+            formatAccountReference(existing.type, existing.name) === nextReference
+            && formatAccountReference(existing.type, existing.name) !== previousReference
+        );
+        if (duplicateAccount) {
+            throw new Error('Account already exists');
+        }
+
+        const index = this.transactionsData.accounts.findIndex(existing =>
+            formatAccountReference(existing.type, existing.name) === previousReference
+        );
+        if (index === -1) {
+            throw new Error('Account not found');
+        }
+
+        const updatedAccount: Account = {
+            ...this.transactionsData.accounts[index],
+            ...account,
+            name: normalizeAccountName(account.name)
+        };
+        if (updatedAccount.isDefault && updatedAccount.type === AccountType.CREDIT) {
+            throw new Error('Default account cannot be credit');
+        }
+
+        if (updatedAccount.type !== AccountType.CREDIT) {
+            delete updatedAccount.creditLimit;
+        }
+
+        this.transactionsData.accounts[index] = updatedAccount;
+
+        this.transactionsData.transactions = this.transactionsData.transactions.map(transaction => {
+            const nextTransaction = { ...transaction };
+
+            if (Object.prototype.hasOwnProperty.call(nextTransaction, 'account') && nextTransaction.account === previousReference) {
+                nextTransaction.account = nextReference;
+            }
+
+            if (nextTransaction.fromAccount === previousReference) {
+                nextTransaction.fromAccount = nextReference;
+            }
+
+            if (nextTransaction.toAccount === previousReference) {
+                nextTransaction.toAccount = nextReference;
+            }
+
+            return nextTransaction;
+        });
+
+        await this.saveAccountsData();
+        await this.saveTransactionsData();
+        await this.refreshExpensicaViews(sourceView);
+    }
+
+    async deleteAccount(accountReference: string, sourceView?: unknown) {
+        const index = this.transactionsData.accounts.findIndex(account =>
+            formatAccountReference(account.type, account.name) === accountReference
+        );
+        if (index === -1) {
+            throw new Error('Account not found');
+        }
+
+        this.transactionsData.accounts.splice(index, 1);
+        await this.saveAccountsData();
+        await this.refreshExpensicaViews(sourceView);
+    }
+
+    hasTransactionsForAccount(accountReference: string): boolean {
+        return this.transactionsData.transactions.some(transaction =>
+            transaction.account === accountReference
+            || transaction.fromAccount === accountReference
+            || transaction.toAccount === accountReference
+        );
+    }
+
+    normalizeTransactionAccountReference(accountReference?: string | null): string {
+        if (!accountReference) {
+            const defaultAccount = this.getDefaultAccount();
+            return formatAccountReference(defaultAccount.type, defaultAccount.name);
+        }
+
+        const parsedAccount = parseAccountReference(accountReference);
+        return formatAccountReference(parsedAccount.type, parsedAccount.name);
+    }
+
+    normalizeTransactionForSave(transaction: Transaction): Transaction {
+        const description = formatTransactionDescriptionForBanking(transaction.description);
+        if (transaction.type === TransactionType.INTERNAL) {
+            return {
+                ...transaction,
+                description,
+                category: INTERNAL_CATEGORY_ID,
+                fromAccount: this.normalizeTransactionAccountReference(transaction.fromAccount),
+                toAccount: this.normalizeTransactionAccountReference(transaction.toAccount),
+                account: undefined
+            };
+        }
+
+        return {
+            ...transaction,
+            description,
+            account: this.normalizeTransactionAccountReference(transaction.account),
+            fromAccount: undefined,
+            toAccount: undefined
+        };
+    }
+
+    private normalizeTransactionsData() {
+        const normalizedAccounts = new Map<string, Account>();
+        let defaultAccountId: string | null = null;
+        let defaultAccountPriority = -1;
+        const usedAccountIds = new Set<string>();
+        const sourceAccounts = this.transactionsData.accounts && this.transactionsData.accounts.length > 0
+            ? this.transactionsData.accounts
+            : [DEFAULT_ACCOUNT];
+
+        sourceAccounts.forEach((account) => {
+            const normalizedName = normalizeAccountName(account.name) || DEFAULT_ACCOUNT.name;
+            const normalizedType = account.type || AccountType.CHEQUING;
+            const reference = formatAccountReference(normalizedType, normalizedName);
+
+            if (normalizedAccounts.has(reference)) {
+                return;
+            }
+
+            let normalizedId = account.id || generateId();
+            if (usedAccountIds.has(normalizedId)) {
+                normalizedId = generateId();
+            }
+            usedAccountIds.add(normalizedId);
+
+            const normalizedAccount: Account = {
+                id: normalizedId,
+                name: normalizedName,
+                type: normalizedType,
+                createdAt: account.createdAt || new Date().toISOString(),
+                isDefault: !!account.isDefault
+            };
+            if (normalizedType === AccountType.CREDIT && typeof account.creditLimit === 'number') {
+                normalizedAccount.creditLimit = account.creditLimit;
+            }
+
+            normalizedAccounts.set(reference, normalizedAccount);
+
+            const defaultPriority = account.id === DEFAULT_ACCOUNT_ID
+                ? 2
+                : account.isDefault
+                    ? 1
+                    : 0;
+
+            if (defaultPriority > defaultAccountPriority) {
+                defaultAccountId = normalizedAccount.id;
+                defaultAccountPriority = defaultPriority;
+            }
+        });
+
+        if (!defaultAccountId) {
+            const firstAccount = [...normalizedAccounts.values()][0];
+            if (firstAccount) {
+                firstAccount.isDefault = true;
+                defaultAccountId = firstAccount.id;
+            }
+        }
+
+        this.transactionsData.accounts = [...normalizedAccounts.values()]
+            .map(account => ({
+                ...account,
+                isDefault: account.id === defaultAccountId
+            }))
+            .sort(compareAccounts);
+        this.transactionsData.transactions = (this.transactionsData.transactions || []).map(transaction => {
+            const normalizedType = transaction.type === TransactionType.INCOME
+                ? TransactionType.INCOME
+                : transaction.type === TransactionType.INTERNAL
+                    ? TransactionType.INTERNAL
+                    : TransactionType.EXPENSE;
+
+            if (normalizedType === TransactionType.INTERNAL) {
+                return {
+                    ...transaction,
+                    type: normalizedType,
+                    category: INTERNAL_CATEGORY_ID,
+                    fromAccount: transaction.fromAccount ? this.normalizeTransactionAccountReference(transaction.fromAccount) : undefined,
+                    toAccount: transaction.toAccount ? this.normalizeTransactionAccountReference(transaction.toAccount) : undefined,
+                    account: undefined
+                };
+            }
+
+            return {
+                ...transaction,
+                type: normalizedType,
+                account: Object.prototype.hasOwnProperty.call(transaction, 'account')
+                    ? this.normalizeTransactionAccountReference(transaction.account)
+                    : undefined,
+                fromAccount: undefined,
+                toAccount: undefined
+            };
+        });
     }
 
     // Export transactions to JSON (legacy method for backward compatibility)
@@ -1402,6 +1751,22 @@ class ExpensicaSettingTab extends PluginSettingTab {
 
                 }));
 
+        new Setting(containerEl)
+            .setName('Enable Accounts')
+            .setDesc('Enable or disable account features.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.enableAccounts)
+                .onChange(async (value) => {
+                    this.plugin.settings.enableAccounts = value;
+                    await this.plugin.saveSettings();
+
+                    this.plugin.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE).forEach((leaf) => {
+                        if (leaf.view instanceof ExpensicaDashboardView) {
+                            leaf.view.renderDashboard();
+                        }
+                    });
+                }));
+
         // Enable budgeting feature
         new Setting(containerEl)
             .setName('Enable Budgeting')
@@ -1846,4 +2211,3 @@ class DatePickerModal extends Modal {
         contentEl.empty();
     }
 }
-

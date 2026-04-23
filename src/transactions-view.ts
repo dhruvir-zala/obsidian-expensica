@@ -1,22 +1,74 @@
 import { App } from 'obsidian';
 import {
+    AccountType,
     CategoryType,
     Transaction,
     TransactionType,
     formatCurrency,
     formatDate,
+    formatAccountReference,
+    getAccountEmoji,
+    getAccountTypeLabel,
     parseLocalDate,
     sortTransactionsByDateTimeDesc,
-    getRunningBalanceByTransactionId,
     getCurrencyByCode
 } from './models';
 import ExpensicaPlugin from '../main';
 import type { SharedDateRangeState } from '../main';
-import { ExpenseModal, IncomeModal, DateRangeType, DateRange } from './dashboard-view';
+import { TransactionModal, DateRangeType, DateRange } from './dashboard-view';
 import { ConfirmationModal } from './confirmation-modal';
 import { showExpensicaNotice } from './notice';
 import { renderTransactionCard, showTransactionBulkCategoryMenu } from './transaction-card';
 import { renderCategoryChip } from './category-chip';
+
+function getAccountTransactionAmount(plugin: ExpensicaPlugin, transaction: Transaction, accountReference: string): number {
+    const account = plugin.findAccountByReference(accountReference);
+    const isCredit = account?.type === AccountType.CREDIT;
+
+    if (transaction.type === TransactionType.INTERNAL) {
+        const fromAccount = transaction.fromAccount ? plugin.normalizeTransactionAccountReference(transaction.fromAccount) : '';
+        const toAccount = transaction.toAccount ? plugin.normalizeTransactionAccountReference(transaction.toAccount) : '';
+        if (fromAccount === accountReference) {
+            return isCredit ? transaction.amount : -transaction.amount;
+        }
+        if (toAccount === accountReference) {
+            return isCredit ? -transaction.amount : transaction.amount;
+        }
+        return 0;
+    }
+
+    const transactionAccount = Object.prototype.hasOwnProperty.call(transaction, 'account')
+        ? plugin.normalizeTransactionAccountReference(transaction.account)
+        : plugin.normalizeTransactionAccountReference(undefined);
+
+    if (transactionAccount !== accountReference) {
+        return 0;
+    }
+
+    if (transaction.type === TransactionType.INCOME) {
+        return isCredit ? -transaction.amount : transaction.amount;
+    }
+
+    return transaction.type === TransactionType.EXPENSE
+        ? (isCredit ? transaction.amount : -transaction.amount)
+        : 0;
+}
+
+function getRunningBalanceByTransactionIdForAccount(
+    plugin: ExpensicaPlugin,
+    accountReference: string,
+    transactions: Transaction[]
+): Record<string, number> {
+    let runningBalance = 0;
+
+    return sortTransactionsByDateTimeDesc(transactions)
+        .reverse()
+        .reduce((balances, transaction) => {
+            runningBalance += getAccountTransactionAmount(plugin, transaction, accountReference);
+            balances[transaction.id] = runningBalance;
+            return balances;
+        }, {} as Record<string, number>);
+}
 
 export interface TransactionView {
     plugin: ExpensicaPlugin;
@@ -31,6 +83,8 @@ export class ExpensicaTransactionsView implements TransactionView {
     transactions: Transaction[] = [];
     filteredTransactions: Transaction[] = [];
     searchQuery: string = '';
+    selectedTypeFilters: TransactionType[] = [];
+    selectedAccountReferences: string[] = [];
     selectedCategoryIds: string[] = [];
     inputFocused: boolean = false;
     
@@ -155,25 +209,13 @@ export class ExpensicaTransactionsView implements TransactionView {
 
         const filterMenu = filterContainer.createDiv('expensica-filter-menu');
         filterMenu.addClass('is-hidden');
+        filterMenu.createDiv({ text: 'Filter by', cls: 'expensica-filter-menu-title' });
 
-        filterMenu.createDiv({
-            text: 'Filter by',
-            cls: 'expensica-filter-menu-title'
-        });
-
-        const categoryMenuItem = filterMenu.createDiv('expensica-filter-menu-item expensica-filter-menu-parent');
-        categoryMenuItem.setAttribute('tabindex', '0');
-        categoryMenuItem.createSpan({ text: 'Categories', cls: 'expensica-filter-menu-value' });
-        const categoryMenuArrow = categoryMenuItem.createSpan('expensica-filter-menu-arrow');
-        categoryMenuArrow.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>';
-
-        const categorySubmenu = categoryMenuItem.createDiv('expensica-filter-submenu');
-        this.renderCategoryFilterOptions(categorySubmenu);
-
-        categoryMenuItem.addEventListener('click', (event) => {
-            event.stopPropagation();
-            categoryMenuItem.toggleClass('is-open', !categoryMenuItem.hasClass('is-open'));
-        });
+        this.renderFilterMenuSection(filterMenu, 'Type', (submenu) => this.renderTypeFilterOptions(submenu));
+        if (this.plugin.settings.enableAccounts) {
+            this.renderFilterMenuSection(filterMenu, 'Accounts', (submenu) => this.renderAccountFilterOptions(submenu));
+        }
+        this.renderFilterMenuSection(filterMenu, 'Categories', (submenu) => this.renderCategoryFilterOptions(submenu));
 
         const closeMenu = () => {
             filterContainer.removeClass('is-open');
@@ -183,6 +225,9 @@ export class ExpensicaTransactionsView implements TransactionView {
         filterButton.addEventListener('click', (event) => {
             event.stopPropagation();
             const isHidden = filterMenu.hasClass('is-hidden');
+            filterMenu.querySelectorAll('.expensica-filter-menu-parent.is-open').forEach(item => {
+                item.removeClass('is-open');
+            });
             filterContainer.toggleClass('is-open', isHidden);
             filterMenu.toggleClass('is-hidden', !isHidden);
 
@@ -198,11 +243,116 @@ export class ExpensicaTransactionsView implements TransactionView {
         });
     }
 
+    private renderFilterMenuSection(
+        filterMenu: HTMLElement,
+        label: string,
+        renderOptions: (submenu: HTMLElement) => void
+    ) {
+        const menuItem = filterMenu.createDiv('expensica-filter-menu-item expensica-filter-menu-parent');
+        menuItem.createSpan({ text: label, cls: 'expensica-filter-menu-value' });
+        const menuArrow = menuItem.createSpan('expensica-filter-menu-arrow');
+        menuArrow.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>';
+
+        const submenu = menuItem.createDiv('expensica-filter-submenu');
+        renderOptions(submenu);
+
+        const openOnlyThisMenu = () => {
+            filterMenu.querySelectorAll('.expensica-filter-menu-parent.is-open').forEach(item => {
+                if (item !== menuItem) {
+                    item.removeClass('is-open');
+                }
+            });
+            menuItem.addClass('is-open');
+        };
+
+        const closeMenu = () => {
+            menuItem.removeClass('is-open');
+        };
+
+        menuItem.addEventListener('mouseenter', () => {
+            openOnlyThisMenu();
+        });
+
+        menuItem.addEventListener('mouseleave', () => {
+            closeMenu();
+        });
+
+        menuItem.addEventListener('click', (event) => {
+            event.stopPropagation();
+            closeMenu();
+        });
+
+        menuItem.addEventListener('mousedown', (event) => {
+            event.preventDefault();
+        });
+    }
+
+    private renderTypeFilterOptions(container: HTMLElement) {
+        const optionsHost = container.createDiv('expensica-filter-submenu-options');
+        const options = [
+            { value: TransactionType.INCOME, label: 'Income', emoji: '💰' },
+            { value: TransactionType.EXPENSE, label: 'Expenses', emoji: '💸' },
+            { value: TransactionType.INTERNAL, label: 'Internal', emoji: '🔁' }
+        ];
+
+        options.forEach(option => {
+            const isSelected = this.selectedTypeFilters.includes(option.value);
+            const button = optionsHost.createEl('button', {
+                cls: `expensica-filter-category-option ${isSelected ? 'is-selected' : ''}`.trim(),
+                attr: {
+                    type: 'button',
+                    'aria-pressed': String(isSelected),
+                    'data-filter-type': option.value
+                }
+            });
+            button.createSpan({ text: option.emoji, cls: 'expensica-filter-category-emoji' });
+            button.createSpan({ text: option.label, cls: 'expensica-filter-category-name' });
+            button.addEventListener('click', (event) => {
+                event.stopPropagation();
+                this.toggleSelectedType(option.value);
+                button.closest('.expensica-filter-menu-parent')?.removeClass('is-open');
+            });
+        });
+    }
+
+    private renderAccountFilterOptions(container: HTMLElement) {
+        const optionsHost = container.createDiv('expensica-filter-submenu-options');
+        const accounts = this.plugin.getAccounts();
+
+        if (accounts.length === 0) {
+            optionsHost.createDiv({ text: 'No accounts', cls: 'expensica-filter-menu-empty' });
+            return;
+        }
+
+        accounts.forEach(account => {
+            const accountReference = this.plugin.normalizeTransactionAccountReference(
+                formatAccountReference(account.type, account.name)
+            );
+            const isSelected = this.selectedAccountReferences.includes(accountReference);
+            const button = optionsHost.createEl('button', {
+                cls: `expensica-filter-category-option ${isSelected ? 'is-selected' : ''}`.trim(),
+                attr: {
+                    type: 'button',
+                    'aria-pressed': String(isSelected),
+                    'data-account-reference': accountReference
+                }
+            });
+            button.createSpan({ text: getAccountEmoji(account.type), cls: 'expensica-filter-category-emoji' });
+            button.createSpan({ text: account.name, cls: 'expensica-filter-category-name' });
+            button.addEventListener('click', (event) => {
+                event.stopPropagation();
+                this.toggleSelectedAccount(accountReference);
+                button.closest('.expensica-filter-menu-parent')?.removeClass('is-open');
+            });
+        });
+    }
+
     renderCategoryFilterOptions(container: HTMLElement) {
+        const optionsHost = container.createDiv('expensica-filter-submenu-options');
         const categories = this.plugin.getCategories();
 
         if (categories.length === 0) {
-            container.createDiv({
+            optionsHost.createDiv({
                 text: 'No categories',
                 cls: 'expensica-filter-menu-empty'
             });
@@ -211,7 +361,7 @@ export class ExpensicaTransactionsView implements TransactionView {
 
         categories.forEach(category => {
             const isSelected = this.selectedCategoryIds.includes(category.id);
-            const categoryButton = container.createEl('button', {
+            const categoryButton = optionsHost.createEl('button', {
                 cls: `expensica-filter-category-option ${isSelected ? 'is-selected' : ''}`.trim(),
                 attr: {
                     type: 'button',
@@ -232,15 +382,31 @@ export class ExpensicaTransactionsView implements TransactionView {
             categoryButton.addEventListener('click', (event) => {
                 event.stopPropagation();
                 this.toggleSelectedCategory(category.id);
-                categoryButton.toggleClass('is-selected', this.selectedCategoryIds.includes(category.id));
-                categoryButton.setAttribute('aria-pressed', String(this.selectedCategoryIds.includes(category.id)));
+                categoryButton.closest('.expensica-filter-menu-parent')?.removeClass('is-open');
             });
         });
     }
 
     renderSelectedFilterChips(container: HTMLElement) {
         const selectedFiltersContainer = container.createDiv('expensica-selected-filters');
-        selectedFiltersContainer.toggleClass('is-hidden', this.selectedCategoryIds.length === 0);
+        const hasFilters = this.selectedTypeFilters.length > 0
+            || this.selectedAccountReferences.length > 0
+            || this.selectedCategoryIds.length > 0;
+        selectedFiltersContainer.toggleClass('is-hidden', !hasFilters);
+
+        this.selectedTypeFilters.forEach(type => {
+            const label = type === TransactionType.INCOME ? 'Income' : type === TransactionType.EXPENSE ? 'Expenses' : 'Internal';
+            this.renderTextFilterChip(selectedFiltersContainer, label, () => this.removeSelectedType(type));
+        });
+
+        this.selectedAccountReferences.forEach(accountReference => {
+            const account = this.plugin.findAccountByReference(accountReference);
+            if (!account) {
+                return;
+            }
+
+            this.renderTextFilterChip(selectedFiltersContainer, account.name, () => this.removeSelectedAccount(accountReference));
+        });
 
         this.selectedCategoryIds.forEach(categoryId => {
             const category = this.plugin.getCategoryById(categoryId);
@@ -267,6 +433,20 @@ export class ExpensicaTransactionsView implements TransactionView {
         });
     }
 
+    private renderTextFilterChip(container: HTMLElement, text: string, onRemove: () => void) {
+        const chip = container.createEl('button', {
+            cls: 'expensica-selected-filter-chip expensica-selected-filter-chip-text',
+            attr: {
+                type: 'button',
+                'aria-label': `Remove ${text} filter`
+            }
+        });
+        chip.createSpan({ text });
+        const removeIcon = chip.createSpan('expensica-selected-filter-remove');
+        removeIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+        chip.addEventListener('click', onRemove);
+    }
+
     refreshSelectedFilterChips() {
         const searchSection = this.getActiveContentEl().querySelector('.expensica-search-section') as HTMLElement | null;
         if (!searchSection) {
@@ -278,13 +458,75 @@ export class ExpensicaTransactionsView implements TransactionView {
     }
 
     refreshCategoryFilterOptions() {
-        this.getActiveContentEl().querySelectorAll('.expensica-filter-category-option').forEach(option => {
-            const categoryId = option.getAttribute('data-category-id');
-            const isSelected = !!categoryId && this.selectedCategoryIds.includes(categoryId);
-
+        this.getActiveContentEl().querySelectorAll('.expensica-filter-category-option[data-filter-type]').forEach(option => {
+            const type = option.getAttribute('data-filter-type') as TransactionType | null;
+            const isSelected = !!type && this.selectedTypeFilters.includes(type);
             option.toggleClass('is-selected', isSelected);
             option.setAttribute('aria-pressed', String(isSelected));
         });
+
+        this.getActiveContentEl().querySelectorAll('.expensica-filter-category-option[data-account-reference]').forEach(option => {
+            const accountReference = option.getAttribute('data-account-reference');
+            const isSelected = !!accountReference && this.selectedAccountReferences.includes(accountReference);
+            option.toggleClass('is-selected', isSelected);
+            option.setAttribute('aria-pressed', String(isSelected));
+        });
+
+        this.getActiveContentEl().querySelectorAll('.expensica-filter-category-option').forEach(option => {
+            const categoryId = option.getAttribute('data-category-id');
+            if (!categoryId) {
+                return;
+            }
+            const isSelected = this.selectedCategoryIds.includes(categoryId);
+            option.toggleClass('is-selected', isSelected);
+            option.setAttribute('aria-pressed', String(isSelected));
+        });
+    }
+
+    toggleSelectedType(type: TransactionType) {
+        if (this.selectedTypeFilters.includes(type)) {
+            this.selectedTypeFilters = this.selectedTypeFilters.filter(value => value !== type);
+        } else {
+            this.selectedTypeFilters = [...this.selectedTypeFilters, type];
+        }
+
+        this.applyFilters(true);
+        this.persistTransactionsState();
+        this.refreshTransactionsListOnly();
+        this.refreshSelectedFilterChips();
+        this.refreshCategoryFilterOptions();
+    }
+
+    removeSelectedType(type: TransactionType) {
+        this.selectedTypeFilters = this.selectedTypeFilters.filter(value => value !== type);
+        this.applyFilters(true);
+        this.persistTransactionsState();
+        this.refreshTransactionsListOnly();
+        this.refreshSelectedFilterChips();
+        this.refreshCategoryFilterOptions();
+    }
+
+    toggleSelectedAccount(accountReference: string) {
+        if (this.selectedAccountReferences.includes(accountReference)) {
+            this.selectedAccountReferences = this.selectedAccountReferences.filter(value => value !== accountReference);
+        } else {
+            this.selectedAccountReferences = [...this.selectedAccountReferences, accountReference];
+        }
+
+        this.applyFilters(true);
+        this.persistTransactionsState();
+        this.refreshTransactionsListOnly();
+        this.refreshSelectedFilterChips();
+        this.refreshCategoryFilterOptions();
+    }
+
+    removeSelectedAccount(accountReference: string) {
+        this.selectedAccountReferences = this.selectedAccountReferences.filter(value => value !== accountReference);
+        this.applyFilters(true);
+        this.persistTransactionsState();
+        this.refreshTransactionsListOnly();
+        this.refreshSelectedFilterChips();
+        this.refreshCategoryFilterOptions();
     }
 
     toggleSelectedCategory(categoryId: string) {
@@ -429,6 +671,19 @@ export class ExpensicaTransactionsView implements TransactionView {
             }
         });
 
+        this.selectedTypeFilters = this.selectedTypeFilters.filter(type =>
+            Object.values(TransactionType).includes(type)
+        );
+        if (!this.plugin.settings.enableAccounts) {
+            this.selectedAccountReferences = [];
+        } else {
+            const validAccountReferences = new Set(this.plugin.getAccounts().map(account =>
+                this.plugin.normalizeTransactionAccountReference(formatAccountReference(account.type, account.name))
+            ));
+            this.selectedAccountReferences = this.selectedAccountReferences.filter(accountReference =>
+                validAccountReferences.has(accountReference)
+            );
+        }
         this.selectedCategoryIds = this.selectedCategoryIds.filter(categoryId =>
             !!this.plugin.getCategoryById(categoryId)
         );
@@ -447,16 +702,49 @@ export class ExpensicaTransactionsView implements TransactionView {
             );
         }
 
+        if (this.selectedTypeFilters.length > 0) {
+            this.filteredTransactions = this.filteredTransactions.filter(transaction =>
+                this.selectedTypeFilters.includes(transaction.type)
+            );
+        }
+
+        if (this.selectedAccountReferences.length > 0) {
+            this.filteredTransactions = this.filteredTransactions.filter(transaction => {
+                const accountReferences = new Set<string>();
+                accountReferences.add(this.plugin.normalizeTransactionAccountReference(transaction.account));
+                if (transaction.fromAccount) {
+                    accountReferences.add(this.plugin.normalizeTransactionAccountReference(transaction.fromAccount));
+                }
+                if (transaction.toAccount) {
+                    accountReferences.add(this.plugin.normalizeTransactionAccountReference(transaction.toAccount));
+                }
+
+                return this.selectedAccountReferences.some(reference => accountReferences.has(reference));
+            });
+        }
+
         if (this.searchQuery) {
             const query = this.searchQuery.toLowerCase();
             this.filteredTransactions = this.filteredTransactions.filter(transaction => {
                 const category = this.plugin.getCategoryById(transaction.category);
+                const typeLabel = transaction.type === TransactionType.INCOME
+                    ? 'income'
+                    : transaction.type === TransactionType.EXPENSE
+                        ? 'expenses'
+                        : 'internal';
+                const accountNames = [
+                    transaction.account ? this.plugin.findAccountByReference(transaction.account)?.name ?? '' : this.plugin.getDefaultAccount().name,
+                    transaction.fromAccount ? this.plugin.findAccountByReference(transaction.fromAccount)?.name ?? '' : '',
+                    transaction.toAccount ? this.plugin.findAccountByReference(transaction.toAccount)?.name ?? '' : ''
+                ];
                 const searchableValues = [
                     transaction.description,
                     transaction.category,
                     category?.name ?? '',
                     category ? this.plugin.getCategoryEmoji(category.id) : '',
-                    transaction.notes ?? ''
+                    transaction.notes ?? '',
+                    typeLabel,
+                    ...accountNames
                 ];
 
                 return searchableValues.some(value => value.toLowerCase().includes(query));
@@ -477,7 +765,7 @@ export class ExpensicaTransactionsView implements TransactionView {
             (totals, transaction) => {
                 if (transaction.type === TransactionType.INCOME) {
                     totals.income += transaction.amount;
-                } else {
+                } else if (transaction.type === TransactionType.EXPENSE) {
                     totals.expenses += transaction.amount;
                 }
 
@@ -510,7 +798,11 @@ export class ExpensicaTransactionsView implements TransactionView {
         
         // Get current page transactions
         const pageTransactions = this.filteredTransactions.slice(startIdx, endIdx);
-        const runningBalances = getRunningBalanceByTransactionId(this.transactions);
+        const runningBalances = getRunningBalanceByTransactionIdForAccount(
+            this.plugin,
+            this.plugin.normalizeTransactionAccountReference(undefined),
+            this.transactions
+        );
         
         this.renderTransactionsToContainer(transactionsContainer, pageTransactions, runningBalances);
         this.renderBulkSelectionFooter(transactionsSection);
@@ -568,13 +860,8 @@ export class ExpensicaTransactionsView implements TransactionView {
             transaction,
             runningBalance,
             onEdit: (transaction) => {
-                if (transaction.type === TransactionType.EXPENSE) {
-                    const modal = new ExpenseModal(this.app, this.plugin, this as any, transaction);
-                    modal.open();
-                } else {
-                    const modal = new IncomeModal(this.app, this.plugin, this as any, transaction);
-                    modal.open();
-                }
+                const modal = new TransactionModal(this.app, this.plugin, this as any, transaction, transaction.type);
+                modal.open();
             },
             onCategoryChange: async (transaction, categoryId) => {
                 await this.updateTransaction({
@@ -604,13 +891,53 @@ export class ExpensicaTransactionsView implements TransactionView {
         }
 
         const footer = container.createDiv('expensica-transaction-bulk-footer');
-        footer.createSpan({
+        const leftGroup = footer.createDiv('expensica-transaction-bulk-group expensica-transaction-bulk-group-left');
+        const clearButton = leftGroup.createEl('button', {
+            cls: 'expensica-standard-button expensica-btn expensica-btn-secondary expensica-transaction-bulk-icon-button expensica-transaction-bulk-clear',
+            attr: {
+                type: 'button',
+                'aria-label': 'Clear selected transactions',
+                title: 'Clear selected transactions'
+            }
+        });
+        clearButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+        clearButton.addEventListener('click', () => {
+            this.clearSelectedTransactions();
+        });
+
+        leftGroup.createSpan({
             text: `${selectedTransactions.length} selected`,
             cls: 'expensica-transaction-bulk-count'
         });
 
-        const hasMixedTypes = new Set(selectedTransactions.map(transaction => transaction.type)).size > 1;
-        const categoryButton = footer.createEl('button', {
+        const visibleTransactions = this.getVisiblePageTransactions();
+        const allVisibleSelected = visibleTransactions.length > 0
+            && visibleTransactions.every(transaction => this.selectedTransactionIds.has(transaction.id));
+        const selectAllButton = leftGroup.createEl('button', {
+            text: 'Select All',
+            cls: 'expensica-standard-button expensica-transaction-bulk-select-all-btn',
+            attr: {
+                type: 'button',
+                'aria-label': allVisibleSelected ? 'All visible transactions selected' : 'Select all visible transactions'
+            }
+        });
+        selectAllButton.disabled = allVisibleSelected;
+        if (allVisibleSelected) {
+            selectAllButton.title = 'All visible transactions are already selected.';
+        } else {
+            selectAllButton.addEventListener('click', () => {
+                visibleTransactions.forEach(transaction => this.selectedTransactionIds.add(transaction.id));
+                this.maybeShowMixedTransactionTypeSelectionNotice();
+                this.syncVisibleTransactionSelectionState();
+                this.syncBulkSelectionFooter();
+            });
+        }
+
+        const selectedTypes = new Set(selectedTransactions.map(transaction => transaction.type));
+        const hasMixedTypes = selectedTypes.size > 1;
+        const hasInternalOnly = selectedTypes.size === 1 && selectedTypes.has(TransactionType.INTERNAL);
+        const actionsGroup = footer.createDiv('expensica-transaction-bulk-group expensica-transaction-bulk-group-right');
+        const categoryButton = actionsGroup.createEl('button', {
             text: 'Category',
             cls: 'expensica-standard-button expensica-transaction-bulk-category-btn',
             attr: {
@@ -619,9 +946,11 @@ export class ExpensicaTransactionsView implements TransactionView {
             }
         });
 
-        if (hasMixedTypes) {
+        if (hasMixedTypes || hasInternalOnly) {
             categoryButton.disabled = true;
-            categoryButton.title = 'Select only income or only expense transactions to bulk change category.';
+            categoryButton.title = hasInternalOnly
+                ? 'Internal transaction category cannot be changed.'
+                : 'Select only income or only expense transactions to bulk change category.';
         } else {
             categoryButton.addEventListener('click', (event) => {
                 event.preventDefault();
@@ -635,22 +964,28 @@ export class ExpensicaTransactionsView implements TransactionView {
             });
         }
 
-        const clearButton = footer.createEl('button', {
-            cls: 'expensica-transaction-bulk-clear',
+        const deleteButton = actionsGroup.createEl('button', {
+            cls: 'expensica-standard-button expensica-btn expensica-btn-danger-solid expensica-transaction-bulk-icon-button expensica-transaction-bulk-delete',
             attr: {
                 type: 'button',
-                'aria-label': 'Clear selected transactions',
-                title: 'Clear selected transactions'
+                'aria-label': 'Delete selected transactions',
+                title: 'Delete selected transactions'
             }
         });
-        clearButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
-        clearButton.addEventListener('click', () => {
-            this.clearSelectedTransactions();
+        deleteButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
+        deleteButton.addEventListener('click', () => {
+            void this.deleteSelectedTransactions();
         });
     }
 
     private getSelectedTransactions(): Transaction[] {
         return this.transactions.filter(transaction => this.selectedTransactionIds.has(transaction.id));
+    }
+
+    private getVisiblePageTransactions(): Transaction[] {
+        const startIdx = (this.currentPage - 1) * this.pageSize;
+        const endIdx = Math.min(startIdx + this.pageSize, this.filteredTransactions.length);
+        return this.filteredTransactions.slice(startIdx, endIdx);
     }
 
     private clearSelectedTransactions() {
@@ -685,6 +1020,33 @@ export class ExpensicaTransactionsView implements TransactionView {
         this.persistTransactionsState();
         this.refreshTransactionsListOnly();
         showExpensicaNotice('Transactions updated successfully');
+    }
+
+    private async deleteSelectedTransactions() {
+        const selectedTransactions = this.getSelectedTransactions();
+        if (selectedTransactions.length === 0) {
+            return;
+        }
+
+        new ConfirmationModal(
+            this.app,
+            'Delete Transactions?',
+            `Are you sure you want to delete ${selectedTransactions.length} selected transactions? This action cannot be undone.`,
+            async (confirmed) => {
+                if (!confirmed) {
+                    return;
+                }
+
+                await Promise.all(selectedTransactions.map(transaction =>
+                    this.plugin.deleteTransaction(transaction.id, this)
+                ));
+                this.selectedTransactionIds.clear();
+                await this.loadTransactionsData(false);
+                this.persistTransactionsState();
+                this.refreshTransactionsListOnly();
+                showExpensicaNotice('Transactions deleted successfully');
+            }
+        ).open();
     }
 
     private syncBulkSelectionFooter() {
@@ -920,7 +1282,7 @@ export class ExpensicaTransactionsView implements TransactionView {
         this.refreshTransactionsListOnly();
     }
 
-    async deleteTransaction(id: string) {
+    async deleteTransaction(id: string, onDeleted?: () => void, onConfirmDelete?: () => void) {
         const transaction = this.transactions.find(t => t.id === id);
         if (!transaction) return;
 
@@ -930,12 +1292,14 @@ export class ExpensicaTransactionsView implements TransactionView {
             `Are you sure you want to delete this ${transaction.type.toLowerCase()} transaction? This action cannot be undone.`,
             async (confirmed) => {
                 if (confirmed) {
+                    onConfirmDelete?.();
                     await this.plugin.deleteTransaction(id, this);
                     // Refresh transactions without resetting the user's current filter/page context.
                     await this.loadTransactionsData(false);
                     this.persistTransactionsState();
                     this.refreshTransactionsListOnly();
                     showExpensicaNotice('Transaction deleted successfully');
+                    onDeleted?.();
                 }
             }
         ).open();
@@ -1090,7 +1454,11 @@ export class ExpensicaTransactionsView implements TransactionView {
     renderTransactionsToContainer(
         container: HTMLElement,
         transactions: Transaction[],
-        runningBalances: Record<string, number> = getRunningBalanceByTransactionId(this.transactions)
+        runningBalances: Record<string, number> = getRunningBalanceByTransactionIdForAccount(
+            this.plugin,
+            this.plugin.normalizeTransactionAccountReference(undefined),
+            this.transactions
+        )
     ) {
         let currentMonthKey = '';
         let currentDayKey = '';

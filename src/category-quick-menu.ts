@@ -1,5 +1,5 @@
 import { App, Modal } from 'obsidian';
-import { Category, CategoryType, ColorPalette, getCommonCategoryEmojis } from './models';
+import { Category, CategoryType, ColorPalette, getCommonCategoryEmojis, INTERNAL_CATEGORY_ID } from './models';
 import type ExpensicaPlugin from '../main';
 import { EmojiPickerModal } from './emoji-picker-modal';
 import { showExpensicaNotice } from './notice';
@@ -28,6 +28,7 @@ class CategoryQuickMenu {
     private readonly onCategoryChange: (categoryId: string) => void | Promise<void>;
     private readonly selectedCategoryId?: string;
     private readonly categories: Category[];
+    private readonly hostEl: HTMLElement;
     private readonly boundHandleDocumentPointerDown: (event: MouseEvent) => void;
     private readonly boundHandleDocumentKeydown: (event: KeyboardEvent) => void;
 
@@ -43,7 +44,8 @@ class CategoryQuickMenu {
         this.categoryType = categoryType;
         this.onCategoryChange = onCategoryChange;
         this.selectedCategoryId = selectedCategoryId;
-        this.categories = plugin.getCategories(categoryType);
+        this.categories = plugin.getCategories(categoryType).filter(category => category.id !== INTERNAL_CATEGORY_ID);
+        this.hostEl = (target.closest('.modal-content') as HTMLElement | null) || document.body;
         this.boundHandleDocumentPointerDown = this.handleDocumentPointerDown.bind(this);
         this.boundHandleDocumentKeydown = this.handleDocumentKeydown.bind(this);
 
@@ -85,7 +87,7 @@ class CategoryQuickMenu {
     }
 
     open() {
-        document.body.appendChild(this.menuEl);
+        this.hostEl.appendChild(this.menuEl);
         this.renderList();
         this.position();
 
@@ -329,7 +331,7 @@ class NewCategoryModal extends Modal {
             }
 
             const duplicate = this.plugin.getCategories(this.categoryType).find(category =>
-                category.name.toLowerCase() === normalizedName.toLowerCase()
+                this.plugin.normalizeCategoryName(category.name).name.toLowerCase() === normalizedName.toLowerCase()
             );
             if (duplicate) {
                 showExpensicaNotice(`Category "${normalizedName}" already exists.`);
