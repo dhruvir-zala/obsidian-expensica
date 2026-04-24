@@ -341,6 +341,7 @@ export class ExpensicaDashboardView extends ItemView {
     selectedCalendarDate: Date | null = null;
     expensesChart: Chart | null = null;
     incomeExpenseChart: Chart | null = null;
+    cumulativeExpensesChart: Chart | null = null;
     
     // Track previous month data for trends
     previousMonthTransactions: Transaction[] = [];
@@ -443,6 +444,10 @@ export class ExpensicaDashboardView extends ItemView {
         if (this.incomeExpenseChart) {
             this.incomeExpenseChart.destroy();
             this.incomeExpenseChart = null;
+        }
+        if (this.cumulativeExpensesChart) {
+            this.cumulativeExpensesChart.destroy();
+            this.cumulativeExpensesChart = null;
         }
 
         // Premium visualizations will be garbage collected
@@ -719,7 +724,7 @@ export class ExpensicaDashboardView extends ItemView {
     }
 
     private setChartAnimations(enabled: boolean) {
-        [this.expensesChart, this.incomeExpenseChart].forEach(chart => {
+        [this.expensesChart, this.incomeExpenseChart, this.cumulativeExpensesChart].forEach(chart => {
             if (!chart) return;
             chart.options.animation = enabled
                 ? this.getChartAnimationOptions(true)
@@ -970,7 +975,7 @@ export class ExpensicaDashboardView extends ItemView {
         this.updateDashboardChartGridLayout();
         let resizedAnyChart = false;
 
-        [this.expensesChart, this.incomeExpenseChart].forEach(chart => {
+        [this.expensesChart, this.incomeExpenseChart, this.cumulativeExpensesChart].forEach(chart => {
             if (chart) {
                 resizedAnyChart = this.resizeChartToContainer(chart) || resizedAnyChart;
             }
@@ -1453,11 +1458,74 @@ export class ExpensicaDashboardView extends ItemView {
     getSummaryComparisonRange(): { range: DateRange; label: string } | null {
         switch (this.dateRange.type) {
             case DateRangeType.THIS_WEEK:
-                return { range: this.getDateRange(DateRangeType.LAST_WEEK), label: 'last Wk' };
+                return { range: this.getDateRange(DateRangeType.LAST_WEEK), label: 'Last Wk' };
             case DateRangeType.THIS_MONTH:
-                return { range: this.getDateRange(DateRangeType.LAST_MONTH), label: 'last M' };
+                return { range: this.getDateRange(DateRangeType.LAST_MONTH), label: 'Last M' };
             case DateRangeType.THIS_YEAR:
-                return { range: this.getDateRange(DateRangeType.LAST_YEAR), label: 'last Y' };
+                return { range: this.getDateRange(DateRangeType.LAST_YEAR), label: 'Last Y' };
+            default:
+                return null;
+        }
+    }
+
+    getPreviousPeriodComparisonRange(): { range: DateRange; label: string } | null {
+        const start = new Date(this.dateRange.startDate);
+        const end = new Date(this.dateRange.endDate);
+
+        switch (this.dateRange.type) {
+            case DateRangeType.TODAY:
+                return {
+                    range: this.getDateRange(
+                        DateRangeType.CUSTOM,
+                        new Date(start.getFullYear(), start.getMonth(), start.getDate() - 1),
+                        new Date(end.getFullYear(), end.getMonth(), end.getDate() - 1)
+                    ),
+                    label: 'Previous Day'
+                };
+            case DateRangeType.THIS_WEEK:
+            case DateRangeType.LAST_WEEK:
+                return {
+                    range: this.getDateRange(
+                        DateRangeType.CUSTOM,
+                        new Date(start.getFullYear(), start.getMonth(), start.getDate() - 7),
+                        new Date(end.getFullYear(), end.getMonth(), end.getDate() - 7)
+                    ),
+                    label: 'Previous Wk'
+                };
+            case DateRangeType.THIS_MONTH:
+            case DateRangeType.LAST_MONTH:
+                return {
+                    range: this.getDateRange(
+                        DateRangeType.CUSTOM,
+                        new Date(start.getFullYear(), start.getMonth() - 1, 1),
+                        new Date(start.getFullYear(), start.getMonth(), 0)
+                    ),
+                    label: 'Previous M'
+                };
+            case DateRangeType.THIS_YEAR:
+            case DateRangeType.LAST_YEAR:
+                return {
+                    range: this.getDateRange(
+                        DateRangeType.CUSTOM,
+                        new Date(start.getFullYear() - 1, 0, 1),
+                        new Date(start.getFullYear() - 1, 11, 31)
+                    ),
+                    label: 'Previous Y'
+                };
+            case DateRangeType.CUSTOM:
+                return {
+                    range: this.getDateRange(
+                        DateRangeType.CUSTOM,
+                        new Date(start.getFullYear() - 1, start.getMonth(), start.getDate()),
+                        new Date(end.getFullYear() - 1, end.getMonth(), end.getDate())
+                    ),
+                    label: `Previous ${this.getDateRange(
+                        DateRangeType.CUSTOM,
+                        new Date(start.getFullYear() - 1, start.getMonth(), start.getDate()),
+                        new Date(end.getFullYear() - 1, end.getMonth(), end.getDate())
+                    ).label}`
+                };
+            case DateRangeType.ALL_TIME:
             default:
                 return null;
         }
@@ -1860,6 +1928,9 @@ export class ExpensicaDashboardView extends ItemView {
     renderOverviewTab(container: HTMLElement) {
         // Summary cards
         this.renderSummary(container);
+
+        const cumulativeExpensesChartContainer = container.createDiv('expensica-chart-container expensica-cumulative-expenses-chart-container expensica-animate expensica-animate-delay-1');
+        this.renderCumulativeExpensesChart(cumulativeExpensesChartContainer);
 
         // Premium visualizations section
         this.renderPremiumVisualizations(container);
@@ -3110,17 +3181,22 @@ export class ExpensicaDashboardView extends ItemView {
         };
     }
 
-    getIncomeExpenseChartBuckets(): { label: string; start: Date; end: Date; income: number; expenses: number; net: number; accountBalances: Record<string, number> }[] {
-        const chartBounds = this.getIncomeExpenseChartDayBounds();
-        if (!chartBounds) {
+    getChartBucketsForRange(
+        dateRange: DateRange,
+        transactions: Transaction[],
+        resolutionOverride?: 'hour' | 'day' | 'week' | 'month' | 'year'
+    ): { label: string; start: Date; end: Date; income: number; expenses: number; net: number; accountBalances: Record<string, number> }[] {
+        const start = new Date(dateRange.startDate);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(dateRange.endDate);
+        end.setHours(23, 59, 59, 999);
+
+        if (start > end) {
             return [];
         }
 
-        const { start, end } = chartBounds;
         const includeYear = start.getFullYear() !== end.getFullYear();
-        const resolution = this.getIncomeExpenseChartResolution(start, end);
-        const accounts = this.getIncomeExpenseChartAccounts();
-        const accountReferences = accounts.map(account => account.reference);
+        const resolution = resolutionOverride ?? this.getIncomeExpenseChartResolution(start, end);
         const buckets: { label: string; start: Date; end: Date; income: number; expenses: number; net: number; accountBalances: Record<string, number> }[] = [];
 
         if (resolution === 'hour') {
@@ -3134,8 +3210,7 @@ export class ExpensicaDashboardView extends ItemView {
                 buckets.push(this.createIncomeExpenseBucket(
                     this.formatChartHourLabel(currentHour, includeYear || formatDate(start) !== formatDate(end)),
                     bucketStart < start ? new Date(start) : bucketStart,
-                    bucketEnd > end ? new Date(end) : bucketEnd,
-                    accountReferences
+                    bucketEnd > end ? new Date(end) : bucketEnd
                 ));
                 currentHour.setHours(currentHour.getHours() + 1);
             }
@@ -3151,8 +3226,7 @@ export class ExpensicaDashboardView extends ItemView {
                 buckets.push(this.createIncomeExpenseBucket(
                     this.formatChartShortDateLabel(currentDay, includeYear),
                     bucketStart,
-                    bucketEnd > end ? new Date(end) : bucketEnd,
-                    accountReferences
+                    bucketEnd > end ? new Date(end) : bucketEnd
                 ));
                 currentDay.setDate(currentDay.getDate() + 1);
             }
@@ -3181,10 +3255,7 @@ export class ExpensicaDashboardView extends ItemView {
                         income: 0,
                         expenses: 0,
                         net: 0,
-                        accountBalances: accountReferences.reduce((balances, reference) => {
-                            balances[reference] = 0;
-                            return balances;
-                        }, {} as Record<string, number>)
+                        accountBalances: {}
                     });
                 }
 
@@ -3209,8 +3280,7 @@ export class ExpensicaDashboardView extends ItemView {
                 buckets.push(this.createIncomeExpenseBucket(
                     this.formatChartMonthLabel(currentMonth, includeYear),
                     bucketStart < start ? new Date(start) : bucketStart,
-                    bucketEnd > end ? new Date(end) : bucketEnd,
-                    accountReferences
+                    bucketEnd > end ? new Date(end) : bucketEnd
                 ));
                 currentMonth.setMonth(currentMonth.getMonth() + 1);
             }
@@ -3225,14 +3295,33 @@ export class ExpensicaDashboardView extends ItemView {
                 buckets.push(this.createIncomeExpenseBucket(
                     this.formatChartYearLabel(currentYear),
                     bucketStart < start ? new Date(start) : bucketStart,
-                    bucketEnd > end ? new Date(end) : bucketEnd,
-                    accountReferences
+                    bucketEnd > end ? new Date(end) : bucketEnd
                 ));
                 currentYear.setFullYear(currentYear.getFullYear() + 1);
             }
         }
 
-        this.assignTransactionsToIncomeExpenseBuckets(buckets);
+        this.assignTransactionsToIncomeExpenseBuckets(buckets, transactions);
+        return buckets;
+    }
+
+    getIncomeExpenseChartBuckets(): { label: string; start: Date; end: Date; income: number; expenses: number; net: number; accountBalances: Record<string, number> }[] {
+        const chartBounds = this.getIncomeExpenseChartDayBounds();
+        if (!chartBounds) {
+            return [];
+        }
+
+        const { start, end } = chartBounds;
+        const resolution = this.getIncomeExpenseChartResolution(start, end);
+        const accounts = this.getIncomeExpenseChartAccounts();
+        const accountReferences = accounts.map(account => account.reference);
+        const buckets = this.getChartBucketsForRange(this.dateRange, this.transactions, resolution).map(bucket => ({
+            ...bucket,
+            accountBalances: accountReferences.reduce((balances, reference) => {
+                balances[reference] = 0;
+                return balances;
+            }, {} as Record<string, number>)
+        }));
 
         return buckets.map(bucket => {
             bucket.net = this.getNetBalanceThrough(bucket.end);
@@ -3261,6 +3350,218 @@ export class ExpensicaDashboardView extends ItemView {
                 bucket.expenses += transaction.amount;
             }
         });
+    }
+
+    renderCumulativeExpensesChart(container: HTMLElement) {
+        const chartHeader = container.createDiv('expensica-chart-header');
+        const chartTitle = chartHeader.createEl('h3', { cls: 'expensica-chart-title' });
+        chartTitle.setText('Cumulative Expenses');
+
+        const canvasContainer = container.createDiv('expensica-canvas-container');
+        const expenseTransactions = this.transactions.filter(transaction => transaction.type === TransactionType.EXPENSE);
+
+        if (expenseTransactions.length === 0) {
+            const emptyState = canvasContainer.createDiv('expensica-empty-charts');
+            emptyState.createEl('div', { text: '📉', cls: 'expensica-empty-icon' });
+            emptyState.createEl('p', {
+                text: 'No expenses found for this period.',
+                cls: 'expensica-empty-state-message'
+            });
+            return;
+        }
+
+        const canvas = canvasContainer.createEl('canvas', { attr: { id: 'cumulative-expenses-chart' } });
+        setTimeout(() => this.createCumulativeExpensesChart(canvas), 50);
+    }
+
+    createCumulativeExpensesChart(canvas: HTMLCanvasElement) {
+        if (this.cumulativeExpensesChart) {
+            this.cumulativeExpensesChart.destroy();
+        }
+
+        const currentRange = {
+            ...this.dateRange,
+            endDate: new Date(this.dateRange.endDate)
+        };
+        currentRange.endDate.setHours(23, 59, 59, 999);
+        const currentBuckets = this.getChartBucketsForRange(
+            currentRange,
+            this.getTransactionsForDateRange(currentRange)
+        );
+        if (currentBuckets.length === 0) {
+            return;
+        }
+
+        const currentData = currentBuckets.reduce((series, bucket) => {
+            const nextValue = (series[series.length - 1] || 0) + bucket.expenses;
+            series.push(nextValue);
+            return series;
+        }, [] as number[]);
+        const todayEnd = new Date();
+        todayEnd.setHours(23, 59, 59, 999);
+        const visibleCurrentData = currentBuckets.map((bucket, index) => (
+            bucket.start > todayEnd ? null : currentData[index]
+        ));
+
+        const comparison = this.getPreviousPeriodComparisonRange();
+        const previousTransactions = comparison ? this.getTransactionsForDateRange(comparison.range) : [];
+        const previousExpenseTransactions = previousTransactions.filter(transaction => transaction.type === TransactionType.EXPENSE);
+        const previousBuckets = comparison && previousExpenseTransactions.length > 0
+            ? this.getChartBucketsForRange(
+                {
+                    ...comparison.range,
+                    endDate: new Date(comparison.range.endDate.getFullYear(), comparison.range.endDate.getMonth(), comparison.range.endDate.getDate(), 23, 59, 59, 999)
+                },
+                previousTransactions,
+                this.getIncomeExpenseChartResolution(this.dateRange.startDate, this.dateRange.endDate)
+            )
+            : [];
+        const sortedPreviousExpenseTransactions = previousExpenseTransactions
+            .slice()
+            .sort((a, b) => this.getTransactionDateTime(a).getTime() - this.getTransactionDateTime(b).getTime());
+        const firstPreviousExpenseAt = sortedPreviousExpenseTransactions.length > 0
+            ? this.getTransactionDateTime(sortedPreviousExpenseTransactions[0])
+            : null;
+        const lastPreviousExpenseAt = sortedPreviousExpenseTransactions.length > 0
+            ? this.getTransactionDateTime(sortedPreviousExpenseTransactions[sortedPreviousExpenseTransactions.length - 1])
+            : null;
+        const previousData = previousBuckets.reduce((series, bucket) => {
+            const nextValue = (series[series.length - 1] || 0) + bucket.expenses;
+            series.push(nextValue);
+            return series;
+        }, [] as number[]);
+
+        const comparisonLabel = comparison?.label ?? 'Previous';
+        const formattedDates = currentBuckets.map(bucket => bucket.label);
+        const expenseColor = this.getThemeColor('--text-error', 'rgb(212, 76, 71)');
+        const expenseFillColor = this.getThemeColorWithAlpha('--text-error', 'rgb(212, 76, 71)', 0.14);
+        const comparisonColor = this.getThemeColorWithAlpha('--text-muted', 'rgb(148, 163, 184)', 0.7);
+        const helperTextColor = this.getChartHelperTextColor();
+
+        this.prepareChartCanvasSize(canvas);
+        this.cumulativeExpensesChart = new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels: formattedDates,
+                datasets: [
+                    {
+                        label: comparisonLabel,
+                        data: formattedDates.map((_, index) => {
+                            const bucket = previousBuckets[index];
+                            if (
+                                !bucket
+                                || !firstPreviousExpenseAt
+                                || !lastPreviousExpenseAt
+                                || bucket.end < firstPreviousExpenseAt
+                                || bucket.start > lastPreviousExpenseAt
+                            ) {
+                                return null;
+                            }
+
+                            return previousData[index] ?? null;
+                        }),
+                        borderColor: comparisonColor,
+                        backgroundColor: comparisonColor,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHoverRadius: 0,
+                        tension: 0.35,
+                        fill: false,
+                        spanGaps: false,
+                        order: 1
+                    },
+                    {
+                        label: 'Expenses',
+                        data: visibleCurrentData,
+                        borderColor: expenseColor,
+                        backgroundColor: expenseFillColor,
+                        borderWidth: 3,
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                        pointHoverBackgroundColor: expenseColor,
+                        pointHoverBorderColor: expenseColor,
+                        pointHitRadius: 16,
+                        tension: 0.35,
+                        fill: true,
+                        spanGaps: false,
+                        order: 0
+                    }
+                ]
+            },
+            options: {
+                responsive: false,
+                maintainAspectRatio: false,
+                animation: this.getChartAnimationOptions(this.animateIncomeExpenseChartThisRender),
+                resizeDelay: this.getChartResizeDelay(),
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                transitions: {
+                    resize: {
+                        animation: {
+                            duration: 0
+                        }
+                    }
+                },
+                layout: {
+                    padding: {
+                        bottom: 12
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            color: helperTextColor,
+                            callback: (value) => this.formatCompactChartCurrency(value as number)
+                        },
+                        grid: {
+                            color: this.getGridColor()
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            color: helperTextColor,
+                            padding: 6
+                        },
+                        grid: {
+                            color: this.getGridColor()
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: this.getTooltipBackgroundColor(),
+                        titleColor: this.getTooltipTitleColor(),
+                        bodyColor: this.getTooltipBodyColor(),
+                        borderColor: this.getTooltipBorderColor(),
+                        borderWidth: 1,
+                        multiKeyBackground: 'transparent',
+                        callbacks: {
+                            label: (context) => `${context.dataset.label}: ${this.formatCompactChartCurrency(context.raw as number)}`,
+                            labelColor: (context) => {
+                                const dataset = context.dataset;
+                                return {
+                                    borderColor: dataset.borderColor as string,
+                                    backgroundColor: dataset.backgroundColor as string
+                                };
+                            }
+                        },
+                        filter: (context) => context.raw !== null
+                    }
+                }
+            }
+        });
+
+        this.bindChartAreaTooltipClear(canvas, this.cumulativeExpensesChart);
+
+        if (this.animateIncomeExpenseChartThisRender) {
+            this.scheduleChartAnimationReset();
+        }
     }
 
     createCategoryExpensesChart(
@@ -3799,6 +4100,11 @@ export class ExpensicaDashboardView extends ItemView {
         const incomeData = buckets.map(bucket => bucket.income);
         const expenseData = buckets.map(bucket => -bucket.expenses);
         const netData = buckets.map(bucket => bucket.net);
+        const todayEnd = new Date();
+        todayEnd.setHours(23, 59, 59, 999);
+        const visibleNetData = buckets.map((bucket, index) => (
+            bucket.start > todayEnd ? null : netData[index]
+        ));
         const accountSeries = accounts.map((account) => {
             const firstTransaction = this.plugin.getAllTransactions()
                 .filter(transaction => getAccountTransactionAmount(this.plugin, transaction, account.reference) !== 0)
@@ -3809,6 +4115,9 @@ export class ExpensicaDashboardView extends ItemView {
                 ...account,
                 data: buckets.map(bucket => {
                     if (firstTransactionAt && bucket.end < firstTransactionAt) {
+                        return null;
+                    }
+                    if (bucket.start > todayEnd) {
                         return null;
                     }
 
@@ -3863,7 +4172,7 @@ export class ExpensicaDashboardView extends ItemView {
                     },
                     {
                         label: 'Net',
-                        data: netData,
+                        data: visibleNetData,
                         type: 'line',
                         hidden: !this.incomeExpenseVisibility.net,
                         borderColor: netColor,
