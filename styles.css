@@ -8106,6 +8106,22 @@ body:not(.is-mobile) .expensica-calendar-details-container {
   max-width: 400px;
 }
 
+body:not(.is-mobile) .expensica-calendar-flex-container:not(.expensica-calendar-stacked) {
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+body:not(.is-mobile) .expensica-calendar-flex-container:not(.expensica-calendar-stacked) > .expensica-calendar-details-container {
+  order: 2;
+  flex: 0 1 400px;
+}
+
+body:not(.is-mobile) .expensica-calendar-flex-container:not(.expensica-calendar-stacked) > .expensica-calendar-grid-container {
+  order: 1;
+  flex: 0 1 auto;
+}
+
 body:not(.is-mobile) .expensica-dashboard-grid {
   grid-template-columns: repeat(2, minmax(var(--expensica-chart-panel-shrink-min-width), 1fr));
 }

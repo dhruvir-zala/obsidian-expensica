@@ -2107,7 +2107,7 @@ export class ExpensicaDashboardView extends ItemView {
 
         if (unusedCategoryData.length > 0) {
             listContainer.createEl('h3', {
-                text: 'Unused Categories',
+                text: 'Other Categories',
                 cls: 'expensica-chart-title expensica-categories-unused-title'
             });
 
