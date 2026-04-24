@@ -1,4 +1,4 @@
-import { AccountType, Transaction, TransactionType, formatCurrency, ColorScheme, parseLocalDate, getCategoryColor, sortTransactionsByDateTimeDesc, getCurrencyByCode } from '../models';
+import { AccountType, Transaction, TransactionType, formatCurrency, ColorScheme, parseLocalDate, sortTransactionsByDateTimeDesc, getCurrencyByCode } from '../models';
 import ExpensicaPlugin from '../../main';
 import * as d3 from 'd3';
 import { renderTransactionCard } from '../transaction-card';
@@ -42,11 +42,12 @@ function getRunningBalanceByTransactionIdForAccount(
     transactions: Transaction[]
 ): Record<string, number> {
     let runningBalance = 0;
+    const normalizeBalanceValue = (value: number) => Math.abs(value) < 0.000001 ? 0 : value;
 
     return sortTransactionsByDateTimeDesc(transactions)
         .reverse()
         .reduce((balances, transaction) => {
-            runningBalance += getAccountTransactionAmount(plugin, transaction, accountReference);
+            runningBalance = normalizeBalanceValue(runningBalance + getAccountTransactionAmount(plugin, transaction, accountReference));
             balances[transaction.id] = runningBalance;
             return balances;
         }, {} as Record<string, number>);
@@ -911,17 +912,24 @@ export class CalendarHeatmap {
                 }
                 
                 // Add category breakdown if there are multiple categories
-                const categories = new Map<string, number>();
+                const categories = new Map<string, { amount: number; color: string }>();
                 
                 expenseTransactions.forEach(t => {
                     const category = this.plugin.getCategoryById(t.category);
                     const categoryName = category ? category.name : 'Unknown';
+                    const categoryColor = category
+                        ? this.plugin.getCategoryColor(category.id, category.name)
+                        : this.plugin.getCategoryColor(t.category, categoryName);
                     
                     if (!categories.has(categoryName)) {
-                        categories.set(categoryName, 0);
+                        categories.set(categoryName, {
+                            amount: 0,
+                            color: categoryColor
+                        });
                     }
                     
-                    categories.set(categoryName, categories.get(categoryName)! + t.amount);
+                    const existingCategory = categories.get(categoryName)!;
+                    existingCategory.amount += t.amount;
                 });
                 
                 if (categories.size > 1) {
@@ -946,16 +954,17 @@ export class CalendarHeatmap {
                     
                     // Sort categories by amount
                     const sortedCategories = Array.from(categories.entries())
-                        .sort((a, b) => b[1] - a[1]);
+                        .sort((a, b) => b[1].amount - a[1].amount);
                     
                     // Calculate bar widths based on percentage
-                    sortedCategories.forEach(([categoryName, amount]) => {
+                    sortedCategories.forEach(([categoryName, categoryData]) => {
+                        const amount = categoryData.amount;
                         const percentage = (amount / totalExpenses) * 100;
                         const categoryBar = breakdownChart.createDiv('expensica-category-bar');
                         
                         // Create the color bar
                         const colorBar = categoryBar.createDiv('expensica-bar-fill color-bar-fill color-bar-hue');
-                        colorBar.setAttribute('style', `--color-bar-percentage: ${percentage}%; --category-color: ${getCategoryColor(categoryName)}`);
+                        colorBar.setAttribute('style', `--color-bar-percentage: ${percentage}%; --category-color: ${categoryData.color}`);
 
                         // Label with amount and percentage
                         const labelEl = categoryBar.createDiv('expensica-bar-label');
@@ -1002,9 +1011,13 @@ export class CalendarHeatmap {
         
         // Add each transaction
         sortedTransactions.forEach((transaction, index) => {
+            const transactionAccountReference = this.plugin.settings.enableAccounts
+                ? this.plugin.normalizeTransactionAccountReference(transaction.account)
+                : defaultAccountReference;
+            const transactionBalances = ensureBalanceMap(transactionAccountReference);
             let runningBalanceLabel = formatRunningBalanceLabel(
                 this.plugin,
-                runningBalances[transaction.id] ?? 0
+                transactionBalances[transaction.id] ?? 0
             );
             let secondaryRunningBalanceLabel: string | undefined;
 

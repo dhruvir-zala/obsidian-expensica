@@ -60,11 +60,12 @@ function getRunningBalanceByTransactionIdForAccount(
     transactions: Transaction[]
 ): Record<string, number> {
     let runningBalance = 0;
+    const normalizeBalanceValue = (value: number) => Math.abs(value) < 0.000001 ? 0 : value;
 
     return sortTransactionsByDateTimeDesc(transactions)
         .reverse()
         .reduce((balances, transaction) => {
-            runningBalance += getAccountTransactionAmount(plugin, transaction, accountReference);
+            runningBalance = normalizeBalanceValue(runningBalance + getAccountTransactionAmount(plugin, transaction, accountReference));
             balances[transaction.id] = runningBalance;
             return balances;
         }, {} as Record<string, number>);
@@ -1531,9 +1532,13 @@ export class ExpensicaTransactionsView implements TransactionView {
                 this.renderTransactionGroupTitle(container, this.getTransactionDayLabel(transaction), 'day');
             }
 
+            const transactionAccountReference = this.plugin.settings.enableAccounts
+                ? this.plugin.normalizeTransactionAccountReference(transaction.account)
+                : defaultAccountReference;
+            const transactionBalances = ensureBalanceMap(transactionAccountReference);
             let runningBalanceLabel = formatRunningBalanceLabel(
                 this.plugin,
-                runningBalances[transaction.id] ?? 0
+                transactionBalances[transaction.id] ?? 0
             );
             let secondaryRunningBalanceLabel: string | undefined;
 

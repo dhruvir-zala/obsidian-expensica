@@ -40,6 +40,7 @@ export enum CategoryType {
     name: string;
     type: AccountType;
     createdAt: string;
+    color?: string;
     creditLimit?: number;
     isDefault?: boolean;
   }
@@ -245,6 +246,55 @@ export function getAccountEmoji(type: AccountType): string {
   return ACCOUNT_TYPE_EMOJIS[type];
 }
 
+export function normalizePaletteColor(color?: string | null): string | null {
+  if (!color) {
+    return null;
+  }
+
+  if (/^#[0-9a-f]{6}$/i.test(color)) {
+    return color;
+  }
+
+  if (/^#[0-9a-f]{8}$/i.test(color)) {
+    return color.slice(0, 7);
+  }
+
+  if (/^#[0-9a-f]{3}$/i.test(color)) {
+    return `#${color.slice(1).split('').map(char => `${char}${char}`).join('')}`;
+  }
+
+  return null;
+}
+
+export function getAccountColor(account: Account, accounts: Account[] = [account]): string {
+  const storedColor = normalizePaletteColor(account.color);
+  if (storedColor) {
+    return storedColor;
+  }
+
+  const palette = ColorPalette.colors.map(color => color.slice(0, 7));
+  const stableKey = account.id || formatAccountReference(account.type, account.name);
+  const index = Array.from(stableKey).reduce((hash, character) => {
+    return ((hash * 31) + character.charCodeAt(0)) >>> 0;
+  }, 0) % palette.length;
+
+  return palette[index];
+}
+
+export function getNextAccountColor(accounts: Account[]): string {
+  const palette = ColorPalette.colors.map(color => color.slice(0, 7));
+  const usedColors = new Set(accounts
+    .map(account => normalizePaletteColor(account.color))
+    .filter((color): color is string => !!color));
+
+  const availableColor = palette.find(color => !usedColors.has(color));
+  if (availableColor) {
+    return availableColor;
+  }
+
+  return palette[accounts.length % palette.length];
+}
+
 export function compareAccounts(a: Account, b: Account): number {
   if (a.isDefault && !b.isDefault) {
     return -1;
@@ -256,9 +306,9 @@ export function compareAccounts(a: Account, b: Account): number {
 
   const order = {
     [AccountType.CHEQUING]: 1,
-    [AccountType.SAVING]: 2,
-    [AccountType.OTHER]: 3,
-    [AccountType.CREDIT]: 4
+    [AccountType.CREDIT]: 2,
+    [AccountType.SAVING]: 3,
+    [AccountType.OTHER]: 4
   };
 
   const typeDifference = order[a.type] - order[b.type];

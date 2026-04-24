@@ -5,6 +5,7 @@ interface AccountCardOptions {
     runningBalance: number;
     lastTransactionDateLabel: string;
     currency: Currency;
+    color?: string;
     creditLimitLabel?: string;
     onClick?: (account: Account) => void;
 }
@@ -14,7 +15,7 @@ interface CreateAccountCardOptions {
 }
 
 export function renderAccountCard(container: HTMLElement, options: AccountCardOptions): HTMLElement {
-    const { account, runningBalance, lastTransactionDateLabel, currency, creditLimitLabel, onClick } = options;
+    const { account, runningBalance, lastTransactionDateLabel, currency, color, creditLimitLabel, onClick } = options;
     const card = container.createDiv('expensica-account-card');
     card.setAttribute('data-account-type', account.type);
 
@@ -35,7 +36,12 @@ export function renderAccountCard(container: HTMLElement, options: AccountCardOp
 
     const header = card.createDiv('expensica-account-card-header');
     const identity = header.createDiv('expensica-account-card-identity');
-    identity.createDiv({ text: getAccountEmoji(account.type), cls: 'expensica-account-card-icon' });
+    const iconRow = identity.createDiv('expensica-account-card-icon-row');
+    if (color) {
+        const colorSwatch = iconRow.createDiv('expensica-category-color-preview');
+        colorSwatch.style.backgroundColor = color;
+    }
+    iconRow.createDiv({ text: getAccountEmoji(account.type), cls: 'expensica-account-card-icon' });
 
     const textGroup = identity.createDiv('expensica-account-card-text');
     const titleRow = textGroup.createDiv('expensica-account-card-title-row');

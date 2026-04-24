@@ -33,7 +33,9 @@ import {
     sortTransactionsByDateTimeDesc,
     compareAccounts,
     formatAccountReference,
+    getAccountColor,
     normalizeAccountName,
+    normalizePaletteColor,
     parseAccountReference,
     INTERNAL_CATEGORY_ID
 } from './src/models';
@@ -898,13 +900,23 @@ export default class ExpensicaPlugin extends Plugin {
     }
 
     getTransactionAccountDisplay(accountReference?: string | null): Account {
-        return this.findAccountByReference(accountReference) || this.getDefaultAccount();
+        const account = this.findAccountByReference(accountReference) || this.getDefaultAccount();
+        if (!this.settings.enableAccounts) {
+            return {
+                ...account,
+                name: 'Running Balance',
+                isDefault: true
+            };
+        }
+
+        return account;
     }
 
     async addAccount(account: Account, sourceView?: unknown) {
         const normalizedAccount: Account = {
             ...account,
-            name: normalizeAccountName(account.name)
+            name: normalizeAccountName(account.name),
+            color: normalizePaletteColor(account.color) || undefined
         };
 
         if (normalizedAccount.type !== AccountType.CREDIT) {
@@ -937,7 +949,8 @@ export default class ExpensicaPlugin extends Plugin {
         const updatedAccount: Account = {
             ...this.transactionsData.accounts[index],
             ...account,
-            name: normalizeAccountName(account.name)
+            name: normalizeAccountName(account.name),
+            color: normalizePaletteColor(account.color ?? this.transactionsData.accounts[index].color) || undefined
         };
         if (updatedAccount.isDefault && updatedAccount.type === AccountType.CREDIT) {
             throw new Error('Default account cannot be credit');
@@ -1054,6 +1067,12 @@ export default class ExpensicaPlugin extends Plugin {
                 name: normalizedName,
                 type: normalizedType,
                 createdAt: account.createdAt || new Date().toISOString(),
+                color: normalizePaletteColor(account.color) || getAccountColor({
+                    id: normalizedId,
+                    name: normalizedName,
+                    type: normalizedType,
+                    createdAt: account.createdAt || new Date().toISOString()
+                }),
                 isDefault: !!account.isDefault
             };
             if (normalizedType === AccountType.CREDIT && typeof account.creditLimit === 'number') {

@@ -8,7 +8,7 @@ import {
     Budget, BudgetPeriod, calculateBudgetStatus, getCurrencyByCode, getCategoryColor as getDefaultCategoryColor, sortTransactionsByDateTimeDesc,
     getTransactionDisplayTime, getTransactionTime, ColorPalette,
     Account, AccountType, getAccountTypeLabel, parseAccountReference, formatAccountReference, normalizeAccountName, getAccountEmoji,
-    INTERNAL_CATEGORY_ID, getCategoryTypeForTransactionType, getDefaultTransactionCategory
+    INTERNAL_CATEGORY_ID, getCategoryTypeForTransactionType, getDefaultTransactionCategory, getAccountColor, getNextAccountColor, normalizePaletteColor
 } from './models';
 import ExpensicaPlugin from '../main';
 import type { SharedDateRangeState } from '../main';
@@ -75,7 +75,8 @@ interface DashboardViewState {
 interface IncomeExpenseVisibility {
     income: boolean;
     expenses: boolean;
-    balance: boolean;
+    net: boolean;
+    accounts: Record<string, boolean>;
 }
 
 function hasDashboardStateKey(state: DashboardViewState, key: keyof DashboardViewState): boolean {
@@ -166,7 +167,10 @@ function getAccountTransactionAmount(plugin: ExpensicaPlugin, transaction: Trans
 }
 
 function getAccountRunningBalance(plugin: ExpensicaPlugin, accountReference: string, transactions: Transaction[]): number {
-    return transactions.reduce((balance, transaction) => balance + getAccountTransactionAmount(plugin, transaction, accountReference), 0);
+    return transactions.reduce(
+        (balance, transaction) => normalizeBalanceValue(balance + getAccountTransactionAmount(plugin, transaction, accountReference)),
+        0
+    );
 }
 
 function getRunningBalanceByTransactionIdForAccount(
@@ -179,7 +183,7 @@ function getRunningBalanceByTransactionIdForAccount(
     return sortTransactionsByDateTimeDesc(transactions)
         .reverse()
         .reduce((balances, transaction) => {
-            runningBalance += getAccountTransactionAmount(plugin, transaction, accountReference);
+            runningBalance = normalizeBalanceValue(runningBalance + getAccountTransactionAmount(plugin, transaction, accountReference));
             balances[transaction.id] = runningBalance;
             return balances;
         }, {} as Record<string, number>);
@@ -215,6 +219,82 @@ function formatRunningBalanceLabel(plugin: ExpensicaPlugin, balance: number, acc
 
     const account = plugin.getTransactionAccountDisplay(accountReference);
     return `${account.name}: ${amount}`;
+}
+
+function formatOverviewValueNumber(currencyCode: string, amount: number): string {
+    const currency = getCurrencyByCode(currencyCode) || getCurrencyByCode('USD');
+    const code = currency?.code || 'USD';
+    const absoluteAmount = Math.abs(amount);
+    const sign = amount < 0 ? '-' : '';
+
+    let fractionDigits = 2;
+    try {
+        fractionDigits = new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: code
+        }).resolvedOptions().maximumFractionDigits;
+    } catch {
+        fractionDigits = 2;
+    }
+
+    const formattedNumber = new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: fractionDigits,
+        maximumFractionDigits: fractionDigits
+    }).format(absoluteAmount);
+
+    return `${sign}${formattedNumber}`;
+}
+
+function getOverviewCurrencyParts(currencyCode: string): { prefix: string; symbol: string } {
+    const currency = getCurrencyByCode(currencyCode) || getCurrencyByCode('USD');
+    const code = currency?.code || 'USD';
+    const fallbackSymbol = currency?.symbol || '$';
+    const rawSymbol = (() => {
+        try {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: code,
+                currencyDisplay: 'symbol'
+            }).formatToParts(0).find(part => part.type === 'currency')?.value || fallbackSymbol;
+        } catch {
+            return fallbackSymbol;
+        }
+    })();
+    const match = rawSymbol.match(/^([A-Za-z]+)(.*)$/);
+
+    if (!match) {
+        return { prefix: '', symbol: rawSymbol };
+    }
+
+    return {
+        prefix: '',
+        symbol: match[2] || rawSymbol
+    };
+}
+
+function renderOverviewCurrencyValue(
+    container: HTMLElement,
+    currencyCode: string,
+    amount: number,
+    valueClass: string
+): HTMLElement {
+    const currencyParts = getOverviewCurrencyParts(currencyCode);
+    const valueEl = container.createEl('p', {
+        cls: `expensica-card-value ${valueClass}`
+    });
+    valueEl.createSpan({
+        text: `${currencyParts.symbol}${formatOverviewValueNumber(currencyCode, amount)}`,
+        cls: 'expensica-card-currency-amount'
+    });
+    return valueEl;
+}
+
+function isEffectivelyZero(value: number, epsilon = 0.000001): boolean {
+    return Math.abs(value) < epsilon;
+}
+
+function normalizeBalanceValue(value: number): number {
+    return isEffectivelyZero(value) ? 0 : value;
 }
 
 function getCreditLimitExceededAccount(plugin: ExpensicaPlugin, transaction: Transaction, existingTransactions: Transaction[]): Account | null {
@@ -271,7 +351,8 @@ export class ExpensicaDashboardView extends ItemView {
     incomeExpenseVisibility: IncomeExpenseVisibility = {
         income: true,
         expenses: true,
-        balance: true
+        net: true,
+        accounts: {}
     };
     
     // Premium visualizations
@@ -460,10 +541,12 @@ export class ExpensicaDashboardView extends ItemView {
         }
 
         if (dashboardState.incomeExpenseVisibility) {
+            const savedVisibility = dashboardState.incomeExpenseVisibility as IncomeExpenseVisibility & { balance?: boolean };
             this.incomeExpenseVisibility = {
-                income: dashboardState.incomeExpenseVisibility.income !== false,
-                expenses: dashboardState.incomeExpenseVisibility.expenses !== false,
-                balance: dashboardState.incomeExpenseVisibility.balance !== false
+                income: savedVisibility.income !== false,
+                expenses: savedVisibility.expenses !== false,
+                net: (savedVisibility.net ?? savedVisibility.balance) !== false,
+                accounts: savedVisibility.accounts ?? {}
             };
         }
 
@@ -1063,7 +1146,7 @@ export class ExpensicaDashboardView extends ItemView {
         return Number.isFinite(radius) ? radius : 4;
     }
 
-    private requestAllChartAnimations() {
+    requestAllChartAnimations() {
         this.shouldAnimateExpensesChartOnNextRender = true;
         this.shouldAnimateIncomeExpenseChartOnNextRender = true;
     }
@@ -1300,6 +1383,39 @@ export class ExpensicaDashboardView extends ItemView {
         return getAccountRunningBalance(this.plugin, defaultAccountReference, transactionsThroughDate);
     }
 
+    getIncomeExpenseChartAccounts(): { reference: string; name: string; color: string; isCredit: boolean }[] {
+        if (!this.plugin.settings.enableAccounts) {
+            const defaultAccountReference = this.plugin.normalizeTransactionAccountReference(undefined);
+            const defaultAccount = this.plugin.getTransactionAccountDisplay(undefined);
+            return [{
+                reference: defaultAccountReference,
+                name: defaultAccount.name,
+                color: getAccountColor(defaultAccount, [defaultAccount]),
+                isCredit: false
+            }];
+        }
+
+        const accounts = this.plugin.getAccounts();
+        return accounts.map(account => ({
+            reference: this.plugin.normalizeTransactionAccountReference(
+                formatAccountReference(account.type, account.name)
+            ),
+            name: account.name,
+            color: getAccountColor(account, accounts),
+            isCredit: account.type === AccountType.CREDIT
+        }));
+    }
+
+    getAccountBalanceThroughDateTime(accountReference: string, endDate: Date): number {
+        return this.plugin.getAllTransactions().reduce((balance, transaction) => {
+            if (this.getTransactionDateTime(transaction) > endDate) {
+                return balance;
+            }
+
+            return normalizeBalanceValue(balance + getAccountTransactionAmount(this.plugin, transaction, accountReference));
+        }, 0);
+    }
+
     getNetBalanceThrough(endDate: Date): number {
         const normalizedEndDate = new Date(endDate);
         normalizedEndDate.setHours(23, 59, 59, 999);
@@ -1337,11 +1453,11 @@ export class ExpensicaDashboardView extends ItemView {
     getSummaryComparisonRange(): { range: DateRange; label: string } | null {
         switch (this.dateRange.type) {
             case DateRangeType.THIS_WEEK:
-                return { range: this.getDateRange(DateRangeType.LAST_WEEK), label: 'last week' };
+                return { range: this.getDateRange(DateRangeType.LAST_WEEK), label: 'last Wk' };
             case DateRangeType.THIS_MONTH:
-                return { range: this.getDateRange(DateRangeType.LAST_MONTH), label: 'last month' };
+                return { range: this.getDateRange(DateRangeType.LAST_MONTH), label: 'last M' };
             case DateRangeType.THIS_YEAR:
-                return { range: this.getDateRange(DateRangeType.LAST_YEAR), label: 'last year' };
+                return { range: this.getDateRange(DateRangeType.LAST_YEAR), label: 'last Y' };
             default:
                 return null;
         }
@@ -1784,13 +1900,14 @@ export class ExpensicaDashboardView extends ItemView {
             const accountTransactions = allTransactions.filter(transaction => getAccountTransactionAmount(this.plugin, transaction, accountReference) !== 0);
             const lastTransaction = getLastAccountTransaction(accountTransactions);
             const runningBalance = accountTransactions.reduce((balance, transaction) => (
-                balance + getAccountTransactionAmount(this.plugin, transaction, accountReference)
+                normalizeBalanceValue(balance + getAccountTransactionAmount(this.plugin, transaction, accountReference))
             ), 0);
 
             renderAccountCard(accountsList, {
                 account,
                 runningBalance,
                 currency: currency || { code: 'USD', name: 'US Dollar', symbol: '$' },
+                color: getAccountColor(account, accounts),
                 creditLimitLabel: account.type === AccountType.CREDIT && typeof account.creditLimit === 'number'
                     ? `${formatCurrency(
                         Math.max(0, account.creditLimit - Math.max(0, runningBalance)),
@@ -1944,7 +2061,15 @@ export class ExpensicaDashboardView extends ItemView {
             this.renderDashboard();
         }, {
             showTitle: false,
-            overlayClass: 'expensica-category-chart-type-selector-overlay'
+            overlayClass: 'expensica-category-chart-type-selector-overlay',
+            leadingAction: {
+                ariaLabel: this.categoryChartType === CategoryType.INCOME
+                    ? 'New Income Category'
+                    : 'New Expenses Category',
+                onClick: () => {
+                    new CategoryModal(this.app, this.plugin, this, null, this.categoryChartType).open();
+                }
+            }
         });
 
         if (categoryData.length === 0) {
@@ -2405,9 +2530,9 @@ export class ExpensicaDashboardView extends ItemView {
         // Add date range selector
         this.renderDateRangeSelector(actionsEl);
 
-        // Add expense button with shadcn design
-        const addExpenseBtn = actionsEl.createEl('button', {
-            cls: 'expensica-standard-button shadcn-btn shadcn-btn-danger',
+        // Add transaction button with shadcn design
+        const addTransactionBtn = actionsEl.createEl('button', {
+            cls: 'expensica-standard-button shadcn-btn shadcn-btn-primary',
         });
         
         // Create SVG icon
@@ -2436,42 +2561,8 @@ export class ExpensicaDashboardView extends ItemView {
         expenseHorLine.setAttribute("y2", "12");
         expenseSvg.appendChild(expenseHorLine);
         
-        addExpenseBtn.appendChild(expenseSvg);
-        addExpenseBtn.appendChild(document.createTextNode(" Add Expense"));
-
-        // Add income button with shadcn design
-        const addIncomeBtn = actionsEl.createEl('button', {
-            cls: 'expensica-standard-button shadcn-btn shadcn-btn-success',
-        });
-        
-        // Create SVG icon
-        const incomeSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        incomeSvg.setAttribute("width", "16");
-        incomeSvg.setAttribute("height", "16");
-        incomeSvg.setAttribute("viewBox", "0 0 24 24");
-        incomeSvg.setAttribute("fill", "none");
-        incomeSvg.setAttribute("stroke", "currentColor");
-        incomeSvg.setAttribute("stroke-width", "2");
-        incomeSvg.setAttribute("stroke-linecap", "round");
-        incomeSvg.setAttribute("stroke-linejoin", "round");
-        
-        // Create plus icon for income
-        const incomeVertLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        incomeVertLine.setAttribute("x1", "12");
-        incomeVertLine.setAttribute("y1", "5");
-        incomeVertLine.setAttribute("x2", "12");
-        incomeVertLine.setAttribute("y2", "19");
-        incomeSvg.appendChild(incomeVertLine);
-        
-        const incomeHorLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        incomeHorLine.setAttribute("x1", "5");
-        incomeHorLine.setAttribute("y1", "12");
-        incomeHorLine.setAttribute("x2", "19");
-        incomeHorLine.setAttribute("y2", "12");
-        incomeSvg.appendChild(incomeHorLine);
-        
-        addIncomeBtn.appendChild(incomeSvg);
-        addIncomeBtn.appendChild(document.createTextNode(" Add Income"));
+        addTransactionBtn.appendChild(expenseSvg);
+        addTransactionBtn.appendChild(document.createTextNode(" New Transaction"));
 
         // Add export button with shadcn design
         const exportBtn = actionsEl.createEl('button', {
@@ -2511,13 +2602,8 @@ export class ExpensicaDashboardView extends ItemView {
         exportBtn.appendChild(document.createTextNode(" Export"));
 
         // Event listeners
-        addExpenseBtn.addEventListener('click', () => {
-            const modal = new TransactionModal(this.app, this.plugin, this, null, TransactionType.EXPENSE);
-            modal.open();
-        });
-
-        addIncomeBtn.addEventListener('click', () => {
-            const modal = new TransactionModal(this.app, this.plugin, this, null, TransactionType.INCOME);
+        addTransactionBtn.addEventListener('click', () => {
+            const modal = new TransactionModal(this.app, this.plugin, this);
             modal.open();
         });
 
@@ -2716,22 +2802,17 @@ export class ExpensicaDashboardView extends ItemView {
         const prevTotalIncome = TransactionAggregator.getTotalIncome(comparisonTransactions);
         const prevTotalExpenses = TransactionAggregator.getTotalExpenses(comparisonTransactions);
         const prevNetBalance = comparison ? this.getNetBalanceThrough(comparison.range.endDate) : 0;
-        const prevBalance = comparison ? this.getDefaultAccountBalanceThrough(comparison.range.endDate) : 0;
 
         // Calculate trends (percentage change from previous month)
-        const incomeTrend = prevTotalIncome === 0 ? 100 : ((totalIncome - prevTotalIncome) / prevTotalIncome) * 100;
-        const expenseTrend = prevTotalExpenses === 0 ? 100 : ((totalExpenses - prevTotalExpenses) / prevTotalExpenses) * 100;
-        const netBalanceTrend = prevNetBalance === 0 ? 100 : ((netBalance - prevNetBalance) / Math.abs(prevNetBalance)) * 100;
-        const balanceTrend = prevBalance === 0 ? 100 : ((balance - prevBalance) / Math.abs(prevBalance)) * 100;
+        const incomeTrend = isEffectivelyZero(prevTotalIncome) ? 100 : ((totalIncome - prevTotalIncome) / prevTotalIncome) * 100;
+        const expenseTrend = isEffectivelyZero(prevTotalExpenses) ? 100 : ((totalExpenses - prevTotalExpenses) / prevTotalExpenses) * 100;
+        const netBalanceTrend = isEffectivelyZero(prevNetBalance) ? 100 : ((netBalance - prevNetBalance) / Math.abs(prevNetBalance)) * 100;
 
         // Income card
         const incomeCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-animate');
         const incomeCardTitle = incomeCard.createEl('h3', { cls: 'expensica-card-title' });
         incomeCardTitle.innerHTML = '<span class="emoji">💰</span> Income';
-        incomeCard.createEl('p', {
-            text: formatCurrency(totalIncome, this.plugin.settings.defaultCurrency),
-            cls: 'expensica-card-value expensica-income'
-        });
+        renderOverviewCurrencyValue(incomeCard, this.plugin.settings.defaultCurrency, totalIncome, 'expensica-income');
 
         if (comparison && prevTotalIncome > 0) {
             const trendEl = incomeCard.createEl('div', { cls: 'expensica-card-trend' });
@@ -2747,10 +2828,7 @@ export class ExpensicaDashboardView extends ItemView {
         const expensesCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-animate expensica-animate-delay-1');
         const expensesCardTitle = expensesCard.createEl('h3', { cls: 'expensica-card-title' });
         expensesCardTitle.innerHTML = '<span class="emoji">💸</span> Expenses';
-        expensesCard.createEl('p', {
-            text: formatCurrency(totalExpenses, this.plugin.settings.defaultCurrency),
-            cls: 'expensica-card-value expensica-expense'
-        });
+        renderOverviewCurrencyValue(expensesCard, this.plugin.settings.defaultCurrency, totalExpenses, 'expensica-expense');
 
         if (comparison && prevTotalExpenses > 0) {
             // For expenses, trend up (more expenses) is bad, trend down is good
@@ -2767,10 +2845,7 @@ export class ExpensicaDashboardView extends ItemView {
         const netBalanceCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-animate expensica-animate-delay-2');
         const netBalanceCardTitle = netBalanceCard.createEl('h3', { cls: 'expensica-card-title' });
         netBalanceCardTitle.innerHTML = '<span class="emoji">⚖️</span> Net Balance';
-        netBalanceCard.createEl('p', {
-            text: formatCurrency(netBalance, this.plugin.settings.defaultCurrency),
-            cls: 'expensica-card-value expensica-balance'
-        });
+        renderOverviewCurrencyValue(netBalanceCard, this.plugin.settings.defaultCurrency, netBalance, 'expensica-balance');
 
         if (comparison && prevNetBalance !== 0) {
             const trendEl = netBalanceCard.createEl('div', { cls: 'expensica-card-trend' });
@@ -2781,24 +2856,53 @@ export class ExpensicaDashboardView extends ItemView {
             }
         }
 
+        const balanceAccounts = this.plugin.settings.enableAccounts
+            ? this.plugin.getAccounts()
+            : [{
+                ...this.plugin.getTransactionAccountDisplay(undefined),
+                name: 'Running Balance'
+            }];
 
-        // Balance card
-        const balanceCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-animate expensica-animate-delay-3');
-        const balanceCardTitle = balanceCard.createEl('h3', { cls: 'expensica-card-title' });
-        balanceCardTitle.innerHTML = '<span class="emoji">💵</span> Running Balance';
-        balanceCard.createEl('p', {
-            text: formatCurrency(balance, this.plugin.settings.defaultCurrency),
-            cls: 'expensica-card-value expensica-balance'
-        });
+        balanceAccounts.forEach((account, index) => {
+            const accountReference = this.plugin.normalizeTransactionAccountReference(
+                formatAccountReference(account.type, account.name)
+            );
+            const accountBalance = this.plugin.settings.enableAccounts
+                ? this.getAccountBalanceThroughDateTime(accountReference, new Date(this.dateRange.endDate.getFullYear(), this.dateRange.endDate.getMonth(), this.dateRange.endDate.getDate(), 23, 59, 59, 999))
+                : balance;
+            const normalizedAccountBalance = isEffectivelyZero(accountBalance) ? 0 : accountBalance;
+            const prevAccountBalance = comparison
+                ? (this.plugin.settings.enableAccounts
+                    ? this.getAccountBalanceThroughDateTime(accountReference, new Date(comparison.range.endDate.getFullYear(), comparison.range.endDate.getMonth(), comparison.range.endDate.getDate(), 23, 59, 59, 999))
+                    : this.getDefaultAccountBalanceThrough(comparison.range.endDate))
+                : 0;
+            const accountBalanceTrend = isEffectivelyZero(prevAccountBalance)
+                ? 100
+                : ((accountBalance - prevAccountBalance) / Math.abs(prevAccountBalance)) * 100;
+            const accountColor = getAccountColor(account, balanceAccounts);
 
-        if (comparison && prevBalance !== 0) {
-            const trendEl = balanceCard.createEl('div', { cls: 'expensica-card-trend' });
-            if (balanceTrend >= 0) {
-                trendEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg> ${Math.abs(balanceTrend).toFixed(1)}% from ${comparison.label}`;
-            } else {
-                trendEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg> ${Math.abs(balanceTrend).toFixed(1)}% from ${comparison.label}`;
+            const balanceCard = summaryEl.createDiv(`expensica-card expensica-overview-card expensica-animate expensica-animate-delay-${Math.min(3, index + 3)}`);
+            const balanceCardTitle = balanceCard.createEl('h3', { cls: 'expensica-card-title' });
+            balanceCardTitle.innerHTML = this.plugin.settings.enableAccounts
+                ? `<span class="emoji">${getAccountEmoji(account.type)}</span> ${account.name} Balance`
+                : '<span class="emoji">💵</span> Running Balance';
+            const balanceValue = renderOverviewCurrencyValue(
+                balanceCard,
+                this.plugin.settings.defaultCurrency,
+                normalizedAccountBalance,
+                'expensica-balance'
+            );
+            balanceValue.style.color = accountColor;
+
+            if (comparison && !isEffectivelyZero(prevAccountBalance)) {
+                const trendEl = balanceCard.createEl('div', { cls: 'expensica-card-trend' });
+                if (accountBalanceTrend >= 0) {
+                    trendEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg> ${Math.abs(accountBalanceTrend).toFixed(1)}% from ${comparison.label}`;
+                } else {
+                    trendEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg> ${Math.abs(accountBalanceTrend).toFixed(1)}% from ${comparison.label}`;
+                }
             }
-        }
+        });
 
     }
 
@@ -2989,19 +3093,24 @@ export class ExpensicaDashboardView extends ItemView {
     createIncomeExpenseBucket(
         label: string,
         start: Date,
-        end: Date
-    ): { label: string; start: Date; end: Date; income: number; expenses: number; balance: number } {
+        end: Date,
+        accountReferences: string[] = []
+    ): { label: string; start: Date; end: Date; income: number; expenses: number; net: number; accountBalances: Record<string, number> } {
         return {
             label,
             start,
             end,
             income: 0,
             expenses: 0,
-            balance: 0
+            net: 0,
+            accountBalances: accountReferences.reduce((balances, reference) => {
+                balances[reference] = 0;
+                return balances;
+            }, {} as Record<string, number>)
         };
     }
 
-    getIncomeExpenseChartBuckets(): { label: string; start: Date; end: Date; income: number; expenses: number; balance: number }[] {
+    getIncomeExpenseChartBuckets(): { label: string; start: Date; end: Date; income: number; expenses: number; net: number; accountBalances: Record<string, number> }[] {
         const chartBounds = this.getIncomeExpenseChartDayBounds();
         if (!chartBounds) {
             return [];
@@ -3010,7 +3119,9 @@ export class ExpensicaDashboardView extends ItemView {
         const { start, end } = chartBounds;
         const includeYear = start.getFullYear() !== end.getFullYear();
         const resolution = this.getIncomeExpenseChartResolution(start, end);
-        const buckets: { label: string; start: Date; end: Date; income: number; expenses: number; balance: number }[] = [];
+        const accounts = this.getIncomeExpenseChartAccounts();
+        const accountReferences = accounts.map(account => account.reference);
+        const buckets: { label: string; start: Date; end: Date; income: number; expenses: number; net: number; accountBalances: Record<string, number> }[] = [];
 
         if (resolution === 'hour') {
             const currentHour = new Date(start);
@@ -3023,7 +3134,8 @@ export class ExpensicaDashboardView extends ItemView {
                 buckets.push(this.createIncomeExpenseBucket(
                     this.formatChartHourLabel(currentHour, includeYear || formatDate(start) !== formatDate(end)),
                     bucketStart < start ? new Date(start) : bucketStart,
-                    bucketEnd > end ? new Date(end) : bucketEnd
+                    bucketEnd > end ? new Date(end) : bucketEnd,
+                    accountReferences
                 ));
                 currentHour.setHours(currentHour.getHours() + 1);
             }
@@ -3039,14 +3151,15 @@ export class ExpensicaDashboardView extends ItemView {
                 buckets.push(this.createIncomeExpenseBucket(
                     this.formatChartShortDateLabel(currentDay, includeYear),
                     bucketStart,
-                    bucketEnd > end ? new Date(end) : bucketEnd
+                    bucketEnd > end ? new Date(end) : bucketEnd,
+                    accountReferences
                 ));
                 currentDay.setDate(currentDay.getDate() + 1);
             }
         }
 
         if (resolution === 'week') {
-            const weekBuckets: { label: string; isoYear: number; isoWeek: number; start: Date; end: Date; income: number; expenses: number; balance: number }[] = [];
+            const weekBuckets: { label: string; isoYear: number; isoWeek: number; start: Date; end: Date; income: number; expenses: number; net: number; accountBalances: Record<string, number> }[] = [];
             const currentDay = new Date(start);
 
             while (currentDay <= end) {
@@ -3067,7 +3180,11 @@ export class ExpensicaDashboardView extends ItemView {
                         end: new Date(currentDay.getFullYear(), currentDay.getMonth(), currentDay.getDate(), 23, 59, 59, 999),
                         income: 0,
                         expenses: 0,
-                        balance: 0
+                        net: 0,
+                        accountBalances: accountReferences.reduce((balances, reference) => {
+                            balances[reference] = 0;
+                            return balances;
+                        }, {} as Record<string, number>)
                     });
                 }
 
@@ -3092,7 +3209,8 @@ export class ExpensicaDashboardView extends ItemView {
                 buckets.push(this.createIncomeExpenseBucket(
                     this.formatChartMonthLabel(currentMonth, includeYear),
                     bucketStart < start ? new Date(start) : bucketStart,
-                    bucketEnd > end ? new Date(end) : bucketEnd
+                    bucketEnd > end ? new Date(end) : bucketEnd,
+                    accountReferences
                 ));
                 currentMonth.setMonth(currentMonth.getMonth() + 1);
             }
@@ -3107,7 +3225,8 @@ export class ExpensicaDashboardView extends ItemView {
                 buckets.push(this.createIncomeExpenseBucket(
                     this.formatChartYearLabel(currentYear),
                     bucketStart < start ? new Date(start) : bucketStart,
-                    bucketEnd > end ? new Date(end) : bucketEnd
+                    bucketEnd > end ? new Date(end) : bucketEnd,
+                    accountReferences
                 ));
                 currentYear.setFullYear(currentYear.getFullYear() + 1);
             }
@@ -3116,7 +3235,10 @@ export class ExpensicaDashboardView extends ItemView {
         this.assignTransactionsToIncomeExpenseBuckets(buckets);
 
         return buckets.map(bucket => {
-            bucket.balance = this.getCumulativeBalanceThroughDateTime(bucket.end);
+            bucket.net = this.getNetBalanceThrough(bucket.end);
+            accounts.forEach(account => {
+                bucket.accountBalances[account.reference] = this.getAccountBalanceThroughDateTime(account.reference, bucket.end);
+            });
             return bucket;
         });
     }
@@ -3634,7 +3756,7 @@ export class ExpensicaDashboardView extends ItemView {
         // Header with title
         const chartHeader = container.createDiv('expensica-chart-header');
         const chartTitle = chartHeader.createEl('h3', { cls: 'expensica-chart-title' });
-        chartTitle.setText('Transactions & Balance');
+        chartTitle.setText('Transactions & Balances');
 
         // Canvas container
         const canvasContainer = container.createDiv('expensica-canvas-container');
@@ -3668,6 +3790,7 @@ export class ExpensicaDashboardView extends ItemView {
         }
 
         const buckets = this.getIncomeExpenseChartBuckets();
+        const accounts = this.getIncomeExpenseChartAccounts();
 
         if (buckets.length === 0) {
             return;
@@ -3675,15 +3798,35 @@ export class ExpensicaDashboardView extends ItemView {
 
         const incomeData = buckets.map(bucket => bucket.income);
         const expenseData = buckets.map(bucket => -bucket.expenses);
-        const balanceData = buckets.map(bucket => bucket.balance);
-        const canShowNegativeValues = expenseData.some(value => value < 0) || balanceData.some(value => value < 0);
+        const netData = buckets.map(bucket => bucket.net);
+        const accountSeries = accounts.map((account) => {
+            const firstTransaction = this.plugin.getAllTransactions()
+                .filter(transaction => getAccountTransactionAmount(this.plugin, transaction, account.reference) !== 0)
+                .sort((a, b) => this.getTransactionDateTime(a).getTime() - this.getTransactionDateTime(b).getTime())[0];
+            const firstTransactionAt = firstTransaction ? this.getTransactionDateTime(firstTransaction) : null;
+
+            return {
+                ...account,
+                data: buckets.map(bucket => {
+                    if (firstTransactionAt && bucket.end < firstTransactionAt) {
+                        return null;
+                    }
+
+                    const balance = bucket.accountBalances[account.reference] ?? 0;
+                    return account.isCredit ? -balance : balance;
+                })
+            };
+        });
+        const canShowNegativeValues = expenseData.some(value => value < 0)
+            || netData.some(value => value < 0)
+            || accountSeries.some(account => account.data.some(value => value !== null && value < 0));
 
         const formattedDates = buckets.map(bucket => bucket.label);
         const incomeColor = this.getThemeColor('--text-success', 'rgb(68, 131, 97)');
         const incomeFillColor = this.getThemeColorWithAlpha('--text-success', 'rgb(68, 131, 97)', 0.75);
         const expenseColor = this.getThemeColor('--text-error', 'rgb(212, 76, 71)');
         const expenseFillColor = this.getThemeColorWithAlpha('--text-error', 'rgb(212, 76, 71)', 0.75);
-        const balanceColor = this.getThemeColor('--interactive-accent', 'rgb(123, 108, 217)');
+        const netColor = this.getThemeColor('--interactive-accent', 'rgb(123, 108, 217)');
         const barRadius = this.getChartBarRadius();
         const helperTextColor = this.getChartHelperTextColor();
 
@@ -3719,25 +3862,48 @@ export class ExpensicaDashboardView extends ItemView {
                         order: 1
                     },
                     {
-                        label: 'Balance',
-                        data: balanceData,
+                        label: 'Net',
+                        data: netData,
                         type: 'line',
-                        hidden: !this.incomeExpenseVisibility.balance,
-                        borderColor: balanceColor,
-                        backgroundColor: balanceColor,
-                        borderWidth: 4,
+                        hidden: !this.incomeExpenseVisibility.net,
+                        borderColor: netColor,
+                        backgroundColor: netColor,
+                        borderWidth: 2,
                         fill: false,
                         tension: 0.35,
-                        pointBackgroundColor: balanceColor,
-                        pointBorderColor: balanceColor,
+                        pointBackgroundColor: netColor,
+                        pointBorderColor: netColor,
                         pointRadius: 0,
-                        pointHoverRadius: 5,
-                        pointHoverBackgroundColor: balanceColor,
-                        pointHoverBorderColor: balanceColor,
+                        pointHoverRadius: 4,
+                        pointHoverBackgroundColor: netColor,
+                        pointHoverBorderColor: netColor,
                         pointHoverBorderWidth: 2,
                         pointHitRadius: 16,
+                        spanGaps: false,
                         order: 0
-                    }
+                    },
+                    ...accountSeries.map((account, index) => ({
+                        label: account.name,
+                        data: account.data,
+                        type: 'line' as const,
+                        hidden: this.incomeExpenseVisibility.accounts[account.reference] === false,
+                        borderColor: account.color,
+                        backgroundColor: account.color,
+                        borderWidth: 2,
+                        fill: false,
+                        tension: 0.35,
+                        pointBackgroundColor: account.color,
+                        pointBorderColor: account.color,
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                        pointHoverBackgroundColor: account.color,
+                        pointHoverBorderColor: account.color,
+                        pointHoverBorderWidth: 2,
+                        pointHitRadius: 16,
+                        spanGaps: false,
+                        expensicaValueDisplayMode: account.isCredit ? 'absolute' : 'default',
+                        order: index + 1
+                    }))
                 ]
             },
             options: {
@@ -3799,7 +3965,8 @@ export class ExpensicaDashboardView extends ItemView {
                             label: (context) => {
                                 const label = context.dataset.label || '';
                                 const value = context.raw as number;
-                                const formattedValue = label === 'Expenses'
+                                const displayMode = (context.dataset as { expensicaValueDisplayMode?: string }).expensicaValueDisplayMode;
+                                const formattedValue = label === 'Expenses' || displayMode === 'absolute'
                                     ? this.formatCompactChartCurrency(Math.abs(value))
                                     : this.formatCompactChartCurrency(value);
                                 return `${label}: ${formattedValue}`;
@@ -3820,7 +3987,17 @@ export class ExpensicaDashboardView extends ItemView {
         }
 
         if (legendContainer) {
-            this.renderIncomeExpenseLegend(legendContainer, this.incomeExpenseChart, [incomeColor, expenseColor, balanceColor]);
+            this.renderIncomeExpenseLegend(legendContainer, this.incomeExpenseChart, [
+                { label: 'Income', datasetIndex: 0, color: incomeColor },
+                { label: 'Expenses', datasetIndex: 1, color: expenseColor },
+                { label: 'Net', datasetIndex: 2, color: netColor },
+                ...accountSeries.map((account, index) => ({
+                    label: account.name,
+                    datasetIndex: index + 3,
+                    color: account.color,
+                    accountReference: account.reference
+                }))
+            ]);
         }
     }
 
@@ -3854,7 +4031,11 @@ export class ExpensicaDashboardView extends ItemView {
         this.incomeExpenseVisibility = {
             income: chart.isDatasetVisible(0),
             expenses: chart.isDatasetVisible(1),
-            balance: chart.isDatasetVisible(2)
+            net: chart.isDatasetVisible(2),
+            accounts: this.getIncomeExpenseChartAccounts().reduce((visibility, account, index) => {
+                visibility[account.reference] = chart.isDatasetVisible(index + 3);
+                return visibility;
+            }, {} as Record<string, boolean>)
         };
         this.persistDashboardState();
     }
@@ -3887,19 +4068,17 @@ export class ExpensicaDashboardView extends ItemView {
         });
     }
 
-    renderIncomeExpenseLegend(container: HTMLElement, chart: Chart, colors: string[]) {
+    renderIncomeExpenseLegend(
+        container: HTMLElement,
+        chart: Chart,
+        legendItems: { label: string; datasetIndex: number; color: string; accountReference?: string }[]
+    ) {
         container.empty();
-        const legendItems = [
-            { label: 'Income', datasetIndex: 0 },
-            { label: 'Expenses', datasetIndex: 1 },
-            { label: 'Balance', datasetIndex: 2 }
-        ];
-
-        legendItems.forEach((item, index) => {
+        legendItems.forEach((item) => {
             const legendItem = renderCategoryChip(container, {
                 text: item.label,
-                color: colors[index],
-                swatchColor: colors[index],
+                color: item.color,
+                swatchColor: item.color,
                 interactive: true,
                 hidden: !chart.isDatasetVisible(item.datasetIndex)
             });
@@ -4009,6 +4188,10 @@ export class ExpensicaDashboardView extends ItemView {
         options: {
             showTitle?: boolean;
             overlayClass?: string;
+            leadingAction?: {
+                ariaLabel: string;
+                onClick: () => void;
+            };
         } = {}
     ) {
         const chartHeader = container.createDiv('expensica-chart-header');
@@ -4021,6 +4204,19 @@ export class ExpensicaDashboardView extends ItemView {
                 text: 'Categories',
                 cls: 'expensica-chart-title'
             });
+        }
+
+        if (options.leadingAction) {
+            const leadingActionButton = chartHeader.createEl('button', {
+                cls: 'expensica-standard-button shadcn-btn shadcn-btn-primary expensica-category-create-button',
+                attr: {
+                    type: 'button',
+                    'aria-label': options.leadingAction.ariaLabel,
+                    title: options.leadingAction.ariaLabel
+                }
+            });
+            leadingActionButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="4" x2="12" y2="20"></line><line x1="4" y1="12" x2="20" y2="12"></line></svg>';
+            leadingActionButton.addEventListener('click', options.leadingAction.onClick);
         }
 
         const chartTypeOptions: { value: CategoryType; label: string }[] = [
@@ -4119,11 +4315,7 @@ export class ExpensicaDashboardView extends ItemView {
         // Sort transactions by date and creation time (most recent first)
         const sortedTransactions = sortTransactionsByDateTimeDesc(this.transactions);
         const defaultAccountReference = this.plugin.normalizeTransactionAccountReference(undefined);
-        const runningBalances = getRunningBalanceByTransactionIdForAccount(
-            this.plugin,
-            defaultAccountReference,
-            this.plugin.getAllTransactions()
-        );
+        const allTransactions = this.plugin.getAllTransactions();
         const internalBalanceMaps = new Map<string, Record<string, number>>();
         const ensureBalanceMap = (accountReference: string): Record<string, number> => {
             const existing = internalBalanceMaps.get(accountReference);
@@ -4131,9 +4323,7 @@ export class ExpensicaDashboardView extends ItemView {
                 return existing;
             }
 
-            const balances = accountReference === defaultAccountReference
-                ? runningBalances
-                : getRunningBalanceByTransactionIdForAccount(this.plugin, accountReference, this.plugin.getAllTransactions());
+            const balances = getRunningBalanceByTransactionIdForAccount(this.plugin, accountReference, allTransactions);
             internalBalanceMaps.set(accountReference, balances);
             return balances;
         };
@@ -4167,9 +4357,13 @@ export class ExpensicaDashboardView extends ItemView {
                     this.renderTransactionGroupTitle(transactionsContainer, this.getTransactionDayLabel(transaction), 'day');
                 }
 
+                const transactionAccountReference = this.plugin.settings.enableAccounts
+                    ? this.plugin.normalizeTransactionAccountReference(transaction.account)
+                    : defaultAccountReference;
+                const transactionBalances = ensureBalanceMap(transactionAccountReference);
                 let runningBalanceLabel = formatRunningBalanceLabel(
                     this.plugin,
-                    runningBalances[transaction.id] ?? 0
+                    transactionBalances[transaction.id] ?? 0
                 );
                 let secondaryRunningBalanceLabel: string | undefined;
 
@@ -4700,7 +4894,7 @@ export class DateRangePickerModal extends Modal {
         });
         
         const startDateInput = startDateGroup.createEl('input', {
-            cls: 'expensica-form-input',
+            cls: 'expensica-form-input expensica-edit-field',
             attr: {
                 type: 'date',
                 id: 'start-date',
@@ -4719,7 +4913,7 @@ export class DateRangePickerModal extends Modal {
         });
         
         const endDateInput = endDateGroup.createEl('input', {
-            cls: 'expensica-form-input',
+            cls: 'expensica-form-input expensica-edit-field',
             attr: {
                 type: 'date',
                 id: 'end-date',
@@ -5877,6 +6071,7 @@ class AccountEditorModal extends Modal {
         }
 
         await this.dashboardView.loadTransactionsData();
+        this.dashboardView.requestAllChartAnimations();
         this.dashboardView.renderDashboard();
         this.close();
     }
@@ -5927,7 +6122,7 @@ class AccountEditorModal extends Modal {
 
         const modalTitle = contentEl.createEl('h2', { cls: 'expensica-modal-title' });
         const modalLabel = this.account
-            ? `Edit ${getAccountTypeLabel(this.account.type).toLowerCase()} account`
+            ? `Edit ${getAccountTypeLabel(this.account.type)} Account`
             : 'Create New Account';
         modalTitle.innerHTML = `<span class="expensica-modal-title-icon">${getAccountEmoji(this.account?.type || AccountType.CHEQUING)}</span> ${modalLabel}`;
 
@@ -5939,8 +6134,29 @@ class AccountEditorModal extends Modal {
             cls: 'expensica-form-label',
             attr: { for: 'account-name' }
         });
-        const nameInput = nameGroup.createEl('input', {
-            cls: 'expensica-form-input expensica-edit-field',
+        const nameRow = nameGroup.createDiv('expensica-category-name-row');
+        let selectedColor = this.account
+            ? (normalizePaletteColor(this.account.color) || getAccountColor(this.account, this.plugin.getAccounts()))
+            : getNextAccountColor(this.plugin.getAccounts());
+
+        const colorButton = nameRow.createEl('button', {
+            cls: 'expensica-standard-button expensica-category-color-button',
+            attr: {
+                type: 'button',
+                id: 'account-color',
+                'aria-label': 'Choose color'
+            }
+        });
+        colorButton.style.setProperty('--expensica-category-button-color', selectedColor);
+        colorButton.addEventListener('click', () => {
+            new CategoryColorPaletteModal(this.app, selectedColor, (color) => {
+                selectedColor = normalizePaletteColor(color) || selectedColor;
+                colorButton.style.setProperty('--expensica-category-button-color', selectedColor);
+            }).open();
+        });
+
+        const nameInput = nameRow.createEl('input', {
+            cls: 'expensica-form-input expensica-edit-field expensica-category-name-field',
             attr: {
                 id: 'account-name',
                 name: 'account-name',
@@ -6056,6 +6272,13 @@ class AccountEditorModal extends Modal {
             typeOptionsMenu.toggleClass('expensica-select-hidden', !typeOptionsMenu.hasClass('expensica-select-hidden'));
         });
 
+        if (this.account?.isDefault) {
+            form.createEl('p', {
+                text: 'This is a Default account',
+                cls: 'expensica-account-default-note'
+            });
+        }
+
         const formFooter = form.createDiv('expensica-form-footer');
         let deleteBtn: HTMLButtonElement | null = null;
         if (this.account && !this.account.isDefault) {
@@ -6087,7 +6310,7 @@ class AccountEditorModal extends Modal {
             if (this.plugin.hasTransactionsForAccount(accountReference)) {
                 new AccountDeleteBlockedModal(
                     this.app,
-                    `This ${getAccountTypeLabel(this.account.type).toLowerCase()} account has a transaction history, and in order to delete this account they need to deal with transactions first.`
+                    `This ${getAccountTypeLabel(this.account.type).toLowerCase()} account has a transaction history. In order to delete it, reassign or remove transactions affected`
                 ).open();
                 return;
             }
@@ -6103,6 +6326,7 @@ class AccountEditorModal extends Modal {
 
                     await this.plugin.deleteAccount(accountReference, this.dashboardView);
                     await this.dashboardView.loadTransactionsData();
+                    this.dashboardView.requestAllChartAnimations();
                     this.dashboardView.renderDashboard();
                     this.close();
                 }
@@ -6124,6 +6348,7 @@ class AccountEditorModal extends Modal {
                 name: accountName,
                 type: accountType,
                 createdAt: this.account?.createdAt || new Date().toISOString(),
+                color: selectedColor,
                 isDefault: this.account?.isDefault
             };
             if (accountType === AccountType.CREDIT && creditLimitInput?.value) {
@@ -6161,13 +6386,21 @@ class AccountEditorModal extends Modal {
 class CategoryModal extends Modal {
     plugin: ExpensicaPlugin;
     dashboardView: ExpensicaDashboardView;
-    category: Category;
+    category: Category | null;
+    initialType: CategoryType;
 
-    constructor(app: App, plugin: ExpensicaPlugin, dashboardView: ExpensicaDashboardView, category: Category) {
+    constructor(
+        app: App,
+        plugin: ExpensicaPlugin,
+        dashboardView: ExpensicaDashboardView,
+        category: Category | null,
+        initialType: CategoryType = CategoryType.EXPENSE
+    ) {
         super(app);
         this.plugin = plugin;
         this.dashboardView = dashboardView;
         this.category = category;
+        this.initialType = category?.type || initialType;
     }
 
     onOpen() {
@@ -6175,10 +6408,17 @@ class CategoryModal extends Modal {
         contentEl.empty();
         this.modalEl.addClass('expensica-transaction-modal');
         contentEl.addClass('expensica-modal');
-        const isProtectedExpenseFallback = this.category.id === 'other_expense';
+        const isProtectedExpenseFallback = this.category?.id === 'other_expense';
+        const draftCategory: Category = this.category || {
+            id: generateId(),
+            name: '',
+            type: this.initialType
+        };
 
         const modalTitle = contentEl.createEl('h2', { cls: 'expensica-modal-title' });
-        modalTitle.innerHTML = '<span class="expensica-modal-title-icon">🏷️</span> Edit Category';
+        modalTitle.innerHTML = `<span class="expensica-modal-title-icon">🏷️</span> ${this.category
+            ? 'Edit Category'
+            : (draftCategory.type === CategoryType.INCOME ? 'New Income Category' : 'New Expenses Category')}`;
 
         const form = contentEl.createEl('form', { cls: 'expensica-form' });
         const nameGroup = form.createDiv('expensica-form-group');
@@ -6188,8 +6428,10 @@ class CategoryModal extends Modal {
             attr: { for: 'category-name' }
         });
         const nameRow = nameGroup.createDiv('expensica-category-name-row');
-        let selectedEmoji = this.plugin.getCategoryEmoji(this.category.id);
-        let selectedColor = this.normalizeColorInputValue(this.plugin.getCategoryColor(this.category.id, this.category.name));
+        let selectedEmoji = this.category ? this.plugin.getCategoryEmoji(this.category.id) : this.plugin.getCategoryEmoji('other_expense');
+        let selectedColor = this.category
+            ? this.normalizeColorInputValue(this.plugin.getCategoryColor(this.category.id, this.category.name))
+            : this.normalizeColorInputValue(ColorPalette.colors[0]);
 
         const colorButton = nameRow.createEl('button', {
             cls: 'expensica-standard-button expensica-category-color-button',
@@ -6217,7 +6459,7 @@ class CategoryModal extends Modal {
             }
         });
         emojiButton.addEventListener('click', () => {
-            new EmojiPickerModal(this.app, this.category, selectedEmoji, (emoji) => {
+            new EmojiPickerModal(this.app, draftCategory, selectedEmoji, (emoji) => {
                 selectedEmoji = emoji;
                 emojiButton.setText(emoji);
             }).open();
@@ -6233,14 +6475,14 @@ class CategoryModal extends Modal {
                 required: 'required'
             }
         });
-        nameInput.value = this.category.name;
+        nameInput.value = this.category?.name || '';
         if (isProtectedExpenseFallback) {
             nameInput.disabled = true;
         }
 
         const formFooter = form.createDiv('expensica-form-footer');
         let deleteBtn: HTMLButtonElement | null = null;
-        if (!isProtectedExpenseFallback) {
+        if (this.category && !isProtectedExpenseFallback) {
             deleteBtn = formFooter.createEl('button', {
                 text: 'Delete',
                 cls: 'expensica-standard-button expensica-btn expensica-btn-danger-solid expensica-modal-delete-btn',
@@ -6253,7 +6495,7 @@ class CategoryModal extends Modal {
             attr: { type: 'button' }
         });
         formFooter.createEl('button', {
-            text: 'Update',
+            text: this.category ? 'Update' : 'Save',
             cls: 'expensica-standard-button expensica-btn expensica-btn-primary',
             attr: { type: 'submit' }
         });
@@ -6263,6 +6505,10 @@ class CategoryModal extends Modal {
         });
 
         deleteBtn?.addEventListener('click', async () => {
+            if (!this.category) {
+                return;
+            }
+
             const typeCategories = this.plugin.getCategories(this.category.type);
             if (typeCategories.length <= 1) {
                 showExpensicaNotice(`You must have at least one ${this.category.type} category`);
@@ -6280,7 +6526,7 @@ class CategoryModal extends Modal {
             event.preventDefault();
 
             const nextName = this.plugin.normalizeCategoryName(nameInput.value.trim()).name;
-            const nextEmoji = selectedEmoji || this.plugin.getCategoryEmoji(this.category.id);
+            const nextEmoji = selectedEmoji || (this.category ? this.plugin.getCategoryEmoji(this.category.id) : this.plugin.getCategoryEmoji('other_expense'));
             const nextColor = selectedColor;
 
             if (!nextName) {
@@ -6288,8 +6534,8 @@ class CategoryModal extends Modal {
                 return;
             }
 
-            const duplicate = this.plugin.getCategories(this.category.type).find(candidate =>
-                candidate.id !== this.category.id
+            const duplicate = this.plugin.getCategories(draftCategory.type).find(candidate =>
+                candidate.id !== draftCategory.id
                 && this.plugin.normalizeCategoryName(candidate.name).name.toLowerCase() === nextName.toLowerCase()
             );
             if (duplicate) {
@@ -6297,12 +6543,21 @@ class CategoryModal extends Modal {
                 return;
             }
 
-            await this.plugin.updateCategory({
-                ...this.category,
-                name: nextName
-            });
-            await this.plugin.updateCategoryEmoji(this.category.id, nextEmoji);
-            await this.plugin.updateCategoryColor(this.category.id, nextColor);
+            if (this.category) {
+                await this.plugin.updateCategory({
+                    ...this.category,
+                    name: nextName
+                });
+                await this.plugin.updateCategoryEmoji(this.category.id, nextEmoji);
+                await this.plugin.updateCategoryColor(this.category.id, nextColor);
+            } else {
+                await this.plugin.addCategory({
+                    ...draftCategory,
+                    name: nextName
+                });
+                await this.plugin.updateCategoryEmoji(draftCategory.id, nextEmoji);
+                await this.plugin.updateCategoryColor(draftCategory.id, nextColor);
+            }
             this.dashboardView.renderDashboard();
             this.close();
         });

@@ -407,6 +407,10 @@
   word-break: normal;
 }
 
+.expensica-card-currency-amount {
+  color: inherit;
+}
+
 .expensica-card-trend {
   font-size: var(--expensica-card-trend-font-size);
   margin-block-start: var(--expensica-gap-md);
@@ -4577,6 +4581,13 @@ to {
     min-width: 0;
 }
 
+.expensica-account-card-icon-row {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--expensica-gap-sm);
+    flex: 0 0 auto;
+}
+
 .expensica-account-card-icon {
     width: 40px;
     height: 40px;
@@ -4636,6 +4647,15 @@ to {
     font-size: 0.8rem;
     font-style: italic;
     line-height: 1.2;
+}
+
+.expensica-account-default-note {
+    margin: 0 0 -10px 0;
+    color: var(--text-faint);
+    font-size: var(--expensica-font-size-sm);
+    font-style: italic;
+    line-height: 1.4;
+    transform: translateY(2px);
 }
 
 .expensica-account-card[data-account-type="chequing"] .expensica-account-card-balance.is-positive,
@@ -7948,6 +7968,7 @@ h4.expensica-transactions-title {
 .expensica-category-chart-type-selector-overlay {
   position: absolute;
   top: var(--expensica-gap-md);
+  left: var(--expensica-gap-md);
   right: var(--expensica-gap-md);
   z-index: var(--expensica-z-dropdown);
   margin: 0;
@@ -7956,11 +7977,23 @@ h4.expensica-transactions-title {
   border-bottom: 0;
   background: transparent;
   width: auto;
-  display: block;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .expensica-category-chart-type-selector-overlay .expensica-chart-type-current {
   min-width: 0;
+}
+
+.expensica-category-create-button {
+  padding: 0;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .expensica-summary,
