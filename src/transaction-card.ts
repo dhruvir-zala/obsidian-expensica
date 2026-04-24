@@ -1,7 +1,7 @@
 import { Menu } from 'obsidian';
 import {
     CategoryType,
-    getAccountTypeLabel,
+    getAccountColor,
     getCurrencyByCode,
     getTransactionDisplayTime,
     INTERNAL_CATEGORY_ID,
@@ -98,12 +98,19 @@ export function renderTransactionCard(container: HTMLElement, options: Transacti
     if (plugin.settings.enableAccounts && transaction.type === TransactionType.INTERNAL) {
         const fromAccount = parseAccountReference(transaction.fromAccount || plugin.normalizeTransactionAccountReference(undefined));
         const toAccount = parseAccountReference(transaction.toAccount || plugin.normalizeTransactionAccountReference(undefined));
+        const accounts = plugin.getAccounts();
+        const fromAccountRecord = plugin.findAccountByReference(transaction.fromAccount);
+        const toAccountRecord = plugin.findAccountByReference(transaction.toAccount);
         const accountEl = metaEl.createEl('span', { cls: 'expensica-transaction-account' });
-        accountEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg> ${fromAccount.name} → ${toAccount.name}`;
+        renderTransactionAccountEndpoint(accountEl, fromAccount.name, fromAccountRecord ? getAccountColor(fromAccountRecord, accounts) : undefined);
+        const separatorEl = accountEl.createSpan({ cls: 'expensica-transaction-account-separator' });
+        separatorEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg>';
+        renderTransactionAccountEndpoint(accountEl, toAccount.name, toAccountRecord ? getAccountColor(toAccountRecord, accounts) : undefined);
     } else if (plugin.settings.enableAccounts) {
         const accountDisplay = plugin.getTransactionAccountDisplay(transaction.account);
         const accountEl = metaEl.createEl('span', { cls: 'expensica-transaction-account' });
         accountEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg> ${accountDisplay.name}`;
+        accountEl.style.color = getAccountColor(accountDisplay, plugin.getAccounts());
     }
 
     if (plugin.settings.showTransactionCategoryLabels) {
@@ -220,6 +227,21 @@ function getTransactionCardCurrencySymbol(currencyCode: string, fallbackSymbol: 
 
 function stripCurrencyAbbreviation(symbol: string): string {
     return symbol.replace(/[A-Za-z]+/g, '').trim();
+}
+
+function renderTransactionAccountEndpoint(container: HTMLElement, name: string, color?: string): void {
+    const endpointEl = container.createSpan({ cls: 'expensica-transaction-account-endpoint' });
+    if (color) {
+        endpointEl.style.color = color;
+    }
+
+    const iconEl = endpointEl.createSpan({ cls: 'expensica-transaction-account-icon' });
+    iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>';
+
+    endpointEl.createSpan({
+        text: name,
+        cls: 'expensica-transaction-account-name'
+    });
 }
 
 function showTransactionCategoryMenu(
