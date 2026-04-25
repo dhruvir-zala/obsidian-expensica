@@ -86,6 +86,7 @@ interface ExpensicaSettings {
 type LegacyCategory = Category & { emoji?: string };
 
 const LEADING_CATEGORY_EMOJI_PATTERN = /^([\p{Extended_Pictographic}\uFE0F\u200D]+)\s+/u;
+const INTERNAL_CATEGORY_NAME = DEFAULT_CATEGORIES.find(category => category.id === INTERNAL_CATEGORY_ID)?.name || 'Internal';
 
 // Define a separate interface for our transactions data
 interface TransactionsData {
@@ -582,7 +583,23 @@ export default class ExpensicaPlugin extends Plugin {
             };
         });
 
-        this.settings.categories = normalizedCategories;
+        const categoriesById = new Map<string, Category>();
+        normalizedCategories.forEach(category => {
+            if (
+                category.id !== INTERNAL_CATEGORY_ID
+                && this.normalizeCategoryName(category.name).name.toLowerCase() === INTERNAL_CATEGORY_NAME.toLowerCase()
+            ) {
+                return;
+            }
+            categoriesById.set(category.id, category);
+        });
+        DEFAULT_CATEGORIES.forEach(category => {
+            if (!categoriesById.has(category.id)) {
+                categoriesById.set(category.id, category);
+            }
+        });
+
+        this.settings.categories = Array.from(categoriesById.values());
 
         this.settings.categoryEmojis = this.getCategoryEmojiOverridesForSave();
     }
@@ -677,10 +694,11 @@ export default class ExpensicaPlugin extends Plugin {
 
     // Get categories filtered by type
     getCategories(type?: CategoryType): Category[] {
+        const visibleCategories = this.settings.categories.filter(category => category.id !== INTERNAL_CATEGORY_ID);
         if (!type) {
-            return this.settings.categories;
+            return visibleCategories;
         }
-        return this.settings.categories.filter(c => c.type === type);
+        return visibleCategories.filter(c => c.type === type);
     }
 
     // Get category by ID
@@ -695,6 +713,11 @@ export default class ExpensicaPlugin extends Plugin {
     getCategoryColor(categoryId: string, fallbackName?: string): string {
         return this.settings.categoryColors[categoryId]
             || getCategoryColor(fallbackName || categoryId);
+    }
+
+    isReservedCategoryName(categoryId: string, name: string): boolean {
+        return categoryId !== INTERNAL_CATEGORY_ID
+            && this.normalizeCategoryName(name).name.toLowerCase() === INTERNAL_CATEGORY_NAME.toLowerCase();
     }
 
     async updateCategoryEmoji(categoryId: string, emoji: string): Promise<void> {
@@ -724,6 +747,9 @@ export default class ExpensicaPlugin extends Plugin {
     // Add a new category
     async addCategory(category: Category): Promise<void> {
         const normalizedName = this.normalizeCategoryName(category.name).name;
+        if (this.isReservedCategoryName(category.id, normalizedName)) {
+            throw new Error(`Category name "${INTERNAL_CATEGORY_NAME}" is reserved`);
+        }
         const duplicate = this.settings.categories.find(existing =>
             existing.type === category.type
             && this.normalizeCategoryName(existing.name).name.toLowerCase() === normalizedName.toLowerCase()
@@ -758,6 +784,9 @@ export default class ExpensicaPlugin extends Plugin {
         const index = this.settings.categories.findIndex(c => c.id === updatedCategory.id);
         if (index !== -1) {
             const normalizedName = this.normalizeCategoryName(updatedCategory.name).name;
+            if (this.isReservedCategoryName(updatedCategory.id, normalizedName)) {
+                throw new Error(`Category name "${INTERNAL_CATEGORY_NAME}" is reserved`);
+            }
             const duplicate = this.settings.categories.find(existing =>
                 existing.id !== updatedCategory.id
                 && existing.type === updatedCategory.type
