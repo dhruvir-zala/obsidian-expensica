@@ -44,7 +44,9 @@ class CategoryQuickMenu {
         this.categoryType = categoryType;
         this.onCategoryChange = onCategoryChange;
         this.selectedCategoryId = selectedCategoryId;
-        this.categories = plugin.getCategories(categoryType).filter(category => category.id !== INTERNAL_CATEGORY_ID);
+        this.categories = plugin.getCategories(categoryType)
+            .filter(category => category.id !== INTERNAL_CATEGORY_ID)
+            .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }));
         this.hostEl = (target.closest('.modal-content') as HTMLElement | null) || document.body;
         this.boundHandleDocumentPointerDown = this.handleDocumentPointerDown.bind(this);
         this.boundHandleDocumentKeydown = this.handleDocumentKeydown.bind(this);

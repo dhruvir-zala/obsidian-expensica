@@ -1,7 +1,8 @@
-import { 
+import {
     App, Editor, MarkdownView, Modal, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, WorkspaceLeaf, ItemView, ViewStateResult
 } from 'obsidian';
 import Chart from 'chart.js/auto';
+import type { ArcElement, Chart as ChartJS, Plugin as ChartPlugin } from 'chart.js';
 import { 
     Transaction, Category, TransactionType, CategoryType, Currency, ColorScheme,
     formatCurrency, formatDate, formatTime, parseLocalDate, getMonthName, getYear, generateId, TransactionAggregator,
@@ -27,6 +28,7 @@ import { getLastAccountTransaction, renderAccountCard, renderCreateAccountCard }
 declare module '../main' {
     interface ExpensicaPlugin {
         openTransactionsView(): Promise<void>;
+        openTransactionsViewForCategory(categoryId: string): Promise<void>;
         renderDashboardTransactionsTab(dashboard: ExpensicaDashboardView, container: HTMLElement): void;
         renderDashboardAccountsTab(dashboard: ExpensicaDashboardView, container: HTMLElement): void;
         openExportModal(): void;
@@ -375,6 +377,11 @@ export class ExpensicaDashboardView extends ItemView {
     private chartAnimationResetTimeout: number | null = null;
     private incomeExpenseToggleAnimationFrame: number | null = null;
     private incomeExpenseHoverAnimationFrame: number | null = null;
+    private doughnutLabelAnimationFrame: number | null = null;
+    private doughnutLabelAnimationIndex: number | null = null;
+    private doughnutLabelAnimationStartTime: number = 0;
+    private doughnutLabelAnimationTarget: number = 0;
+    private doughnutLabelAnimationValue: number = 0;
     private paneResizeObserver: ResizeObserver | null = null;
     private lastObservedDashboardWidth = 0;
     private lastObservedDashboardHeight = 0;
@@ -437,6 +444,7 @@ export class ExpensicaDashboardView extends ItemView {
     async onClose() {
         // Cleanup charts
         if (this.expensesChart) {
+            this.cancelDoughnutLabelAnimation();
             this.expensesChart.destroy();
             this.expensesChart = null;
         }
@@ -489,6 +497,9 @@ export class ExpensicaDashboardView extends ItemView {
             window.cancelAnimationFrame(this.incomeExpenseHoverAnimationFrame);
             this.incomeExpenseHoverAnimationFrame = null;
         }
+
+        this.cancelDoughnutLabelAnimation();
+
     }
 
     getState(): Record<string, unknown> {
@@ -1012,6 +1023,7 @@ export class ExpensicaDashboardView extends ItemView {
         }
 
         if (this.expensesChart) {
+            this.cancelDoughnutLabelAnimation();
             this.clearChartCanvasMeasurement(this.expensesChart);
             this.expensesChart.destroy();
             this.expensesChart = null;
@@ -1084,6 +1096,11 @@ export class ExpensicaDashboardView extends ItemView {
     }
 
     private formatCategoryCardCurrency(amount: number): string {
+        return formatCurrency(amount, this.plugin.settings.defaultCurrency)
+            .replace(/^[A-Z]{1,3}(?=\$)/, '');
+    }
+
+    private formatBudgetCurrency(amount: number): string {
         return formatCurrency(amount, this.plugin.settings.defaultCurrency)
             .replace(/^[A-Z]{1,3}(?=\$)/, '');
     }
@@ -1170,6 +1187,152 @@ export class ExpensicaDashboardView extends ItemView {
         return shouldAnimate
             ? { duration: this.getChartAnimationDuration(), easing: 'easeOutQuart' as const }
             : { duration: 0 };
+    }
+
+    private getDoughnutVisibleDoughnutTotal(chart: ChartJS<'doughnut', number[], unknown>): number {
+        const dataset = chart.data.datasets[0];
+        const rawData = Array.isArray(dataset?.data) ? dataset.data as number[] : [];
+        return rawData.reduce((sum, value, index) => {
+            if (!chart.getDataVisibility(index)) {
+                return sum;
+            }
+
+            const numericValue = typeof value === 'number' ? value : Number(value);
+            return Number.isFinite(numericValue) ? sum + numericValue : sum;
+        }, 0);
+    }
+
+    private getActiveDoughnutPercentageValue(chart: ChartJS<'doughnut', number[], unknown>): { index: number; percentage: number } | null {
+        const [activeElement] = chart.getActiveElements();
+        if (!activeElement || !chart.getDataVisibility(activeElement.index)) {
+            return null;
+        }
+
+        const dataset = chart.data.datasets[activeElement.datasetIndex];
+        const rawValue = Array.isArray(dataset?.data) ? dataset.data[activeElement.index] : null;
+        const value = typeof rawValue === 'number' ? rawValue : Number(rawValue);
+        const total = this.getDoughnutVisibleDoughnutTotal(chart);
+
+        if (!Number.isFinite(value) || total <= 0) {
+            return null;
+        }
+
+        return {
+            index: activeElement.index,
+            percentage: (value / total) * 100
+        };
+    }
+
+    private formatDoughnutPercentageLabel(percentage: number, allowZero = false): string {
+        if (allowZero && percentage <= 0) {
+            return '0%';
+        }
+
+        if (!Number.isFinite(percentage) || percentage <= 0) {
+            return '0.01%';
+        }
+
+        if (percentage >= 100) {
+            return '100%';
+        }
+
+        if (percentage >= 1) {
+            return `${parseFloat(percentage.toFixed(2)).toString()}%`;
+        }
+
+        return `${percentage.toFixed(2)}%`;
+    }
+
+    private easeOutDoughnutLabelAnimation(progress: number): number {
+        return 1 - Math.pow(1 - progress, 3);
+    }
+
+    private cancelDoughnutLabelAnimation() {
+        if (this.doughnutLabelAnimationFrame !== null) {
+            window.cancelAnimationFrame(this.doughnutLabelAnimationFrame);
+            this.doughnutLabelAnimationFrame = null;
+        }
+
+        this.doughnutLabelAnimationIndex = null;
+        this.doughnutLabelAnimationStartTime = 0;
+        this.doughnutLabelAnimationTarget = 0;
+        this.doughnutLabelAnimationValue = 0;
+    }
+
+    private startDoughnutLabelAnimation(chart: ChartJS<'doughnut', number[], unknown>, index: number, targetPercentage: number) {
+        this.cancelDoughnutLabelAnimation();
+        this.doughnutLabelAnimationIndex = index;
+        this.doughnutLabelAnimationTarget = targetPercentage;
+        this.doughnutLabelAnimationValue = 0;
+        this.doughnutLabelAnimationStartTime = performance.now();
+
+        const duration = 450;
+        const tick = (now: number) => {
+            if (this.doughnutLabelAnimationIndex !== index) {
+                this.doughnutLabelAnimationFrame = null;
+                return;
+            }
+
+            const progress = Math.min(1, (now - this.doughnutLabelAnimationStartTime) / duration);
+            this.doughnutLabelAnimationValue = targetPercentage * this.easeOutDoughnutLabelAnimation(progress);
+            chart.draw();
+
+            if (progress < 1) {
+                this.doughnutLabelAnimationFrame = window.requestAnimationFrame(tick);
+                return;
+            }
+
+            this.doughnutLabelAnimationValue = targetPercentage;
+            this.doughnutLabelAnimationFrame = null;
+            chart.draw();
+        };
+
+        this.doughnutLabelAnimationFrame = window.requestAnimationFrame(tick);
+    }
+
+    private createDoughnutCenterTextPlugin(): ChartPlugin<'doughnut'> {
+        return {
+            id: 'expensicaDoughnutCenterText',
+            afterDatasetsDraw: (chart) => {
+                const activePercentage = this.getActiveDoughnutPercentageValue(chart);
+                if (!activePercentage) {
+                    this.cancelDoughnutLabelAnimation();
+                    return;
+                }
+
+                if (
+                    this.doughnutLabelAnimationIndex !== activePercentage.index
+                    || Math.abs(this.doughnutLabelAnimationTarget - activePercentage.percentage) > 0.001
+                ) {
+                    this.startDoughnutLabelAnimation(chart, activePercentage.index, activePercentage.percentage);
+                }
+
+                const meta = chart.getDatasetMeta(0);
+                const firstArc = meta.data[0] as ArcElement | undefined;
+                if (!firstArc) {
+                    return;
+                }
+
+                const label = this.formatDoughnutPercentageLabel(this.doughnutLabelAnimationValue, true);
+
+                const ctx = chart.ctx;
+                const styles = getComputedStyle(chart.canvas);
+                const fontSize = styles.getPropertyValue('--expensica-font-size-donut-current').trim()
+                    || styles.getPropertyValue('--expensica-font-size-donut').trim()
+                    || '64px';
+                const fontFamily = styles.fontFamily || getComputedStyle(document.body).fontFamily || 'sans-serif';
+                const x = chart.chartArea.left + (chart.chartArea.right - chart.chartArea.left) / 2;
+                const y = chart.chartArea.top + (chart.chartArea.bottom - chart.chartArea.top) / 2;
+
+                ctx.save();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = styles.color || 'currentColor';
+                ctx.font = `700 ${fontSize} ${fontFamily}`;
+                ctx.fillText(label, x, y);
+                ctx.restore();
+            }
+        };
     }
 
     private getChartAnimationDuration() {
@@ -2100,7 +2263,12 @@ export class ExpensicaDashboardView extends ItemView {
                 {
                     onHoverStart: (index, event) => this.activateCategorySlice(this.expensesChart, index, event),
                     onHoverEnd: () => this.clearCategorySlice(this.expensesChart),
-                    onClick: (category) => this.openCategoryModal(category.id)
+                    onClick: (category) => this.openCategoryModal(category.id),
+                    onSearchClick: (category) => {
+                        if (category.id) {
+                            void this.plugin.openTransactionsViewForCategory(category.id);
+                        }
+                    }
                 }
             );
         }
@@ -2119,7 +2287,12 @@ export class ExpensicaDashboardView extends ItemView {
                     formattedAmount: this.formatCategoryCardCurrency(0)
                 })),
                 {
-                    onClick: (category) => this.openCategoryModal(category.id)
+                    onClick: (category) => this.openCategoryModal(category.id),
+                    onSearchClick: (category) => {
+                        if (category.id) {
+                            void this.plugin.openTransactionsViewForCategory(category.id);
+                        }
+                    }
                 }
             );
         }
@@ -2146,7 +2319,7 @@ export class ExpensicaDashboardView extends ItemView {
             // Add text node
             budgetedCardTitle.appendChild(document.createTextNode(' Total Budgeted'));
             budgetedCard.createEl('p', {
-                text: formatCurrency(0, this.plugin.settings.defaultCurrency),
+                text: this.formatBudgetCurrency(0),
                 cls: 'expensica-card-value expensica-budget'
             });
             
@@ -2163,7 +2336,7 @@ export class ExpensicaDashboardView extends ItemView {
             // Add text node
             spentCardTitle.appendChild(document.createTextNode(' Total Spent'));
             spentCard.createEl('p', {
-                text: formatCurrency(0, this.plugin.settings.defaultCurrency),
+                text: this.formatBudgetCurrency(0),
                 cls: 'expensica-card-value expensica-expense'
             });
             
@@ -2180,7 +2353,7 @@ export class ExpensicaDashboardView extends ItemView {
             // Add text node
             remainingCardTitle.appendChild(document.createTextNode(' Remaining'));
             remainingCard.createEl('p', {
-                text: formatCurrency(0, this.plugin.settings.defaultCurrency),
+                text: this.formatBudgetCurrency(0),
                 cls: 'expensica-card-value expensica-budget-remaining'
             });
             
@@ -2205,7 +2378,7 @@ export class ExpensicaDashboardView extends ItemView {
         const budgetedCardTitle = budgetedCard.createEl('h3', { cls: 'expensica-card-title' });
         budgetedCardTitle.innerHTML = '<span class="emoji">💰</span> Total Budgeted';
         budgetedCard.createEl('p', {
-            text: formatCurrency(totalBudgeted, this.plugin.settings.defaultCurrency),
+            text: this.formatBudgetCurrency(totalBudgeted),
             cls: 'expensica-card-value expensica-budget'
         });
         
@@ -2222,7 +2395,7 @@ export class ExpensicaDashboardView extends ItemView {
         // Add text node
         spentCardTitle.appendChild(document.createTextNode(' Total Spent'));
         spentCard.createEl('p', {
-            text: formatCurrency(totalSpent, this.plugin.settings.defaultCurrency),
+            text: this.formatBudgetCurrency(totalSpent),
             cls: 'expensica-card-value expensica-expense'
         });
         
@@ -2239,7 +2412,7 @@ export class ExpensicaDashboardView extends ItemView {
         // Add text node
         remainingCardTitle.appendChild(document.createTextNode(' Remaining'));
         remainingCard.createEl('p', {
-            text: formatCurrency(remainingAmount, this.plugin.settings.defaultCurrency),
+            text: this.formatBudgetCurrency(remainingAmount),
             cls: 'expensica-card-value expensica-budget-remaining'
         });
         
@@ -2269,11 +2442,11 @@ export class ExpensicaDashboardView extends ItemView {
         
         // Create spent label
         const spentLabel = labelsDiv.createSpan();
-        spentLabel.textContent = formatCurrency(totalSpent, this.plugin.settings.defaultCurrency);
+        spentLabel.textContent = this.formatBudgetCurrency(totalSpent);
         
         // Create budget label
         const budgetLabel = labelsDiv.createSpan();
-        budgetLabel.textContent = formatCurrency(totalBudgeted, this.plugin.settings.defaultCurrency);
+        budgetLabel.textContent = this.formatBudgetCurrency(totalBudgeted);
     }
 
     // Render budget list
@@ -2375,18 +2548,18 @@ export class ExpensicaDashboardView extends ItemView {
 
             // Budget amount
             const amountCol = budgetItem.createDiv('expensica-budget-col-amount');
-            amountCol.textContent = formatCurrency(budget.amount, this.plugin.settings.defaultCurrency);
+            amountCol.textContent = this.formatBudgetCurrency(budget.amount);
 
             // Spent amount
             const spentCol = budgetItem.createDiv('expensica-budget-col-spent');
-            spentCol.textContent = formatCurrency(status.spent, this.plugin.settings.defaultCurrency);
+            spentCol.textContent = this.formatBudgetCurrency(status.spent);
 
             // Remaining amount
             const remainingCol = budgetItem.createDiv('expensica-budget-col-remaining');
 
             // Create amount span
             const amountSpan = remainingCol.createSpan('expensica-amount');
-            amountSpan.textContent = formatCurrency(status.remaining, this.plugin.settings.defaultCurrency);
+            amountSpan.textContent = this.formatBudgetCurrency(status.remaining);
 
             // Create status span
             const statusSpan = remainingCol.createSpan(`expensica-budget-status ${statusClass}`);
@@ -2562,7 +2735,7 @@ export class ExpensicaDashboardView extends ItemView {
         expenseSvg.appendChild(expenseHorLine);
         
         addTransactionBtn.appendChild(expenseSvg);
-        addTransactionBtn.appendChild(document.createTextNode(" New Transaction"));
+        addTransactionBtn.appendChild(document.createTextNode(" Transaction"));
 
         // Add export button with shadcn design
         const exportBtn = actionsEl.createEl('button', {
@@ -2809,7 +2982,7 @@ export class ExpensicaDashboardView extends ItemView {
         const netBalanceTrend = isEffectivelyZero(prevNetBalance) ? 100 : ((netBalance - prevNetBalance) / Math.abs(prevNetBalance)) * 100;
 
         // Income card
-        const incomeCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-animate');
+        const incomeCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-overview-card-primary expensica-animate');
         const incomeCardTitle = incomeCard.createEl('h3', { cls: 'expensica-card-title' });
         incomeCardTitle.innerHTML = '<span class="emoji">💰</span> Income';
         renderOverviewCurrencyValue(incomeCard, this.plugin.settings.defaultCurrency, totalIncome, 'expensica-income');
@@ -2825,7 +2998,7 @@ export class ExpensicaDashboardView extends ItemView {
 
 
         // Expenses card
-        const expensesCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-animate expensica-animate-delay-1');
+        const expensesCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-overview-card-primary expensica-animate expensica-animate-delay-1');
         const expensesCardTitle = expensesCard.createEl('h3', { cls: 'expensica-card-title' });
         expensesCardTitle.innerHTML = '<span class="emoji">💸</span> Expenses';
         renderOverviewCurrencyValue(expensesCard, this.plugin.settings.defaultCurrency, totalExpenses, 'expensica-expense');
@@ -2842,7 +3015,7 @@ export class ExpensicaDashboardView extends ItemView {
 
 
         // Net Balance card
-        const netBalanceCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-animate expensica-animate-delay-2');
+        const netBalanceCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-overview-card-primary expensica-animate expensica-animate-delay-2');
         const netBalanceCardTitle = netBalanceCard.createEl('h3', { cls: 'expensica-card-title' });
         netBalanceCardTitle.innerHTML = '<span class="emoji">⚖️</span> Net Balance';
         renderOverviewCurrencyValue(netBalanceCard, this.plugin.settings.defaultCurrency, netBalance, 'expensica-balance');
@@ -2881,7 +3054,7 @@ export class ExpensicaDashboardView extends ItemView {
                 : ((accountBalance - prevAccountBalance) / Math.abs(prevAccountBalance)) * 100;
             const accountColor = getAccountColor(account, balanceAccounts);
 
-            const balanceCard = summaryEl.createDiv(`expensica-card expensica-overview-card expensica-animate expensica-animate-delay-${Math.min(3, index + 3)}`);
+            const balanceCard = summaryEl.createDiv(`expensica-card expensica-overview-card expensica-overview-card-balance expensica-animate expensica-animate-delay-${Math.min(3, index + 3)}`);
             const balanceCardTitle = balanceCard.createEl('h3', { cls: 'expensica-card-title' });
             balanceCardTitle.innerHTML = this.plugin.settings.enableAccounts
                 ? `<span class="emoji">${getAccountEmoji(account.type)}</span> ${account.name} Balance`
@@ -3270,6 +3443,7 @@ export class ExpensicaDashboardView extends ItemView {
     ) {
         // Cleanup previous chart
         if (this.expensesChart) {
+            this.cancelDoughnutLabelAnimation();
             this.expensesChart.destroy();
         }
 
@@ -3307,6 +3481,7 @@ export class ExpensicaDashboardView extends ItemView {
         this.prepareChartCanvasSize(canvas);
         this.expensesChart = new Chart(canvas, {
             type: 'doughnut',
+            plugins: [this.createDoughnutCenterTextPlugin()],
             data: {
                 labels: categories,
                 datasets: [doughnutDataset as never]
@@ -4215,7 +4390,10 @@ export class ExpensicaDashboardView extends ItemView {
                     title: options.leadingAction.ariaLabel
                 }
             });
-            leadingActionButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="4" x2="12" y2="20"></line><line x1="4" y1="12" x2="20" y2="12"></line></svg>';
+            leadingActionButton.createSpan({
+                text: '+',
+                cls: 'expensica-category-create-button-icon expensica-account-card-icon-create'
+            });
             leadingActionButton.addEventListener('click', options.leadingAction.onClick);
         }
 
@@ -6408,7 +6586,7 @@ class CategoryModal extends Modal {
         contentEl.empty();
         this.modalEl.addClass('expensica-transaction-modal');
         contentEl.addClass('expensica-modal');
-        const isProtectedExpenseFallback = this.category?.id === 'other_expense';
+        const isProtectedCategory = this.category?.id === 'other_expense' || this.category?.id === INTERNAL_CATEGORY_ID;
         const draftCategory: Category = this.category || {
             id: generateId(),
             name: '',
@@ -6476,13 +6654,13 @@ class CategoryModal extends Modal {
             }
         });
         nameInput.value = this.category?.name || '';
-        if (isProtectedExpenseFallback) {
+        if (isProtectedCategory) {
             nameInput.disabled = true;
         }
 
         const formFooter = form.createDiv('expensica-form-footer');
         let deleteBtn: HTMLButtonElement | null = null;
-        if (this.category && !isProtectedExpenseFallback) {
+        if (this.category && !isProtectedCategory) {
             deleteBtn = formFooter.createEl('button', {
                 text: 'Delete',
                 cls: 'expensica-standard-button expensica-btn expensica-btn-danger-solid expensica-modal-delete-btn',

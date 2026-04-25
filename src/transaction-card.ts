@@ -57,7 +57,6 @@ export function renderTransactionCard(container: HTMLElement, options: Transacti
             emoji: '?',
             type: transaction.type === TransactionType.INCOME ? CategoryType.INCOME : CategoryType.EXPENSE
         };
-
     const selectorEl = transactionEl.createEl('button', {
         cls: 'expensica-transaction-selector',
         attr: {
