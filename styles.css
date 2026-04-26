@@ -623,6 +623,14 @@
   min-height: calc(var(--expensica-chart-height) * 0.75);
 }
 
+.expensica-cumulative-expenses-chart-container .expensica-canvas-container {
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 600px;
+  max-height: 200px;
+  min-height: 200px;
+}
+
 .expensica-chart-grid-same-row .expensica-income-expense-chart-container .expensica-canvas-container {
   aspect-ratio: auto;
   flex: 1 1 auto;
