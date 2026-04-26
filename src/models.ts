@@ -24,9 +24,94 @@ export enum TransactionType {
   export interface Category {
     id: string;
     name: string;
-    emoji: string;
     type: CategoryType;
   }
+
+  export type CategoryEmojiSettings = Record<string, string>;
+
+  export class ColorPalette {
+    static readonly lightCoral = '#e96767ff';
+    static readonly darkGoldenrod = '#c08f1bff';
+    static readonly lightSeaGreen = '#0eaaaaff';
+    static readonly orchid = '#cb5ae2ff';
+    static readonly burntPeach = '#e26b3cff';
+    static readonly metallicGold = '#cba50bff';
+    static readonly dodgerBlue = '#429efaff';
+    static readonly cottonBloom = '#f04cd5ff';
+    static readonly goldenChestnut = '#db7c2fff';
+    static readonly limeMoss = '#7da72aff';
+    static readonly softPeriwinkle = '#9288fcff';
+    static readonly wildStrawberry = '#f25a8cff';
+    static readonly bronze = '#c08635ff';
+    static readonly jadeGreen = '#42ae42ff';
+    static readonly brightLavender = '#b271f4ff';
+    static readonly coolSteel = '#9e9e9eff';
+
+    static readonly colors = [
+      ColorPalette.lightCoral,
+      ColorPalette.darkGoldenrod,
+      ColorPalette.lightSeaGreen,
+      ColorPalette.orchid,
+      ColorPalette.burntPeach,
+      ColorPalette.metallicGold,
+      ColorPalette.dodgerBlue,
+      ColorPalette.cottonBloom,
+      ColorPalette.goldenChestnut,
+      ColorPalette.limeMoss,
+      ColorPalette.softPeriwinkle,
+      ColorPalette.wildStrawberry,
+      ColorPalette.bronze,
+      ColorPalette.jadeGreen,
+      ColorPalette.brightLavender,
+      ColorPalette.coolSteel
+    ] as const;
+  }
+
+  const CATEGORY_COLORS_BY_ID: Record<string, string> = {
+    food: ColorPalette.metallicGold,
+    groceries: ColorPalette.jadeGreen,
+    transportation: ColorPalette.dodgerBlue,
+    rent: ColorPalette.orchid,
+    utilities: ColorPalette.lightSeaGreen,
+    internet: ColorPalette.jadeGreen,
+    entertainment: ColorPalette.brightLavender,
+    shopping: ColorPalette.wildStrawberry,
+    health: ColorPalette.limeMoss,
+    education: ColorPalette.dodgerBlue,
+    travel: ColorPalette.lightSeaGreen,
+    fitness: ColorPalette.goldenChestnut,
+    pets: ColorPalette.bronze,
+    gifts: ColorPalette.cottonBloom,
+    personal: ColorPalette.burntPeach,
+    childcare: ColorPalette.lightCoral,
+    subscriptions: ColorPalette.softPeriwinkle,
+    insurance: ColorPalette.bronze,
+    taxes: ColorPalette.lightCoral,
+    other_expense: ColorPalette.coolSteel
+  };
+
+  const CATEGORY_COLORS_BY_NAME: Record<string, string> = {
+    'food & dining': CATEGORY_COLORS_BY_ID.food,
+    groceries: CATEGORY_COLORS_BY_ID.groceries,
+    transportation: CATEGORY_COLORS_BY_ID.transportation,
+    'rent/mortgage': CATEGORY_COLORS_BY_ID.rent,
+    utilities: CATEGORY_COLORS_BY_ID.utilities,
+    'internet & phone': CATEGORY_COLORS_BY_ID.internet,
+    entertainment: CATEGORY_COLORS_BY_ID.entertainment,
+    shopping: CATEGORY_COLORS_BY_ID.shopping,
+    healthcare: CATEGORY_COLORS_BY_ID.health,
+    education: CATEGORY_COLORS_BY_ID.education,
+    travel: CATEGORY_COLORS_BY_ID.travel,
+    fitness: CATEGORY_COLORS_BY_ID.fitness,
+    pets: CATEGORY_COLORS_BY_ID.pets,
+    'gifts & donations': CATEGORY_COLORS_BY_ID.gifts,
+    'personal care': CATEGORY_COLORS_BY_ID.personal,
+    childcare: CATEGORY_COLORS_BY_ID.childcare,
+    subscriptions: CATEGORY_COLORS_BY_ID.subscriptions,
+    insurance: CATEGORY_COLORS_BY_ID.insurance,
+    taxes: CATEGORY_COLORS_BY_ID.taxes,
+    'other expenses': CATEGORY_COLORS_BY_ID.other_expense
+  };
   
   export interface Currency {
     code: string;  // ISO 4217 code (e.g. USD, EUR)
@@ -115,6 +200,10 @@ function fallbackRandomIdPart(): string {
     return getTimeInSeconds(time) !== null ? time : null;
   }
 
+  export function getTransactionDisplayTime(transaction: Transaction): string | null {
+    return getTransactionTime(transaction)?.slice(0, 5) ?? null;
+  }
+
   export function sortTransactionsByDateTimeDesc<T extends Transaction>(transactions: T[]): T[] {
     return transactions
       .map((transaction, index) => ({ transaction, index }))
@@ -169,9 +258,12 @@ function fallbackRandomIdPart(): string {
     return new Date(year, month - 1, day);
   }
 
-  // Deterministic category color shared by dashboard and calendar views.
-  export function getCategoryColor(categoryName: string): string {
-    return `hsl(${stringToHue(categoryName)}, 70%, 60%)`;
+  // Shared category colors for dashboard, chips, and calendar breakdowns.
+  export function getCategoryColor(categoryNameOrId: string): string {
+    const colorKey = categoryNameOrId.trim().toLowerCase();
+    return CATEGORY_COLORS_BY_ID[colorKey]
+      || CATEGORY_COLORS_BY_NAME[colorKey]
+      || `hsl(${stringToHue(categoryNameOrId)}, 70%, 60%)`;
   }
 
   export function stringToHue(str: string): number {
@@ -401,41 +493,82 @@ function fallbackRandomIdPart(): string {
   
   // Default expense categories
   export const DEFAULT_EXPENSE_CATEGORIES: Category[] = [
-    { id: 'food', name: 'Food & Dining', emoji: '🍽️', type: CategoryType.EXPENSE },
-    { id: 'groceries', name: 'Groceries', emoji: '🛒', type: CategoryType.EXPENSE },
-    { id: 'transportation', name: 'Transportation', emoji: '🚗', type: CategoryType.EXPENSE },
-    { id: 'rent', name: 'Rent/Mortgage', emoji: '🏠', type: CategoryType.EXPENSE },
-    { id: 'utilities', name: 'Utilities', emoji: '💡', type: CategoryType.EXPENSE },
-    { id: 'internet', name: 'Internet & Phone', emoji: '📱', type: CategoryType.EXPENSE },
-    { id: 'entertainment', name: 'Entertainment', emoji: '🎬', type: CategoryType.EXPENSE },
-    { id: 'shopping', name: 'Shopping', emoji: '🛍️', type: CategoryType.EXPENSE },
-    { id: 'health', name: 'Healthcare', emoji: '🏥', type: CategoryType.EXPENSE },
-    { id: 'education', name: 'Education', emoji: '📚', type: CategoryType.EXPENSE },
-    { id: 'travel', name: 'Travel', emoji: '✈️', type: CategoryType.EXPENSE },
-    { id: 'fitness', name: 'Fitness', emoji: '🏋️', type: CategoryType.EXPENSE },
-    { id: 'pets', name: 'Pets', emoji: '🐾', type: CategoryType.EXPENSE },
-    { id: 'gifts', name: 'Gifts & Donations', emoji: '🎁', type: CategoryType.EXPENSE },
-    { id: 'personal', name: 'Personal Care', emoji: '💇', type: CategoryType.EXPENSE },
-    { id: 'childcare', name: 'Childcare', emoji: '👶', type: CategoryType.EXPENSE },
-    { id: 'subscriptions', name: 'Subscriptions', emoji: '📺', type: CategoryType.EXPENSE },
-    { id: 'insurance', name: 'Insurance', emoji: '🔒', type: CategoryType.EXPENSE },
-    { id: 'taxes', name: 'Taxes', emoji: '📝', type: CategoryType.EXPENSE },
-    { id: 'other_expense', name: 'Other Expenses', emoji: '💼', type: CategoryType.EXPENSE },
+    { id: 'food', name: 'Food & Dining', type: CategoryType.EXPENSE },
+    { id: 'groceries', name: 'Groceries', type: CategoryType.EXPENSE },
+    { id: 'transportation', name: 'Transportation', type: CategoryType.EXPENSE },
+    { id: 'rent', name: 'Rent/Mortgage', type: CategoryType.EXPENSE },
+    { id: 'utilities', name: 'Utilities', type: CategoryType.EXPENSE },
+    { id: 'internet', name: 'Internet & Phone', type: CategoryType.EXPENSE },
+    { id: 'entertainment', name: 'Entertainment', type: CategoryType.EXPENSE },
+    { id: 'shopping', name: 'Shopping', type: CategoryType.EXPENSE },
+    { id: 'health', name: 'Healthcare', type: CategoryType.EXPENSE },
+    { id: 'education', name: 'Education', type: CategoryType.EXPENSE },
+    { id: 'travel', name: 'Travel', type: CategoryType.EXPENSE },
+    { id: 'fitness', name: 'Fitness', type: CategoryType.EXPENSE },
+    { id: 'pets', name: 'Pets', type: CategoryType.EXPENSE },
+    { id: 'gifts', name: 'Gifts & Donations', type: CategoryType.EXPENSE },
+    { id: 'personal', name: 'Personal Care', type: CategoryType.EXPENSE },
+    { id: 'childcare', name: 'Childcare', type: CategoryType.EXPENSE },
+    { id: 'subscriptions', name: 'Subscriptions', type: CategoryType.EXPENSE },
+    { id: 'insurance', name: 'Insurance', type: CategoryType.EXPENSE },
+    { id: 'taxes', name: 'Taxes', type: CategoryType.EXPENSE },
+    { id: 'other_expense', name: 'Other Expenses', type: CategoryType.EXPENSE },
   ];
   
   // Default income categories
   export const DEFAULT_INCOME_CATEGORIES: Category[] = [
-    { id: 'salary', name: 'Salary', emoji: '💰', type: CategoryType.INCOME },
-    { id: 'freelance', name: 'Freelance', emoji: '💻', type: CategoryType.INCOME },
-    { id: 'business', name: 'Business', emoji: '🏢', type: CategoryType.INCOME },
-    { id: 'investments', name: 'Investments', emoji: '📈', type: CategoryType.INCOME },
-    { id: 'dividends', name: 'Dividends', emoji: '💵', type: CategoryType.INCOME },
-    { id: 'rental', name: 'Rental Income', emoji: '🏘️', type: CategoryType.INCOME },
-    { id: 'gifts_received', name: 'Gifts Received', emoji: '🎀', type: CategoryType.INCOME },
-    { id: 'tax_returns', name: 'Tax Returns', emoji: '📋', type: CategoryType.INCOME },
-    { id: 'other_income', name: 'Other Income', emoji: '💸', type: CategoryType.INCOME },
+    { id: 'salary', name: 'Salary', type: CategoryType.INCOME },
+    { id: 'freelance', name: 'Freelance', type: CategoryType.INCOME },
+    { id: 'business', name: 'Business', type: CategoryType.INCOME },
+    { id: 'investments', name: 'Investments', type: CategoryType.INCOME },
+    { id: 'dividends', name: 'Dividends', type: CategoryType.INCOME },
+    { id: 'rental', name: 'Rental Income', type: CategoryType.INCOME },
+    { id: 'gifts_received', name: 'Gifts Received', type: CategoryType.INCOME },
+    { id: 'tax_returns', name: 'Tax Returns', type: CategoryType.INCOME },
+    { id: 'other_income', name: 'Other Income', type: CategoryType.INCOME },
   ];
+
+  export const DEFAULT_CATEGORY_EMOJIS: CategoryEmojiSettings = {
+    food: '🍔',
+    groceries: '🥑',
+    transportation: '🚗',
+    rent: '🔑',
+    utilities: '💡',
+    internet: '📱',
+    entertainment: '🎮',
+    shopping: '🛍️',
+    health: '💚',
+    education: '🎓',
+    travel: '✈️',
+    fitness: '👟',
+    pets: '🐶',
+    gifts: '🎁',
+    personal: '✂️',
+    childcare: '🍼',
+    subscriptions: '💳',
+    insurance: '☂️',
+    taxes: '📝',
+    other_expense: '🤷‍♂️',
+    salary: '💵',
+    freelance: '💻',
+    business: '🏢',
+    investments: '📈',
+    dividends: '💰',
+    rental: '🏘️',
+    gifts_received: '🎀',
+    tax_returns: '📋',
+    other_income: '💸'
+  };
   
+  export function getCommonCategoryEmojis(type: CategoryType): string[] {
+    const emojis = DEFAULT_CATEGORIES
+      .filter(category => category.type === type)
+      .map(category => DEFAULT_CATEGORY_EMOJIS[category.id])
+      .filter((emoji): emoji is string => !!emoji);
+
+    return Array.from(new Set(emojis));
+  }
+
   // Combine all default categories
   export const DEFAULT_CATEGORIES: Category[] = [
     ...DEFAULT_EXPENSE_CATEGORIES,
@@ -547,7 +680,7 @@ function fallbackRandomIdPart(): string {
         .filter(t => t.type === TransactionType.EXPENSE)
         .forEach(t => {
           const category = categories.find(c => c.id === t.category);
-          const categoryName = category ? `${category.emoji} ${category.name}` : '❓ Unknown Category';
+          const categoryName = category ? category.name : 'Unknown Category';
           if (!expenses[categoryName]) {
             expenses[categoryName] = 0;
           }

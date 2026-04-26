@@ -32,14 +32,6 @@
   --notion-bg-hover: var(--background-modifier-hover);
   --notion-bg-active: var(--background-modifier-active);
   
-  /* Dark mode Notion-inspired colors */
-  --notion-dark-text: var(--text-normal);
-  --notion-dark-text-light: var(--text-muted);
-  --notion-dark-text-lighter: var(--text-faint);
-  --notion-dark-border: var(--background-modifier-border);
-  --notion-dark-bg-hover: var(--background-modifier-hover);
-  --notion-dark-bg-active: var(--background-modifier-active);
-  
   /* Border Colors */
   --expensica-border-primary: var(--background-modifier-border);
   --expensica-border-secondary: var(--background-modifier-border);
@@ -48,6 +40,15 @@
   --expensica-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
   --expensica-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
   --expensica-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --expensica-shadow-focus: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.2);
+  --expensica-shadow-focus-subtle: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.1);
+  --expensica-shadow-control: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --expensica-shadow-panel-rest: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px,
+    rgba(15, 15, 15, 0.05) 0px 2px 4px;
+  --expensica-shadow-panel-hover: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px,
+    rgba(15, 15, 15, 0.08) 0px 4px 6px;
+  --expensica-shadow-dropdown: 0 10px 25px -5px rgba(0, 0, 0, 0.1),
+    0 8px 10px -6px rgba(0, 0, 0, 0.1);
   
   /* Transitions */
   --expensica-transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -55,9 +56,10 @@
   
   /* Border Radius */
   --expensica-radius-sm: 6px;
-  --expensica-radius: 12px;
+  --expensica-radius: 8px;
   --expensica-radius-lg: 16px;
   --expensica-radius-xl: 24px;
+  --expensica-chart-bar-radius: var(--radius-s, var(--expensica-radius-sm));
   
   /* Spacing scale: prefer Obsidian size tokens, with fallbacks for older themes */
   --expensica-gap-xs: var(--size-2-1, 2px);
@@ -65,25 +67,13 @@
   --expensica-gap-md: var(--size-4-2, 8px);
   --expensica-gap-lg: var(--size-4-4, 16px);
   --expensica-gap-xl: var(--size-4-6, 24px);
-  --expensica-gap-section: var(--size-4-8, 32px);
-  --expensica-gap-page: var(--size-4-8, 32px);
-
-  /* Semantic layout gaps */
-  --expensica-panel-gap: var(--expensica-gap-lg);
-  --expensica-section-gap: var(--expensica-gap-section);
-  --expensica-card-gap: var(--expensica-gap-lg);
-  --expensica-list-gap: var(--expensica-gap-sm);
-  --expensica-control-gap: var(--expensica-gap-md);
-  --expensica-title-gap: var(--expensica-gap-md);
-  --expensica-meta-gap: var(--expensica-gap-md);
-
-  /* Legacy spacing aliases */
-  --expensica-spacing-xs: var(--expensica-gap-sm);
-  --expensica-spacing-sm: var(--expensica-gap-md);
-  --expensica-spacing: var(--expensica-gap-lg);
-  --expensica-spacing-lg: var(--expensica-gap-xl);
-  --expensica-spacing-xl: var(--expensica-gap-section);
-  --expensica-spacing-2xl: var(--size-4-12, 48px);
+  --expensica-gap-2xl: var(--size-4-8, 32px);
+  --expensica-gap-3xl: var(--size-4-12, 48px);
+  --expensica-card-title-margin-block-start: 0;
+  --expensica-card-title-margin-inline: 0;
+  --expensica-card-value-margin: 0;
+  --expensica-transactions-filter-gap: max(var(--size-4-3, 12px), 8px);
+  --expensica-transaction-mobile-inline-padding: var(--size-4-2, 8px);
   
   /* Typography */
   --expensica-font-size-xs: 12px;
@@ -92,6 +82,9 @@
   --expensica-font-size-lg: 18px;
   --expensica-font-size-xl: 20px;
   --expensica-font-size-2xl: 24px;
+  --expensica-card-trend-font-size: var(--font-smallest, var(--font-ui-smallest, var(--expensica-font-size-xs)));
+  --expensica-card-trend-icon-size: 1em;
+  --expensica-card-trend-icon-stroke-width: 3;
   
   /* Line Heights */
   --expensica-line-height-tight: 1.25;
@@ -107,15 +100,19 @@
   --expensica-mobile-footer-safe-space: 96px;
 
   /* Charts */
-  --expensica-chart-height: 240px;
+  --expensica-chart-height: 310px;
   --expensica-chart-aspect-ratio: 400 / 240;
   --expensica-chart-axis-buffer: 18px;
+  --expensica-chart-panel-min-width: 400px;
+  --expensica-category-chip-radius: var(--radius-s, var(--expensica-radius-sm));
+  --expensica-category-chip-padding-y: 4px;
+  --expensica-category-chip-padding-x: 6px;
+  --expensica-category-chip-font-size: calc(var(--expensica-font-size-xs) - 1px);
+  --expensica-category-chip-border-alpha: 55%;
+  --expensica-category-chip-bg-alpha: 26%;
+  --expensica-category-chip-text-alpha: 92%;
   --expensica-doughnut-chart-height: 310px;
   --expensica-doughnut-chart-aspect-ratio: 400 / 310;
-  --expensica-chart-spacing: var(--expensica-panel-gap);
-  --expensica-calendar-panel-spacing: var(--expensica-panel-gap);
-  --expensica-calendar-panel-gap: var(--expensica-panel-gap);
-  --expensica-header-action-gap: var(--expensica-control-gap);
 }
 
 .notice:has(.expensica-notice-content) {
@@ -131,12 +128,12 @@
 
 /* Dashboard Layout */
 .expensica-dashboard {
-  padding: var(--expensica-gap-page);
+  padding: var(--expensica-gap-2xl);
   max-width: 1200px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: var(--expensica-section-gap);
+  gap: var(--expensica-gap-lg);
   background-color: transparent;
 }
 
@@ -145,7 +142,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--expensica-panel-gap);
+  padding: var(--expensica-gap-lg);
   background-color: var(--background-primary);
   border-radius: var(--expensica-radius-lg);
   margin-bottom: 0;
@@ -193,7 +190,7 @@
 
 .expensica-actions {
   display: flex;
-  gap: var(--expensica-control-gap);
+  gap: var(--expensica-gap-md);
   align-items: center;
   position: relative;
 }
@@ -204,8 +201,8 @@
   align-items: center;
   background-color: var(--expensica-bg-secondary);
   border-radius: var(--expensica-radius-xl);
-  padding: var(--expensica-spacing-xs);
-  margin-right: var(--expensica-spacing);
+  padding: var(--expensica-gap-sm);
+  margin-right: var(--expensica-gap-lg);
   box-shadow: var(--expensica-shadow-sm);
 }
 
@@ -232,7 +229,7 @@
 .expensica-month-display {
   font-size: var(--expensica-font-size);
   font-weight: 500;
-  padding: 0 var(--expensica-spacing);
+  padding: 0 var(--expensica-gap-lg);
   min-width: 130px;
   text-align: center;
   color: var(--expensica-text-primary);
@@ -344,14 +341,14 @@
 .expensica-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
-  gap: var(--expensica-card-gap);
+  gap: var(--expensica-gap-lg);
   margin-bottom: 0;
 }
 
 .expensica-card {
   background-color: var(--background-primary);
   border-radius: 4px;
-  padding: var(--expensica-panel-gap);
+  padding: var(--expensica-gap-md);
   position: relative;
   min-width: 0;
   overflow: hidden;
@@ -368,18 +365,16 @@
 }
 
 .expensica-card-title {
-  font-size: 12px;
+  font-size: var(--expensica-font-size-xs);
   color: var(--text-muted);
-  margin: 0 0 8px 0;
+  margin-block-start: var(--expensica-card-title-margin-block-start);
+  margin-block-end: var(--expensica-gap-md);
+  margin-inline: var(--expensica-card-title-margin-inline);
   display: flex;
   align-items: center;
-  gap: var(--expensica-spacing-xs);
+  gap: var(--expensica-gap-sm);
   font-weight: 500;
   letter-spacing: 0.02em;
-}
-
-.theme-dark .expensica-card-title {
-  color: var(--text-muted);
 }
 
 .expensica-card-title svg,
@@ -392,27 +387,19 @@
 .expensica-card-value {
   font-size: clamp(20px, 2.6vw, 28px);
   font-weight: 600;
-  margin: 0;
+  margin: var(--expensica-card-value-margin);
   line-height: 1.2;
   color: var(--text-normal);
   overflow-wrap: anywhere;
   word-break: normal;
 }
 
-.theme-dark .expensica-card-value {
-  color: var(--text-normal);
-}
-
 .expensica-card-trend {
-  font-size: 12px;
-  margin-top: 8px;
+  font-size: var(--expensica-card-trend-font-size);
+  margin-block-start: var(--expensica-gap-md);
   display: flex;
   align-items: center;
-  gap: 4px;
-  color: var(--text-muted);
-}
-
-.theme-dark .expensica-card-trend {
+  gap: var(--expensica-gap-sm);
   color: var(--text-muted);
 }
 
@@ -422,19 +409,6 @@
 
 .expensica-trend-down {
   color: var(--text-error);
-}
-
-.expensica-card-bg-icon {
-  position: absolute;
-  right: -5px;
-  bottom: -5px;
-  font-size: 50px;
-  opacity: 0.04;
-  transform: rotate(-5deg);
-}
-
-.theme-dark .expensica-card-bg-icon {
-  opacity: 0.03;
 }
 
 .expensica-income {
@@ -458,42 +432,47 @@
 }
 
 .expensica-card-value.expensica-budget {
-  color: var(--text-accent);
+  color: var(--text-success);
 }
 
 .expensica-card-value.expensica-budget-remaining {
-  color: var(--expensica-success);
+  color: var(--text-accent);
 }
 
 /* Charts Section */
 .expensica-dashboard-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
-  gap: var(--expensica-panel-gap);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--expensica-gap-lg);
   margin-bottom: 0;
+  align-items: stretch;
+}
+
+.expensica-dashboard-grid.is-narrow {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .expensica-chart-container {
   background-color: var(--expensica-bg-primary);
   border-radius: var(--expensica-radius-lg);
-  padding: var(--expensica-chart-spacing);
+  padding: var(--expensica-gap-lg);
   border: 1px solid var(--expensica-border-primary);
-  box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px,
-              rgba(15, 15, 15, 0.05) 0px 2px 4px;
-  transition: box-shadow 0.15s ease, transform 0.15s ease;
+  box-shadow: var(--expensica-shadow-panel-rest);
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow 0.15s ease;
 }
 
 .expensica-chart-container:hover {
-  transform: translateY(-2px);
-  box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px,
-              rgba(15, 15, 15, 0.08) 0px 4px 6px;
+  transform: none;
+  box-shadow: var(--expensica-shadow-panel-hover);
 }
 
 .expensica-chart-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--expensica-title-gap);
+  margin-bottom: var(--expensica-gap-md);
 }
 
 .expensica-chart-title {
@@ -509,7 +488,7 @@
 
 .expensica-chart-options {
   display: flex;
-  gap: var(--expensica-control-gap);
+  gap: var(--expensica-gap-md);
 }
 
 .expensica-chart-option {
@@ -533,25 +512,103 @@
   font-weight: 500;
 }
 
+.expensica-chart-type-selector {
+  position: relative;
+}
+
+.expensica-chart-type-current {
+  appearance: none;
+}
+
+.expensica-chart-type-text {
+  display: inline-block;
+}
+
+.expensica-chart-type-icon {
+  display: inline-flex;
+}
+
+.expensica-chart-type-options {
+  left: 0;
+  right: auto;
+  background: var(--background-primary);
+  background-color: var(--background-primary);
+}
+
+.expensica-chart-type-option {
+  display: block;
+  width: 100%;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-normal);
+  text-align: left;
+}
+
+.expensica-chart-type-options button.expensica-chart-type-option,
+.expensica-chart-type-options button.shadcn-date-range-option {
+  box-shadow: none;
+  border: none;
+  background: transparent;
+  background-color: transparent;
+  color: var(--text-normal);
+}
+
+.expensica-chart-type-option:hover,
+.expensica-chart-type-option:focus-visible,
+.expensica-chart-type-option.is-active {
+  background: var(--background-modifier-hover);
+  background-color: var(--background-modifier-hover);
+  outline: none;
+}
+
+.expensica-chart-type-options button.expensica-chart-type-option:hover,
+.expensica-chart-type-options button.expensica-chart-type-option:focus-visible,
+.expensica-chart-type-options button.expensica-chart-type-option.is-active,
+.expensica-chart-type-options button.shadcn-date-range-option:hover,
+.expensica-chart-type-options button.shadcn-date-range-option:focus-visible,
+.expensica-chart-type-options button.shadcn-date-range-option.shadcn-date-range-option-active {
+  background: var(--background-modifier-hover);
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.expensica-chart-type-option.is-active {
+  font-weight: 600;
+}
+
 .expensica-canvas-container {
   aspect-ratio: var(--expensica-chart-aspect-ratio);
+  flex: 0 1 auto;
+  width: 100%;
   height: auto;
   max-height: var(--expensica-chart-height);
-  min-height: calc(var(--expensica-panel-min-height, 180px) + var(--expensica-chart-axis-buffer));
-  padding-bottom: var(--expensica-chart-axis-buffer);
+  min-height: min(calc(var(--expensica-panel-min-height, 180px) + var(--expensica-chart-axis-buffer)), var(--expensica-chart-height));
   position: relative;
   overflow: hidden;
 }
 
 .expensica-canvas-container canvas {
+  display: block;
   width: 100%;
-  height: calc(100% - var(--expensica-chart-axis-buffer));
+  height: 100%;
   min-width: var(--expensica-panel-min-width, 75%);
   min-height: var(--expensica-panel-min-height, 75%);
 }
 
 .expensica-income-expense-chart-container .expensica-canvas-container {
+  aspect-ratio: var(--expensica-chart-aspect-ratio);
+  flex: 0 1 auto;
   height: auto;
+  max-height: var(--expensica-chart-height);
+  min-height: calc(var(--expensica-chart-height) * 0.75);
+}
+
+.expensica-chart-grid-same-row .expensica-income-expense-chart-container .expensica-canvas-container {
+  aspect-ratio: auto;
+  flex: 1 1 auto;
+  max-height: none;
+  min-height: calc(var(--expensica-chart-height) * 0.75);
 }
 
 .expensica-empty-charts {
@@ -579,22 +636,56 @@
 .expensica-category-chart-layout {
   display: flex;
   align-items: center;
+  flex-direction: column;
   flex-wrap: nowrap;
-  gap: var(--expensica-panel-gap);
+  gap: var(--expensica-gap-sm);
 }
 
 .expensica-category-chart-layout .expensica-canvas-container {
   aspect-ratio: var(--expensica-doughnut-chart-aspect-ratio);
-  flex: 1 1 260px;
+  flex: 0 1 auto;
   height: auto;
   max-height: var(--expensica-doughnut-chart-height);
   min-height: calc(var(--expensica-doughnut-chart-height) * 0.75);
   padding-bottom: 0;
   min-width: 0;
+  width: 100%;
 }
 
 .expensica-category-chart-layout .expensica-canvas-container canvas {
   height: 100%;
+}
+
+.expensica-mini-donut-canvas-container {
+  --expensica-mini-donut-min-size: 128px;
+  --expensica-mini-donut-max-size: 160px;
+  --expensica-mini-donut-size: var(--expensica-mini-donut-max-size);
+
+  align-items: center;
+  align-self: center;
+  box-sizing: border-box;
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: center;
+  margin: 0;
+  min-height: var(--expensica-mini-donut-min-size);
+  min-width: var(--expensica-mini-donut-min-size);
+  overflow: visible;
+  padding: 0;
+  position: relative;
+  width: min(100%, var(--expensica-mini-donut-size));
+}
+
+.expensica-mini-donut-canvas-container .mini-donut__content {
+  display: block;
+  flex: 0 0 auto;
+  aspect-ratio: 1 / 1;
+  height: var(--expensica-mini-donut-size);
+  max-height: var(--expensica-mini-donut-max-size);
+  max-width: var(--expensica-mini-donut-max-size);
+  min-height: var(--expensica-mini-donut-min-size);
+  min-width: var(--expensica-mini-donut-min-size);
+  width: var(--expensica-mini-donut-size);
 }
 
 .expensica-category-chart-layout.is-narrow .expensica-canvas-container {
@@ -602,12 +693,94 @@
   max-height: var(--expensica-doughnut-chart-height);
 }
 
+.expensica-category-chart-layout.is-narrow .expensica-mini-donut-canvas-container {
+  --expensica-mini-donut-size: var(--expensica-mini-donut-min-size);
+}
+
 .expensica-chart-html-legend {
   display: flex;
   flex: 0 0 130px;
   flex-direction: column;
   align-items: stretch;
-  gap: var(--expensica-list-gap);
+  gap: var(--expensica-gap-sm);
+  max-width: 130px;
+}
+
+.expensica-category-chip {
+  --expensica-category-chip-base-color: var(--expensica-category-chip-color, var(--interactive-accent));
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--expensica-gap-md);
+  min-width: 0;
+  max-width: 100%;
+  min-height: 0;
+  height: auto;
+  padding: var(--expensica-category-chip-padding-y) var(--expensica-category-chip-padding-x);
+  border: 1px solid color-mix(in srgb, var(--expensica-category-chip-base-color) var(--expensica-category-chip-border-alpha), transparent);
+  border-radius: var(--expensica-category-chip-radius);
+  background: color-mix(in srgb, var(--expensica-category-chip-base-color) var(--expensica-category-chip-bg-alpha), transparent);
+  color: color-mix(in srgb, var(--expensica-category-chip-base-color) var(--expensica-category-chip-text-alpha), var(--text-normal));
+  font-size: var(--expensica-category-chip-font-size);
+  line-height: var(--expensica-line-height-tight);
+  text-align: left;
+  transition: var(--expensica-transition);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.expensica-category-chip-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.expensica-category-chip-swatch {
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+button.expensica-category-chip {
+  appearance: none;
+  border: 1px solid color-mix(in srgb, var(--expensica-category-chip-base-color) var(--expensica-category-chip-border-alpha), transparent);
+  background: color-mix(in srgb, var(--expensica-category-chip-base-color) var(--expensica-category-chip-bg-alpha), transparent);
+  box-shadow: none;
+  color: color-mix(in srgb, var(--expensica-category-chip-base-color) var(--expensica-category-chip-text-alpha), var(--text-normal));
+  cursor: pointer;
+  font-family: inherit;
+  margin: 0;
+  outline: none;
+}
+
+.expensica-category-chip:hover {
+  --expensica-category-chip-hover-color: var(--expensica-category-chip-hover-border-color, var(--expensica-category-chip-base-color));
+  border-color: color-mix(in srgb, var(--expensica-category-chip-hover-color) var(--expensica-category-chip-border-alpha), transparent);
+  background: color-mix(in srgb, var(--expensica-category-chip-hover-color) var(--expensica-category-chip-bg-alpha), transparent);
+  color: color-mix(in srgb, var(--expensica-category-chip-hover-color) var(--expensica-category-chip-text-alpha), var(--text-normal));
+}
+
+.expensica-category-chip:focus,
+.expensica-category-chip:focus-visible,
+.expensica-category-chip:active {
+  background: color-mix(in srgb, var(--expensica-category-chip-base-color) var(--expensica-category-chip-bg-alpha), transparent);
+  color: color-mix(in srgb, var(--expensica-category-chip-base-color) var(--expensica-category-chip-text-alpha), var(--text-normal));
+  outline: none;
+}
+
+.expensica-category-chip.is-hidden {
+  opacity: 0.45;
+}
+
+.expensica-chart-html-legend {
+  display: flex;
+  flex: 0 0 130px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--expensica-gap-sm);
   max-width: 130px;
 }
 
@@ -629,7 +802,7 @@
   line-height: 1.1;
   display: inline-flex;
   align-items: center;
-  gap: var(--expensica-control-gap);
+  gap: var(--expensica-gap-md);
   min-width: 0;
   width: 100%;
   max-width: 100%;
@@ -686,45 +859,43 @@
 }
 
 .expensica-category-chart-layout.is-narrow {
-  flex-direction: column;
-  align-items: stretch;
+  align-items: center;
 }
 
-.expensica-category-chart-layout.is-narrow .expensica-chart-html-legend {
+.expensica-category-chip-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 130px));
+  flex: none;
+  grid-template-columns: repeat(var(--expensica-category-chip-columns, 3), minmax(0, 130px));
   justify-content: center;
-  column-gap: var(--expensica-control-gap);
-  margin-top: var(--expensica-title-gap);
+  justify-items: stretch;
+  column-gap: var(--expensica-gap-md);
+  row-gap: var(--expensica-gap-sm);
+  margin-top: var(--expensica-gap-md);
+  width: 100%;
   max-width: 100%;
 }
 
-.expensica-category-chart-layout.is-narrow .expensica-chart-legend-column {
-  display: flex;
-  flex-direction: column;
-  gap: var(--expensica-list-gap);
-}
-
-.expensica-category-chart-layout.is-narrow .expensica-chart-legend-item {
+.expensica-category-chip-grid .expensica-category-chip {
   width: 100%;
   min-width: 0;
-  max-width: 130px;
 }
 
 .expensica-income-expense-legend {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 130px));
+  grid-template-columns: repeat(3, minmax(0, 130px));
   justify-content: center;
-  column-gap: var(--expensica-control-gap);
-  margin-top: var(--expensica-title-gap);
+  justify-items: stretch;
+  column-gap: var(--expensica-gap-md);
+  margin-top: var(--expensica-gap-md);
   max-width: 100%;
+  width: 100%;
   flex: none;
 }
 
 .expensica-income-expense-legend .expensica-chart-legend-column {
   display: flex;
   flex-direction: column;
-  gap: var(--expensica-list-gap);
+  gap: var(--expensica-gap-sm);
 }
 
 .expensica-income-expense-legend .expensica-chart-legend-item {
@@ -733,26 +904,135 @@
   max-width: 130px;
 }
 
+.expensica-income-expense-legend .expensica-category-chip {
+  width: 100%;
+  min-width: 0;
+  max-width: 130px;
+  border-color: var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+}
+
+.expensica-income-expense-legend .expensica-category-chip:hover,
+.expensica-income-expense-legend .expensica-category-chip:focus,
+.expensica-income-expense-legend .expensica-category-chip:focus-visible,
+.expensica-income-expense-legend .expensica-category-chip:active {
+  border-color: var(--background-modifier-border-hover, var(--background-modifier-border));
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.expensica-income-expense-legend .expensica-category-chip.is-hidden {
+  border-color: var(--background-modifier-border);
+  background: var(--background-modifier-border);
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+.expensica-income-expense-legend .expensica-category-chip.is-hidden .expensica-category-chip-swatch {
+  background-color: var(--text-muted) !important;
+  opacity: 0.6;
+}
+
+.expensica-donut-category-legend .expensica-category-chip {
+  width: 100%;
+  min-width: 0;
+  max-width: 130px;
+  border-color: var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+}
+
+.expensica-donut-category-legend .expensica-category-chip:hover,
+.expensica-donut-category-legend .expensica-category-chip:focus,
+.expensica-donut-category-legend .expensica-category-chip:focus-visible,
+.expensica-donut-category-legend .expensica-category-chip:active {
+  border-color: var(--background-modifier-border-hover, var(--background-modifier-border));
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.expensica-donut-category-legend .expensica-category-chip.is-hidden {
+  border-color: var(--background-modifier-border);
+  background: var(--background-modifier-border);
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+.expensica-donut-category-legend .expensica-category-chip.is-hidden .expensica-category-chip-swatch {
+  background-color: var(--text-muted) !important;
+  opacity: 0.6;
+}
+
+.expensica-donut-legend-emoji {
+  flex: 0 0 auto;
+}
+
 /* Transactions Section */
 .expensica-transactions {
     background-color: var(--expensica-bg-primary);
     border-radius: var(--expensica-radius-lg);
     display: flex;
     flex-direction: column;
-    gap: var(--expensica-list-gap);
+    gap: var(--expensica-gap-sm);
     overflow: hidden;
 }
 
-.expensica-transaction {
-    background-color: var(--expensica-bg-primary);
-    padding: var(--expensica-spacing);
+.expensica-transaction-group-title {
+    margin: 0;
+    padding-inline: var(--expensica-gap-lg);
+    line-height: var(--expensica-line-height-tight);
+    letter-spacing: 0;
+}
+
+.expensica-transaction-group-title-month {
+    margin-top: var(--expensica-gap-xl);
+    padding-top: var(--expensica-gap-md);
+    color: var(--text-muted);
+    font-size: var(--expensica-font-size-xl);
+    font-weight: 650;
+}
+
+.expensica-transaction-group-title-day {
     display: flex;
     align-items: center;
-    gap: var(--expensica-card-gap);
+    gap: var(--expensica-gap-sm);
+    margin-top: var(--expensica-gap-md);
+    color: var(--text-muted);
+    font-size: var(--expensica-font-size-sm);
+    font-weight: 500;
+}
+
+.expensica-transaction-group-title-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: inherit;
+}
+
+.expensica-transaction-group-title-icon svg {
+    width: 12px;
+    height: 12px;
+}
+
+.expensica-transactions > .expensica-transaction-group-title:first-child {
+    margin-top: 0;
+}
+
+.expensica-transaction {
+    --expensica-transaction-icon-size: 18px;
+    --expensica-transaction-amount-column-width: 64px;
+    background-color: var(--expensica-bg-primary);
+    padding-block: var(--expensica-gap-md);
+    padding-inline: var(--expensica-gap-md);
+    display: grid;
+    grid-template-columns: var(--expensica-transaction-icon-size) minmax(0, 1fr) minmax(var(--expensica-transaction-amount-column-width), max-content);
+    align-items: center;
+    gap: var(--expensica-gap-md);
+    container-type: inline-size;
     border: 1px solid var(--expensica-border-secondary);
     border-radius: var(--expensica-radius);
-    box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px,
-                rgba(15, 15, 15, 0.05) 0px 2px 4px;
+    box-shadow: var(--expensica-shadow-panel-rest);
     transition: box-shadow 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
 }
 
@@ -760,77 +1040,371 @@
   border-bottom: 1px solid var(--expensica-border-secondary);
 }
 
-.expensica-transaction:hover {
-  background-color: var(--expensica-bg-secondary);
-  box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px,
-              rgba(15, 15, 15, 0.08) 0px 4px 6px;
+.expensica-transaction.is-selected {
+  border-color: var(--interactive-accent);
+  background-color: var(--background-modifier-hover);
 }
 
-.expensica-transaction-icon {
-  margin-right: 0;
-  display: flex;
+.expensica-transaction:hover {
+  background-color: var(--expensica-bg-secondary);
+  box-shadow: var(--expensica-shadow-panel-hover);
+}
+
+.expensica-transaction-interactive {
+  cursor: pointer;
+}
+
+.expensica-transaction-interactive:hover,
+.expensica-transaction-interactive:focus-visible {
+  background-color: var(--background-modifier-hover);
+  box-shadow: var(--expensica-shadow);
+  border-color: var(--background-modifier-border);
+}
+
+.expensica-transaction-interactive:focus-visible {
+  outline: var(--size-2-1, 2px) solid var(--interactive-accent);
+  outline-offset: var(--size-2-1, 2px);
+}
+
+.expensica-transaction-selector {
+  grid-column: 1;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: var(--expensica-radius);
-  background-color: var(--expensica-bg-secondary);
-  font-size: var(--expensica-font-size-xl);
+  width: var(--expensica-transaction-icon-size);
+  height: var(--expensica-transaction-icon-size);
+  min-width: var(--expensica-transaction-icon-size);
+  min-height: var(--expensica-transaction-icon-size);
+  padding: 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--expensica-radius-sm);
+  background: transparent;
+  color: var(--text-faint);
+  font-size: var(--expensica-font-size-sm);
+  line-height: 1;
+  box-shadow: none;
+  cursor: pointer;
   transition: var(--expensica-transition);
 }
 
-.expensica-transaction:hover .expensica-transaction-icon {
-  transform: scale(1.05);
+.expensica-transaction-selector svg {
+  opacity: 0;
 }
 
-.expensica-income-icon {
-  background-color: var(--expensica-success-light);
+.expensica-transaction-selector:hover,
+.expensica-transaction-selector:focus-visible {
+  border-color: var(--background-modifier-border-hover);
+  color: var(--text-accent);
+  background: var(--background-modifier-hover);
+  outline: none;
+  transform: none;
 }
 
-.expensica-expense-icon {
-  background-color: var(--expensica-error-light);
+.expensica-transaction-selector.is-selected {
+  border-color: var(--interactive-accent);
+  background: var(--background-modifier-hover);
+  color: var(--text-accent);
+}
+
+.expensica-transaction-selector.is-selected svg {
+  opacity: 1;
+}
+
+.expensica-transaction-selector.is-disabled {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .expensica-transaction-details {
-  flex: 1;
+  grid-column: 2;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .expensica-transaction-title {
+  display: block;
   font-weight: 500;
   margin: 0 0 4px 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 14px;
   color: var(--expensica-text-primary);
 }
 
 .expensica-transaction-meta {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, max(0px, calc(50cqw - var(--expensica-gap-sm)))) minmax(0, max-content);
   align-items: center;
-  flex-wrap: wrap;
-  gap: var(--expensica-meta-gap);
+  column-gap: var(--expensica-gap-sm);
+  row-gap: var(--expensica-gap-sm);
+  width: 100%;
 }
 
-.expensica-transaction-date {
-  font-size: var(--expensica-font-size-sm);
-  color: var(--expensica-text-secondary);
-}
-
-.expensica-transaction-category {
+.expensica-transaction-bulk-footer {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--expensica-gap-lg) + var(--expensica-mobile-footer-safe-space) + env(safe-area-inset-bottom));
+  z-index: calc(var(--expensica-z-modal) + 1);
   display: inline-flex;
   align-items: center;
-  font-size: var(--expensica-font-size-xs);
-  padding: var(--expensica-spacing-xs) var(--expensica-spacing);
+  justify-content: flex-end;
+  gap: var(--expensica-gap-md);
+  width: fit-content;
+  max-width: calc(100vw - (var(--expensica-gap-lg) * 2));
+  padding: var(--expensica-gap-md);
+  border: 1px solid var(--background-modifier-border);
   border-radius: var(--expensica-radius);
-  background-color: var(--expensica-bg-tertiary);
-  color: var(--expensica-text-secondary);
+  background: transparent;
+  box-shadow: var(--shadow-s);
+  overflow: hidden;
+  transform: translate(-50%, 100%);
+}
+
+.expensica-transaction-bulk-footer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background: rgba(28, 28, 32, 0.72);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  backdrop-filter: blur(24px) saturate(140%);
+  pointer-events: none;
+}
+
+.expensica-transaction-bulk-footer > * {
+  position: relative;
+  z-index: 1;
+}
+
+.expensica-transaction-bulk-category-btn,
+.expensica-transaction-bulk-clear {
+  background: var(--background-secondary);
+  background-color: var(--background-secondary);
+}
+
+.expensica-transaction-bulk-count {
+  margin-right: auto;
+  color: var(--text-muted);
+  font-size: var(--expensica-font-size-sm);
+  white-space: nowrap;
+}
+
+.expensica-transaction-bulk-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--expensica-radius-sm);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  box-shadow: var(--expensica-shadow-control);
+  cursor: pointer;
   transition: var(--expensica-transition);
 }
 
-.expensica-transaction:hover .expensica-transaction-category {
-  background-color: var(--expensica-primary-light);
-  color: var(--expensica-primary);
+.expensica-transaction-bulk-clear:hover,
+.expensica-transaction-bulk-clear:focus-visible {
+  border-color: var(--background-modifier-border-hover);
+  background: var(--background-modifier-hover);
+  outline: none;
+}
+
+.expensica-transaction-bulk-category-btn:hover,
+.expensica-transaction-bulk-category-btn:focus-visible {
+  background: var(--background-modifier-hover);
+  background-color: var(--background-modifier-hover);
+}
+
+.is-mobile .expensica-transaction-bulk-footer {
+  bottom: calc(var(--expensica-gap-md) + var(--expensica-mobile-footer-safe-space) + 32px + env(safe-area-inset-bottom));
+}
+
+.expensica-transaction-date {
+  grid-column: 1;
+  justify-self: start;
+  font-size: var(--expensica-font-size-sm);
+  color: var(--text-faint);
+}
+
+.expensica-transaction-category {
+  grid-column: 2;
+  justify-self: start;
+}
+
+.expensica-category-quick-menu {
+  position: fixed;
+  min-width: 200px;
+  max-width: 230px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--expensica-radius-sm);
+  background: var(--background-primary);
+  background-color: var(--background-primary);
+  box-shadow: var(--expensica-shadow-dropdown);
+  z-index: calc(var(--expensica-z-modal) + 2);
+  overflow: hidden;
+}
+
+.expensica-category-quick-menu-section + .expensica-category-quick-menu-section {
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.expensica-category-quick-menu-search {
+  padding: var(--expensica-gap-sm);
+  background-color: var(--background-primary);
+}
+
+.expensica-category-quick-menu-search-input,
+.expensica-category-quick-menu .expensica-category-quick-menu-search-input.expensica-form-input {
+  width: 100%;
+  background-color: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--expensica-radius-sm);
+  box-shadow: none;
+  color: var(--text-normal);
+  font-size: var(--expensica-font-size);
+  line-height: var(--expensica-line-height-tight);
+  outline: none;
+  transition: var(--expensica-transition);
+}
+
+.expensica-category-quick-menu-search-input:hover,
+.expensica-category-quick-menu .expensica-category-quick-menu-search-input.expensica-form-input:hover {
+  border-color: var(--interactive-accent);
+  background-color: var(--background-primary-alt);
+  box-shadow: none;
+}
+
+.expensica-category-quick-menu-search-input:focus,
+.expensica-category-quick-menu-search-input:focus-visible,
+.expensica-category-quick-menu .expensica-category-quick-menu-search-input.expensica-form-input:focus,
+.expensica-category-quick-menu .expensica-category-quick-menu-search-input.expensica-form-input:focus-visible {
+  border-color: var(--interactive-accent);
+  background-color: var(--background-primary);
+  box-shadow: var(--expensica-shadow-focus);
+  outline: none;
+}
+
+.expensica-category-quick-menu-list {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.expensica-category-quick-menu button.expensica-category-quick-menu-item {
+  all: unset;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--expensica-gap-md);
+  min-height: var(--expensica-gap-2xl);
+  width: 100%;
+  padding: var(--expensica-gap-md);
+  border: 0;
+  border-radius: 0;
+  background: var(--background-primary) !important;
+  background-color: var(--background-primary) !important;
+  background-image: none !important;
+  color: var(--text-normal);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  filter: none !important;
+  font-size: var(--expensica-font-size);
+  font-weight: 400;
+  transition: background-color 0.1s;
+}
+
+.expensica-category-quick-menu button.expensica-category-quick-menu-item:hover,
+.expensica-category-quick-menu button.expensica-category-quick-menu-item:focus-visible {
+  background: var(--background-modifier-hover) !important;
+  background-color: var(--background-modifier-hover) !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  outline: none;
+}
+
+.expensica-category-quick-menu button.expensica-category-quick-menu-item.is-selected {
+  font-weight: 600;
+  background: var(--background-modifier-hover) !important;
+  background-color: var(--background-modifier-hover) !important;
+}
+
+.expensica-category-quick-menu-item-emoji {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--expensica-font-size);
+}
+
+.expensica-category-quick-menu-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.expensica-category-quick-menu-empty {
+  padding: var(--expensica-gap-md);
+  color: var(--text-muted);
+}
+
+.expensica-category-quick-menu button.expensica-category-quick-menu-new-button {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--expensica-gap-md);
+  width: 100%;
+  min-height: var(--expensica-gap-xl);
+  padding: var(--expensica-gap-md);
+  border: 0;
+  border-radius: 0;
+  background: var(--background-primary) !important;
+  background-color: var(--background-primary) !important;
+  background-image: none !important;
+  color: var(--text-normal);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  filter: none !important;
+  font-size: var(--expensica-font-size);
+  font-weight: 400;
+  transition: background-color 0.1s;
+}
+
+.expensica-category-quick-menu button.expensica-category-quick-menu-new-button:hover,
+.expensica-category-quick-menu button.expensica-category-quick-menu-new-button:focus-visible {
+  background: var(--background-modifier-hover) !important;
+  background-color: var(--background-modifier-hover) !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  outline: none;
+}
+
+.expensica-category-quick-menu-new-icon {
+  display: inline-flex;
+  align-items: left;
+  justify-content: left;
+  color: var(--text-faint);
+}
+
+.expensica-category-quick-menu-new-label {
+  color: var(--text-normal);
 }
 
 .expensica-transaction-amount {
+  grid-column: 3;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -842,59 +1416,11 @@
 }
 
 .expensica-transaction-balance {
-  color: var(--expensica-text-secondary);
+  color: var(--text-faint);
   font-size: 11px;
   font-style: italic;
   font-weight: 500;
   white-space: nowrap;
-}
-
-.expensica-transaction:hover .expensica-transaction-amount {
-  transform: scale(1.05);
-}
-
-/* Action Buttons */
-.expensica-transaction-actions {
-  display: flex;
-  gap: var(--expensica-control-gap);
-  opacity: 0;
-  transition: var(--expensica-transition);
-  margin-left: var(--expensica-control-gap);
-}
-
-.expensica-transaction:hover .expensica-transaction-actions {
-  opacity: 1;
-}
-
-.expensica-action-btn {
-  background-color: var(--expensica-bg-tertiary);
-  border: none;
-  cursor: pointer;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--expensica-radius);
-  color: var(--expensica-text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: var(--expensica-transition);
-}
-
-.expensica-action-btn:hover {
-  background-color: var(--expensica-bg-tertiary);
-  color: var(--expensica-text-primary);
-  transform: translateY(-2px);
-  box-shadow: var(--expensica-shadow-sm);
-}
-
-.expensica-delete-btn:hover {
-  color: var(--expensica-error);
-  background-color: var(--expensica-error-light);
-}
-
-.expensica-edit-btn:hover {
-  color: var(--expensica-primary);
-  background-color: var(--expensica-primary-light);
 }
 
 /* Empty state */
@@ -917,10 +1443,32 @@
 /* Modal styles */
 
 .expensica-modal {
+  box-sizing: border-box;
   padding: 24px;
   max-width: 480px;
   border-radius: var(--expensica-radius-lg);
   background-color: var(--background-primary);
+}
+
+.expensica-transaction-modal {
+  box-sizing: border-box;
+  padding: 0;
+  width: min(480px, calc(100vw - var(--size-4-8, 32px)));
+}
+
+.expensica-transaction-modal .modal-content.expensica-modal {
+  max-width: none;
+  width: 100%;
+}
+
+.expensica-modal *,
+.expensica-modal *::before,
+.expensica-modal *::after {
+  box-sizing: border-box;
+}
+
+.expensica-modal .expensica-form {
+  width: 100%;
 }
 
 .expensica-modal-title {
@@ -953,12 +1501,13 @@
 .expensica-import-input,
 .emoji-input {
   width: 100%;
-  padding: 10px 12px;
-  border-radius: 8px;
+  min-height: var(--size-4-8, 32px);
+  padding: var(--size-2-2, 4px) var(--size-4-2, 8px);
+  border-radius: var(--expensica-radius-sm);
   border: 1px solid var(--background-modifier-border);
   background-color: var(--background-primary);
   color: var(--text-normal);
-  font-size: 14px;
+  font-size: var(--expensica-font-size-sm);
   transition: var(--expensica-transition);
 }
 
@@ -971,9 +1520,9 @@
   appearance: none;
   background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C%2Fpolyline%3E%3C%2Fsvg%3E");
   background-repeat: no-repeat;
-  background-position: right 8px center;
-  background-size: 16px;
-  padding-right: 30px;
+  background-position: right var(--size-4-2, 8px) center;
+  background-size: var(--icon-size, var(--size-4-4, 16px));
+  padding-right: calc(var(--size-4-2, 8px) + var(--icon-size, var(--size-4-4, 16px)) + var(--size-2-2, 4px));
   border: 1px solid var(--background-modifier-border);
   cursor: pointer;
 }
@@ -1007,24 +1556,103 @@
 
 .expensica-select-display {
   width: 100%;
-  padding: 12px 16px;
-  border-radius: 8px;
+  padding: var(--size-2-2, 4px) var(--size-4-2, 8px);
+  min-height: var(--size-4-8, 32px);
+  border-radius: var(--expensica-radius-sm);
   border: 1px solid var(--background-modifier-border);
   background-color: var(--background-primary);
   color: var(--text-normal);
   font-weight: 500;
-  font-size: 15px;
+  font-size: var(--expensica-font-size-sm);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: space-between;
   transition: var(--expensica-transition);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  box-shadow: var(--expensica-shadow-control);
 }
 
 .expensica-select-display:hover {
   border-color: var(--interactive-accent);
   background-color: var(--background-primary-alt);
+}
+
+.expensica-modal .expensica-edit-field {
+  width: 100%;
+  box-sizing: border-box;
+  height: var(--size-4-8, 32px);
+  min-height: var(--size-4-8, 32px);
+  padding: var(--size-2-2, 4px) var(--size-4-2, 8px);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--expensica-radius-sm);
+  background-color: var(--background-primary);
+  box-shadow: none;
+  color: var(--text-normal);
+  font-size: var(--expensica-font-size-sm);
+  line-height: var(--expensica-line-height-tight);
+  outline: none;
+  transition: var(--expensica-transition);
+}
+
+.expensica-modal .expensica-edit-field:hover {
+  border-color: var(--interactive-accent);
+  background-color: var(--background-primary-alt);
+  box-shadow: none;
+  transform: none;
+}
+
+.expensica-modal .expensica-category-name-field:hover {
+  border-color: var(--background-modifier-border);
+  background-color: var(--background-primary);
+}
+
+.expensica-modal .expensica-edit-field:focus,
+.expensica-modal .expensica-edit-field:focus-within {
+  border-color: var(--interactive-accent);
+  background-color: var(--background-primary);
+  box-shadow: var(--expensica-shadow-focus);
+  outline: none;
+}
+
+.expensica-modal textarea.expensica-edit-field {
+  height: var(--size-4-16, 64px);
+  min-height: var(--size-4-16, 64px);
+}
+
+.expensica-modal .expensica-select-display,
+.expensica-modal .expensica-select-option {
+  align-items: center;
+  gap: var(--expensica-gap-md);
+}
+
+.expensica-modal .expensica-category-emoji {
+  width: calc(var(--size-4-8, 32px) - (var(--size-2-2, 4px) * 2));
+  height: calc(var(--size-4-8, 32px) - (var(--size-2-2, 4px) * 2));
+  margin-right: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 calc(var(--size-4-8, 32px) - (var(--size-2-2, 4px) * 2));
+  font-size: var(--expensica-font-size-sm);
+}
+
+.expensica-modal .expensica-time-field {
+  position: relative;
+  padding-left: calc(var(--size-4-2, 8px) + var(--icon-size, var(--size-4-4, 16px)) + var(--size-2-2, 4px));
+}
+
+.expensica-modal .expensica-time-field::-webkit-calendar-picker-indicator {
+  position: absolute;
+  left: var(--size-4-2, 8px);
+  top: 50%;
+  right: auto;
+  width: var(--icon-size, var(--size-4-4, 16px));
+  height: var(--icon-size, var(--size-4-4, 16px));
+  margin: 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  transform: translateY(-50%);
 }
 
 .expensica-select-display-text {
@@ -1050,12 +1678,12 @@
   left: 0;
   right: 0;
   z-index: 10;
-  margin-top: 4px;
-  border-radius: 8px;
+  margin-top: var(--expensica-gap-sm);
+  border-radius: var(--expensica-radius-sm);
   border: 1px solid var(--background-modifier-border);
   background-color: var(--background-primary);
   box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-  max-height: 200px;
+  max-height: calc(var(--size-4-8, 32px) * 6);
   overflow-y: auto;
 }
 
@@ -1064,12 +1692,14 @@
 }
 
 .expensica-select-option {
-  padding: 12px 16px;
+  min-height: var(--size-4-8, 32px);
+  padding: var(--size-2-2, 4px) var(--size-4-2, 8px);
   cursor: pointer;
   transition: background-color 0.15s ease;
   display: flex;
   align-items: center;
-  font-size: 14px;
+  font-size: var(--expensica-font-size-sm);
+  line-height: var(--expensica-line-height-tight);
 }
 
 .expensica-select-option:hover {
@@ -1086,8 +1716,8 @@
 }
 
 .expensica-category-emoji {
-  margin-right: 8px;
-  font-size: 16px;
+  margin-right: var(--expensica-gap-md);
+  font-size: var(--expensica-font-size-md);
   display: inline-block;
 }
 
@@ -1106,7 +1736,7 @@
 .expensica-import-input:focus,
 .emoji-input:focus {
   border-color: var(--interactive-accent);
-  box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.2);
+  box-shadow: var(--expensica-shadow-focus);
   outline: none;
 }
 
@@ -1117,8 +1747,17 @@
 }
 
 .expensica-form-textarea {
-  min-height: 80px;
+  min-height: var(--size-4-16, 64px);
   resize: vertical;
+}
+
+.expensica-form-row {
+  display: flex;
+  gap: var(--expensica-gap-md);
+}
+
+.expensica-form-row .expensica-form-group {
+  flex: 1 1 0;
 }
 
 .expensica-form-footer,
@@ -1471,13 +2110,13 @@ to { opacity: 1; transform: translateY(0); }
 
 @media screen and (max-width: 768px) {
   .expensica-dashboard {
-    padding: var(--expensica-spacing);
+    padding: var(--expensica-gap-lg);
   }
   
   .expensica-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: var(--expensica-spacing);
+    gap: var(--expensica-gap-lg);
   }
   
   .expensica-actions {
@@ -1489,24 +2128,28 @@ to { opacity: 1; transform: translateY(0); }
     margin-right: 0;
   }
   
-  .expensica-dashboard-grid {
-    grid-template-columns: 1fr;
-  }
-  
   .expensica-transaction {
-    flex-wrap: wrap;
+    --expensica-transaction-icon-size: 18px;
+    --expensica-transaction-amount-column-width: 88px;
+    display: grid;
+    grid-template-columns: var(--expensica-transaction-icon-size) minmax(0, 1fr) minmax(var(--expensica-transaction-amount-column-width), max-content);
+    padding-left: var(--expensica-transaction-mobile-inline-padding);
+    padding-right: var(--expensica-transaction-mobile-inline-padding);
+  }
+
+  .expensica-transaction-meta {
+    display: grid;
+  }
+
+  .expensica-transaction-date,
+  .expensica-transaction-category {
+    grid-column: initial;
   }
   
   .expensica-transaction-amount {
     margin-left: auto;
   }
   
-  .expensica-transaction-actions {
-    width: 100%;
-    justify-content: flex-end;
-    margin-top: var(--expensica-spacing);
-    opacity: 1;
-  }
 }
 
 /* Calendar Heatmap Styles */
@@ -1514,14 +2157,14 @@ to { opacity: 1; transform: translateY(0); }
 .expensica-calendar-container {
   background-color: var(--expensica-bg-primary);
   border-radius: var(--expensica-radius-lg);
-  padding: var(--expensica-calendar-panel-spacing);
+  padding: var(--expensica-gap-lg);
   border: 1px solid var(--expensica-border-primary);
   margin-bottom: 0;
 }
 
 .expensica-calendar-flex-container {
   display: flex;
-  gap: var(--expensica-calendar-panel-gap);
+  gap: var(--expensica-gap-lg);
   align-items: flex-start;
   flex-wrap: wrap;
   margin-bottom: 0;
@@ -1540,67 +2183,12 @@ to { opacity: 1; transform: translateY(0); }
   margin-right: auto;
 }
 
-.expensica-calendar-flex-container.expensica-calendar-stacked > .expensica-calendar-details-container {
-  flex-basis: 100%;
-}
-
-.expensica-calendar-grid-container {
-  flex: 0 1 auto;
-  width: var(--expensica-panel-natural-width, auto);
-  min-width: min(100%, 280px);
-  max-width: 100%;
-  overflow: hidden;
-}
-
 .expensica-calendar-svg {
   display: block;
   width: 100%;
   min-width: var(--expensica-panel-min-width, 75%);
   max-width: 100%;
   height: auto;
-}
-
-.expensica-calendar-details-container {
-  flex: 1 1 300px;
-  min-width: min(100%, 300px);
-  max-width: 100%;
-  background-color: var(--background-primary);
-  border-radius: var(--expensica-radius);
-  padding: var(--expensica-calendar-panel-spacing);
-  border: 1px solid var(--expensica-border-primary);
-  max-height: 500px;
-  overflow-y: auto;
-  box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px,
-              rgba(15, 15, 15, 0.05) 0px 2px 4px;
-  transition: box-shadow 0.15s ease;
-}
-
-.expensica-calendar-details-container:hover {
-  box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px,
-              rgba(15, 15, 15, 0.08) 0px 4px 6px;
-}
-
-.expensica-calendar-tooltip {
-  display: none;
-}
-
-.expensica-calendar-tooltip .tooltip-title {
-  font-weight: 600;
-  margin-bottom: 6px;
-  font-size: 15px;
-}
-
-.expensica-calendar-tooltip .tooltip-value {
-  font-weight: bold;
-  color: var(--text-normal);
-  font-size: 18px;
-  margin-bottom: 6px;
-}
-
-.expensica-calendar-tooltip .tooltip-hint {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-top: 4px;
 }
 
 .expensica-calendar-tooltip .tooltip-comparison {
@@ -1621,24 +2209,8 @@ to { opacity: 1; transform: translateY(0); }
   color: var(--expensica-success);
 }
 
-.expensica-calendar-details-title {
-  margin: 0 0 16px 0;
-  font-size: 18px;
-  font-weight: 600;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--background-modifier-border);
-}
-
-.expensica-calendar-summary {
-  background-color: var(--background-secondary);
-  border-radius: 12px;
-  padding: 16px;
-  margin-bottom: 20px;
-}
-
 .expensica-calendar-details-total {
   font-size: 16px;
-  margin-bottom: 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1648,27 +2220,13 @@ to { opacity: 1; transform: translateY(0); }
   box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px, 
               rgba(15, 15, 15, 0.1) 0px 3px 6px, 
               rgba(15, 15, 15, 0.2) 0px 9px 24px;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.theme-dark .expensica-calendar-details-total {
-  background-color: var(--background-secondary, #2d3039);
-  box-shadow: rgba(0, 0, 0, 0.1) 0px 0px 0px 1px, 
-              rgba(0, 0, 0, 0.2) 0px 3px 6px, 
-              rgba(0, 0, 0, 0.3) 0px 9px 24px;
+  transition: box-shadow 0.2s ease;
 }
 
 .expensica-calendar-details-total:hover {
-  transform: translateY(-2px);
   box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px, 
               rgba(15, 15, 15, 0.1) 0px 5px 10px, 
               rgba(15, 15, 15, 0.2) 0px 15px 40px;
-}
-
-.theme-dark .expensica-calendar-details-total:hover {
-  box-shadow: rgba(0, 0, 0, 0.1) 0px 0px 0px 1px, 
-              rgba(0, 0, 0, 0.2) 0px 5px 10px, 
-              rgba(0, 0, 0, 0.3) 0px 15px 40px;
 }
 
 .expensica-calendar-details-amount {
@@ -1680,11 +2238,9 @@ to { opacity: 1; transform: translateY(0); }
   color: var(--expensica-error);
 }
 
-.expensica-calendar-insight {
-  font-size: 14px;
-  color: var(--text-muted);
-  margin-bottom: 8px;
-  line-height: 1.5;
+.expensica-calendar-details-amount.expensica-calendar-details-balance-amount {
+  background-color: color-mix(in srgb, var(--interactive-accent) 10%, transparent);
+  color: var(--text-accent);
 }
 
 .expensica-calendar-comparison {
@@ -1700,18 +2256,10 @@ to { opacity: 1; transform: translateY(0); }
   box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px, 
               rgba(15, 15, 15, 0.1) 0px 3px 6px, 
               rgba(15, 15, 15, 0.2) 0px 9px 24px;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.theme-dark .expensica-category-breakdown {
-  background-color: var(--background-secondary, #2d3039);
-  box-shadow: rgba(0, 0, 0, 0.1) 0px 0px 0px 1px, 
-              rgba(0, 0, 0, 0.2) 0px 3px 6px, 
-              rgba(0, 0, 0, 0.3) 0px 9px 24px;
+  transition: box-shadow 0.2s ease;
 }
 
 .expensica-category-breakdown:hover {
-  transform: translateY(-2px);
   box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px, 
               rgba(15, 15, 15, 0.1) 0px 5px 10px, 
               rgba(15, 15, 15, 0.2) 0px 15px 40px;
@@ -1825,7 +2373,7 @@ to { opacity: 1; transform: translateY(0); }
   margin-top: 16px;
 }
 
-.expensica-calendar-transaction-item {
+.expensica-calendar-transaction-item:not(.expensica-transaction) {
   display: flex;
   align-items: center;
   padding: 12px;
@@ -1852,7 +2400,7 @@ to {
 }
 }
 
-.expensica-calendar-transaction-item:hover {
+.expensica-calendar-transaction-item:not(.expensica-transaction):hover {
   background-color: var(--background-modifier-hover);
   transform: translateY(-2px) scale(1.01);
   box-shadow: var(--expensica-shadow);
@@ -1933,23 +2481,23 @@ to {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  margin-top: 30px;
-  padding: 30px 20px;
+  margin-top: 15px;
+  padding: 15px 20px;
   background-color: var(--background-secondary);
   border-radius: 12px;
   text-align: center;
 }
 
 .expensica-calendar-empty-icon {
-  font-size: 32px;
-  margin-bottom: 16px;
+  font-size: 18px;
+  margin-bottom: 8px;
 }
 
 .expensica-calendar-empty-message {
   color: var(--text-muted);
-  font-size: 15px;
-  line-height: 1.5;
-  margin: 0 0 10px 0;
+  font-size: var(--font-ui-small);
+  line-height: 1.3;
+  margin: 0;
 }
 
 /* Responsive adjustments for visualizations */
@@ -2215,26 +2763,26 @@ to {
 .expensica-calendar-container {
   background-color: var(--expensica-bg-primary);
   border-radius: var(--expensica-radius-lg);
-  padding: var(--expensica-calendar-panel-spacing);
+  padding: var(--expensica-gap-lg);
   border: 1px solid var(--expensica-border-primary);
-  margin-bottom: var(--expensica-spacing-2xl);
+  margin-bottom: var(--expensica-gap-3xl);
 }
 
 /* Calendar Grid */
 .expensica-calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: var(--expensica-spacing-sm);
-  margin-bottom: var(--expensica-spacing-lg);
+  gap: var(--expensica-gap-md);
+  margin-bottom: var(--expensica-gap-xl);
 }
 
 /* Calendar Header */
 .expensica-calendar-header {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: var(--expensica-spacing-sm);
-  margin-bottom: var(--expensica-spacing);
-  padding-bottom: var(--expensica-spacing);
+  gap: var(--expensica-gap-md);
+  margin-bottom: var(--expensica-gap-lg);
+  padding-bottom: var(--expensica-gap-lg);
   border-bottom: 1px solid var(--expensica-border-secondary);
 }
 
@@ -2243,7 +2791,7 @@ to {
   font-size: var(--expensica-font-size);
   color: var(--expensica-text-secondary);
   font-weight: 500;
-  padding: var(--expensica-spacing-xs);
+  padding: var(--expensica-gap-sm);
 }
 
 /* Calendar Days */
@@ -2322,7 +2870,7 @@ to {
   .expensica-calendar-day {
     min-width: 42px;
     min-height: 42px;
-    padding: var(--expensica-spacing-xs);
+    padding: var(--expensica-gap-sm);
   }
 
   .expensica-calendar-day-number {
@@ -2338,8 +2886,8 @@ to {
 .expensica-calendar-details {
   background-color: var(--expensica-bg-primary);
   border-radius: var(--expensica-radius-lg);
-  padding: var(--expensica-spacing-lg);
-  margin-top: var(--expensica-spacing-lg);
+  padding: var(--expensica-gap-xl);
+  margin-top: var(--expensica-gap-xl);
   border: 1px solid var(--expensica-border-primary);
   box-shadow: var(--expensica-shadow-sm);
 }
@@ -2348,8 +2896,8 @@ to {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--expensica-spacing);
-  padding-bottom: var(--expensica-spacing);
+  margin-bottom: var(--expensica-gap-lg);
+  padding-bottom: var(--expensica-gap-lg);
   border-bottom: 1px solid var(--expensica-border-secondary);
 }
 
@@ -2370,14 +2918,14 @@ to {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: var(--expensica-spacing-xl);
+  padding: var(--expensica-gap-2xl);
   text-align: center;
   color: var(--expensica-text-secondary);
 }
 
 .expensica-calendar-details-empty-icon {
   font-size: 32px;
-  margin-bottom: var(--expensica-spacing);
+  margin-bottom: var(--expensica-gap-lg);
 }
 
 .expensica-calendar-details-empty-text {
@@ -2387,16 +2935,16 @@ to {
 
 /* Category Breakdown */
 .expensica-calendar-categories {
-  margin-top: var(--expensica-spacing-lg);
+  margin-top: var(--expensica-gap-xl);
 }
 
 .expensica-calendar-category {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--expensica-spacing);
+  padding: var(--expensica-gap-lg);
   border-radius: var(--expensica-radius);
-  margin-bottom: var(--expensica-spacing-xs);
+  margin-bottom: var(--expensica-gap-sm);
   background-color: var(--expensica-bg-secondary);
   transition: var(--expensica-transition);
 }
@@ -2409,7 +2957,7 @@ to {
 .expensica-calendar-category-name {
   display: flex;
   align-items: center;
-  gap: var(--expensica-spacing-xs);
+  gap: var(--expensica-gap-sm);
   font-weight: 500;
   color: var(--expensica-text-primary);
 }
@@ -2423,16 +2971,16 @@ to {
 .expensica-calendar-legend {
   display: flex;
   align-items: center;
-  gap: var(--expensica-spacing);
-  margin-top: var(--expensica-spacing-lg);
-  padding-top: var(--expensica-spacing);
+  gap: var(--expensica-gap-lg);
+  margin-top: var(--expensica-gap-xl);
+  padding-top: var(--expensica-gap-lg);
   border-top: 1px solid var(--expensica-border-secondary);
 }
 
 .expensica-calendar-legend-item {
   display: flex;
   align-items: center;
-  gap: var(--expensica-spacing-xs);
+  gap: var(--expensica-gap-sm);
   font-size: var(--expensica-font-size-sm);
   color: var(--expensica-text-secondary);
 }
@@ -2445,29 +2993,14 @@ to {
 
 /* View All Transactions button */
 .expensica-view-all-btn {
-    background-color: var(--background-secondary);
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 400;
-    display: flex;
-    align-items: center;
+    background: var(--background-primary);
+    background-color: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    color: var(--text-normal);
+    font-size: var(--expensica-font-size-sm);
+    font-weight: 500;
     gap: 4px;
-    padding: 6px 12px;
-    border-radius: 4px;
-    transition: background-color 0.2s ease-in-out;
     margin-left: auto;
-}
-
-/* Dark mode support for View All button */
-.theme-dark .expensica-view-all-btn {
-    background-color: var(--background-modifier-hover);
-    color: var(--text-muted);
-}
-
-.theme-dark .expensica-view-all-btn:hover {
-    background-color: var(--background-modifier-active);
 }
 
 /* Section header styling */
@@ -2475,55 +3008,49 @@ to {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: var(--expensica-title-gap);
+    margin-bottom: var(--expensica-gap-md);
 }
 
 .expensica-view-all-btn:hover {
+    background: var(--background-modifier-hover);
     background-color: var(--background-modifier-hover);
+    border-color: var(--background-modifier-border-hover);
 }
 
 .expensica-view-all-btn svg {
     margin-left: 4px;
 }
 
+.expensica-transactions-footer {
+    display: flex;
+    justify-content: center;
+    margin-top: var(--expensica-gap-2xl);
+}
+
+.expensica-view-all-footer-btn {
+    margin-left: 0;
+    min-width: 110px;
+}
+
 /* Transactions View Styles */
 .expensica-container {
-    padding: var(--expensica-gap-page);
+    padding: var(--expensica-gap-2xl);
     max-width: 100%;
     display: flex;
     flex-direction: column;
-    gap: var(--expensica-section-gap);
+    gap: var(--expensica-gap-2xl);
     height: auto;
     overflow: visible;
 }
 
 .is-mobile .expensica-dashboard {
-  --expensica-panel-gap: var(--size-4-3, 12px);
-  --expensica-section-gap: var(--size-4-4, 16px);
-  --expensica-card-gap: var(--size-4-2, 8px);
-  --expensica-list-gap: var(--size-2-2, 4px);
-  --expensica-control-gap: var(--size-2-2, 4px);
-  --expensica-title-gap: var(--size-4-2, 8px);
-  --expensica-gap-page: var(--size-4-4, 16px);
-  --expensica-chart-spacing: var(--expensica-panel-gap);
-  --expensica-calendar-panel-spacing: var(--size-4-2, 8px);
-  --expensica-calendar-panel-gap: var(--expensica-panel-gap);
-  --expensica-header-action-gap: var(--expensica-control-gap);
-  padding-bottom: calc(var(--expensica-gap-page) + var(--expensica-mobile-footer-safe-space) + env(safe-area-inset-bottom));
+  padding-bottom: calc(var(--expensica-gap-2xl) + var(--expensica-mobile-footer-safe-space) + env(safe-area-inset-bottom));
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
 }
 
 .is-mobile .expensica-container {
-  --expensica-panel-gap: var(--size-4-3, 12px);
-  --expensica-section-gap: var(--size-4-4, 16px);
-  --expensica-card-gap: var(--size-4-2, 8px);
-  --expensica-list-gap: var(--size-2-2, 4px);
-  --expensica-control-gap: var(--size-2-2, 4px);
-  --expensica-title-gap: var(--size-4-2, 8px);
-  --expensica-gap-page: var(--size-4-4, 16px);
-  --expensica-header-action-gap: var(--expensica-control-gap);
 }
 
 .is-mobile .expensica-dashboard,
@@ -2536,7 +3063,7 @@ to {
 .is-mobile .expensica-container {
   padding-left: 0;
   padding-right: 0;
-  padding-bottom: calc(var(--expensica-gap-page) + var(--expensica-mobile-footer-safe-space) + env(safe-area-inset-bottom));
+  padding-bottom: calc(var(--expensica-gap-2xl) + var(--expensica-mobile-footer-safe-space) + env(safe-area-inset-bottom));
 }
 
 .is-mobile .expensica-section,
@@ -2552,10 +3079,6 @@ to {
 .is-mobile .expensica-breakdown-chart {
   min-width: 0;
   max-width: 100%;
-}
-
-.is-mobile .expensica-dashboard-grid {
-  grid-template-columns: minmax(0, 1fr);
 }
 
 .is-mobile .expensica-calendar-flex-container {
@@ -2585,11 +3108,11 @@ to {
 }
 
 .is-mobile .expensica-card {
-  padding: 12px;
+  padding: var(--expensica-gap-md);
 }
 
 .is-mobile .expensica-card-title {
-  margin-bottom: 4px;
+  margin-block-end: var(--expensica-gap-sm);
 }
 
 .is-mobile .expensica-card-value {
@@ -2599,24 +3122,39 @@ to {
 
 .is-mobile .expensica-category-chart-layout {
   flex-direction: column;
-  align-items: stretch;
+  align-items: center;
 }
 
 .is-mobile .expensica-chart-html-legend {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 112px));
   justify-content: center;
-  column-gap: var(--expensica-control-gap);
-  margin-top: var(--expensica-title-gap);
+  column-gap: var(--expensica-gap-md);
+  margin-top: var(--expensica-gap-md);
   max-width: 100%;
   max-height: none;
   overflow-y: visible;
 }
 
+.is-mobile .expensica-category-chip-grid {
+  grid-template-columns: repeat(var(--expensica-category-chip-columns, 3), minmax(0, 112px));
+}
+
+.is-mobile .expensica-income-expense-legend {
+  grid-template-columns: repeat(3, minmax(0, 130px));
+  column-gap: var(--expensica-gap-md);
+}
+
+.is-mobile .expensica-income-expense-legend .expensica-category-chip {
+  max-width: 130px;
+  padding: var(--expensica-category-chip-padding-y) var(--expensica-category-chip-padding-x);
+  font-size: var(--expensica-category-chip-font-size);
+}
+
 .is-mobile .expensica-chart-legend-column {
   display: flex;
   flex-direction: column;
-  gap: var(--expensica-list-gap);
+  gap: var(--expensica-gap-sm);
 }
 
 .is-mobile .expensica-chart-legend-item {
@@ -2646,8 +3184,8 @@ to {
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
-    gap: var(--expensica-header-action-gap);
-    margin-bottom: var(--expensica-title-gap);
+    gap: var(--expensica-gap-md);
+    margin-bottom: var(--expensica-gap-md);
 }
 
 .expensica-title-section {
@@ -2662,7 +3200,7 @@ to {
 
 .expensica-stats-section {
     display: flex;
-    gap: var(--expensica-card-gap);
+    gap: var(--expensica-gap-lg);
 }
 
 .expensica-stat {
@@ -2681,31 +3219,21 @@ to {
 
 .expensica-actions-section {
     display: flex;
-    gap: var(--expensica-control-gap);
+    gap: var(--expensica-gap-md);
 }
 
-.expensica-transactions-view-header {
-    align-items: flex-start;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: var(--expensica-radius);
-    flex-direction: column;
-    gap: var(--expensica-header-action-gap);
-    padding: var(--expensica-spacing);
+.expensica-transaction-total-spent {
+    color: var(--expensica-error);
 }
 
-.expensica-transactions-view-header .expensica-title-section {
-    margin-bottom: 0;
-    width: 100%;
-}
-
-.expensica-transactions-view-header .shadcn-actions {
-    width: 100%;
+.expensica-transaction-total-income {
+    color: var(--expensica-success);
 }
 
 .shadcn-header {
     align-items: flex-start;
     flex-direction: column;
-    gap: var(--expensica-header-action-gap);
+    gap: var(--expensica-gap-md);
 }
 
 .shadcn-header .shadcn-title-section,
@@ -2718,9 +3246,9 @@ to {
 /* Filter Section */
 .expensica-filter-section {
     background-color: var(--background-primary);
-    padding: var(--expensica-panel-gap);
+    padding: var(--expensica-gap-lg);
     border-radius: var(--expensica-radius);
-    margin-bottom: var(--expensica-section-gap);
+    margin-bottom: var(--expensica-gap-2xl);
     position: relative;
     border: 1px solid var(--expensica-border-primary);
     box-shadow: var(--expensica-shadow-sm);
@@ -2730,15 +3258,15 @@ to {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: var(--expensica-title-gap);
-    padding-bottom: var(--expensica-title-gap);
+    margin-bottom: var(--expensica-gap-md);
+    padding-bottom: var(--expensica-gap-md);
     border-bottom: 1px solid var(--expensica-border-secondary);
 }
 
 .expensica-section-title-container {
     display: flex;
     align-items: center;
-    gap: var(--expensica-title-gap);
+    gap: var(--expensica-gap-md);
 }
 
 .expensica-section-title-icon {
@@ -2771,23 +3299,23 @@ to {
 .expensica-filter-form {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: var(--expensica-panel-gap);
+    gap: var(--expensica-gap-lg);
 }
 
 .expensica-filter-row-container {
     grid-column: 1 / -1;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: var(--expensica-panel-gap);
+    gap: var(--expensica-gap-lg);
 }
 
 .expensica-filter-card {
     background-color: var(--background-secondary);
     border-radius: var(--expensica-radius);
-    padding: var(--expensica-panel-gap);
+    padding: var(--expensica-gap-lg);
     display: flex;
     flex-direction: column;
-    gap: var(--expensica-title-gap);
+    gap: var(--expensica-gap-md);
     border: 1px solid var(--expensica-border-secondary);
     transition: var(--expensica-transition);
 }
@@ -2807,19 +3335,19 @@ to {
 .expensica-filter-group {
     display: flex;
     flex-direction: column;
-    gap: var(--expensica-title-gap);
+    gap: var(--expensica-gap-md);
 }
 
 .expensica-filter-row {
     display: flex;
-    gap: var(--expensica-panel-gap);
+    gap: var(--expensica-gap-lg);
 }
 
 .expensica-filter-col {
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: var(--expensica-control-gap);
+    gap: var(--expensica-gap-md);
 }
 
 .expensica-field-label {
@@ -3068,14 +3596,14 @@ to {
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
-    gap: var(--expensica-control-gap);
-    padding: var(--expensica-panel-gap);
-    margin-top: var(--expensica-title-gap);
+    gap: var(--expensica-gap-md);
+    padding: var(--expensica-gap-lg);
+    margin-top: var(--expensica-gap-md);
     border-top: 1px solid var(--background-modifier-border);
 }
 
 .expensica-pagination-top {
-    margin-bottom: var(--expensica-title-gap);
+    margin-bottom: var(--expensica-gap-md);
     border-top: none;
     border-bottom: 1px solid var(--background-modifier-border);
 }
@@ -3083,41 +3611,45 @@ to {
 .expensica-pagination-nav {
     display: flex;
     align-items: center;
-    gap: var(--expensica-control-gap);
+    gap: var(--expensica-gap-md);
     flex-wrap: wrap;
 }
 
 .expensica-pagination-btn {
-    padding: 6px 12px;
     min-width: 36px;
     border: 1px solid var(--background-modifier-border);
     background: var(--background-primary);
+    background-color: var(--background-primary);
     color: var(--text-normal);
     border-radius: var(--expensica-radius-sm);
-    cursor: pointer;
     font-size: var(--expensica-font-size-sm);
-    transition: var(--expensica-transition);
 }
 
 .expensica-pagination-btn.active {
-    background: var(--interactive-accent);
-    border-color: var(--interactive-accent);
-    color: var(--text-on-accent);
+    background: var(--background-modifier-hover);
+    background-color: var(--background-modifier-hover);
+    border-color: var(--background-modifier-border);
+    color: var(--text-normal);
 }
 
 .expensica-pagination-btn:hover:not(.disabled) {
     background: var(--background-modifier-hover);
+    background-color: var(--background-modifier-hover);
     border-color: var(--background-modifier-border-hover);
+    color: var(--text-normal);
 }
 
 .expensica-pagination-btn.disabled {
     opacity: 0.5;
     cursor: not-allowed;
     color: var(--text-muted);
+    background: var(--background-primary);
+    background-color: var(--background-primary);
+    border-color: var(--background-modifier-border);
 }
 
 .expensica-pagination-info {
-    padding: 0 var(--expensica-control-gap);
+    padding: 0 var(--expensica-gap-md);
     color: var(--text-muted);
     font-size: var(--expensica-font-size-sm);
 }
@@ -3125,7 +3657,7 @@ to {
 .expensica-items-per-page {
     display: flex;
     align-items: center;
-    gap: var(--expensica-control-gap);
+    gap: var(--expensica-gap-md);
     color: var(--text-muted);
     font-size: var(--expensica-font-size-sm);
 }
@@ -3178,15 +3710,15 @@ to {
     justify-content: flex-start;
     flex-wrap: wrap;
     overflow: visible;
-    padding: var(--expensica-control-gap) var(--expensica-gap-page);
-    row-gap: var(--expensica-section-gap);
+    padding: var(--expensica-gap-md) var(--expensica-gap-2xl);
+    row-gap: var(--expensica-gap-2xl);
 }
 
 .is-mobile .expensica-pagination-nav {
     justify-content: flex-start;
     flex: 0 0 auto;
     flex-wrap: nowrap;
-    gap: var(--expensica-control-gap);
+    gap: var(--expensica-gap-md);
 }
 
 .is-mobile .expensica-pagination-btn {
@@ -3224,11 +3756,6 @@ to {
     overflow: visible;
 }
 
-/* The app's leaf container should handle scrolling */
-.workspace-leaf-content[data-type="expensica-transactions-view"] {
-    overflow-y: auto;
-}
-
 .expensica-note {
   display: flex;
   align-items: center;
@@ -3249,7 +3776,7 @@ to {
 
 /* Confirmation Modal */
 .expensica-confirmation-modal {
-    padding: var(--expensica-spacing-xl);
+    padding: var(--expensica-gap-lg);
     max-width: 400px;
     margin: 0 auto;
 }
@@ -3258,19 +3785,19 @@ to {
     font-size: var(--expensica-font-size-lg);
     font-weight: 600;
     color: var(--expensica-text-primary);
-    margin-bottom: var(--expensica-spacing);
+    margin: 0 0 var(--expensica-gap-md);
 }
 
 .expensica-confirmation-modal .expensica-modal-message {
     font-size: var(--expensica-font-size);
     color: var(--expensica-text-secondary);
-    margin-bottom: var(--expensica-spacing-xl);
+    margin: 0 0 var(--expensica-gap-md);
     line-height: 1.5;
 }
 
 .expensica-confirmation-modal .expensica-modal-buttons {
     display: flex;
-    gap: var(--expensica-spacing);
+    gap: var(--expensica-gap-md);
     justify-content: flex-end;
 }
 
@@ -3524,15 +4051,15 @@ to {
 .expensica-links-container {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--expensica-card-gap);
+  gap: var(--expensica-gap-lg);
 }
 
 /* Enhanced category containers */
 .categories-container {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: var(--expensica-card-gap);
-  margin: var(--expensica-panel-gap) 0 var(--expensica-section-gap) 0;
+  gap: var(--expensica-gap-lg);
+  margin: var(--expensica-gap-lg) 0 var(--expensica-gap-2xl) 0;
 }
 
 .category-item {
@@ -3625,8 +4152,9 @@ to {
 }
 
 .expensica-select-display {
-  padding: 14px 16px;
-  border-radius: 10px;
+  min-height: var(--size-4-8, 32px);
+  padding: var(--size-2-2, 4px) var(--size-4-2, 8px);
+  border-radius: var(--expensica-radius-sm);
   border: 1px solid var(--background-modifier-border);
   transition: all 0.2s ease;
   box-shadow: var(--expensica-shadow);
@@ -3639,18 +4167,20 @@ to {
 }
 
 .expensica-select-options {
-  border-radius: 10px;
+  border-radius: var(--expensica-radius-sm);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
-  padding: 4px;
-  margin-top: 8px;
-  max-height: 300px;
+  padding: var(--expensica-gap-sm);
+  margin-top: var(--expensica-gap-md);
+  max-height: calc(var(--size-4-8, 32px) * 6);
 }
 
 .expensica-select-option {
-  padding: 14px 16px;
-  border-radius: 8px;
-  margin: 2px 0;
-  font-size: 14px;
+  min-height: var(--size-4-8, 32px);
+  padding: var(--size-2-2, 4px) var(--size-4-2, 8px);
+  border-radius: var(--expensica-radius-sm);
+  margin: var(--expensica-gap-xs) 0;
+  font-size: var(--expensica-font-size-sm);
+  line-height: var(--expensica-line-height-tight);
 }
 
 .expensica-select-option:hover {
@@ -3749,7 +4279,7 @@ to {
   }
   
   .expensica-select-display {
-    padding: 12px 14px;
+    padding: var(--size-2-2, 4px) var(--size-4-2, 8px);
   }
 }
 
@@ -3792,7 +4322,7 @@ to {
     display: flex;
     gap: 8px;
     padding: 0;
-    margin-bottom: var(--expensica-spacing-xl);
+    margin-bottom: var(--expensica-gap-sm);
     position: relative;
     border-bottom: 1px solid var(--background-modifier-border);
     transition: border-color 0.2s ease;
@@ -3847,13 +4377,13 @@ to {
 }
 
 .expensica-budget-summary {
-    margin-bottom: var(--expensica-section-gap);
+    margin-bottom: var(--expensica-gap-2xl);
 }
 
 .expensica-summary-flex {
     display: flex;
-    gap: var(--expensica-card-gap);
-    margin-bottom: var(--expensica-section-gap);
+    gap: var(--expensica-gap-lg);
+    margin-bottom: var(--expensica-gap-2xl);
     flex-wrap: wrap;
 }
 
@@ -3974,6 +4504,160 @@ to {
 
 .expensica-budget-list {
     margin-top: 30px;
+}
+
+.expensica-categories-tab {
+    padding: 0;
+    display: grid;
+    column-gap: var(--expensica-gap-lg);
+    row-gap: var(--expensica-gap-sm);
+}
+
+.expensica-categories-chart-container {
+    padding: 0;
+    position: relative;
+    width: 100%;
+    height: fit-content;
+    max-width: 100%;
+    overflow: visible;
+}
+
+.expensica-categories-chart-layout {
+    display: grid;
+    gap: 0;
+    justify-items: center;
+    width: 100%;
+    overflow: visible;
+}
+
+.expensica-categories-canvas-container {
+    overflow: visible;
+}
+
+.expensica-categories-list {
+    display: grid;
+    gap: var(--expensica-gap-sm);
+}
+
+.expensica-category-card {
+    --expensica-category-card-graph-width: 178px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(160px, var(--expensica-category-card-graph-width));
+    gap: var(--expensica-gap-lg);
+    align-items: center;
+    padding: var(--expensica-gap-md);
+    border: 1px solid var(--expensica-border-secondary);
+    border-radius: var(--expensica-radius);
+    background-color: var(--expensica-bg-primary);
+    font-size: var(--expensica-font-size-xs);
+    line-height: var(--expensica-line-height-tight);
+    box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px,
+                rgba(15, 15, 15, 0.05) 0px 2px 4px;
+    transition: all 0.2s ease;
+}
+
+.expensica-category-card:hover {
+    border-color: var(--background-modifier-border-hover);
+    background: var(--background-modifier-hover);
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.expensica-category-card.is-hovered {
+    border-color: var(--background-modifier-border-hover);
+    background: var(--background-modifier-hover);
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.expensica-category-card-interactive {
+    cursor: pointer;
+}
+
+.expensica-category-card-interactive:focus-visible {
+    outline: none;
+    border-color: var(--interactive-accent);
+    box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.2);
+}
+
+.expensica-category-card-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--expensica-gap-md);
+    min-width: 0;
+}
+
+.expensica-category-card-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    flex: 0 0 auto;
+}
+
+.expensica-category-card-emoji {
+    flex: 0 0 auto;
+    font-size: var(--expensica-font-size-xs);
+}
+
+.expensica-category-card-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+    font-size: var(--expensica-font-size-xs);
+}
+
+.expensica-category-card-graph {
+    display: grid;
+    grid-template-columns: 4.5ch minmax(0, 1fr) 11ch;
+    gap: var(--expensica-gap-sm);
+    align-items: center;
+}
+
+.expensica-category-card-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--background-modifier-border);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.expensica-category-card-fill {
+    height: 100%;
+    border-radius: 999px;
+}
+
+.expensica-category-card-percentage {
+    font-size: var(--expensica-font-size-xs);
+    font-weight: 400;
+    color: var(--text-muted);
+    white-space: nowrap;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.expensica-category-card-amount {
+    font-size: var(--expensica-font-size-xs);
+    font-weight: 400;
+    color: var(--text-normal);
+    white-space: nowrap;
+    text-align: right;
+    min-width: 11ch;
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 900px) {
+    .expensica-category-card {
+        --expensica-category-card-graph-width: 148px;
+        grid-template-columns: minmax(0, 1fr) minmax(132px, var(--expensica-category-card-graph-width));
+        gap: var(--expensica-gap-md);
+    }
+
+    .expensica-category-card-graph {
+        width: 100%;
+        max-width: none;
+    }
 }
 
 .expensica-budget-list-table {
@@ -4256,8 +4940,317 @@ to {
   min-width: 100px;
 }
 
+.expensica-form-footer .expensica-modal-delete-btn {
+  margin-right: auto;
+  min-width: 80px;
+}
+
+.expensica-form-footer .expensica-modal-delete-btn {
+  background-color: var(--expensica-error);
+  border-color: var(--expensica-error);
+  color: var(--text-on-accent);
+}
+
+.expensica-form-footer .expensica-modal-delete-btn:hover,
+.expensica-form-footer .expensica-modal-delete-btn:focus-visible {
+  background-color: var(--expensica-error);
+  border-color: var(--expensica-error);
+  color: var(--text-on-accent);
+  transform: translateY(-1px);
+  box-shadow: var(--expensica-shadow-lg);
+  outline: none;
+}
+
 .expensica-form-footer .expensica-btn-primary {
   background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.expensica-category-modal-emoji-input {
+  text-align: center;
+  font-size: 24px;
+}
+
+.expensica-category-name-field {
+  color: rgba(var(--text-normal-rgb), 0.5);
+}
+
+.expensica-category-name-field:disabled {
+  color: rgba(var(--text-normal-rgb), 0.5);
+  opacity: 1;
+  -webkit-text-fill-color: rgba(var(--text-normal-rgb), 0.5);
+}
+
+.expensica-category-name-row {
+  display: flex;
+  align-items: center;
+  gap: var(--expensica-gap-sm);
+}
+
+.expensica-category-name-row .expensica-category-name-field {
+  flex: 1 1 auto;
+}
+
+.expensica-category-picker-trigger,
+.expensica-category-color-button {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.expensica-category-modal-emoji-button {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.expensica-category-color-button {
+  position: relative;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.expensica-category-color-button::before {
+  content: "";
+  display: block;
+  box-sizing: border-box;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  border-radius: 999px;
+  background: var(--expensica-category-button-color, var(--background-modifier-border));
+  border: 1px solid color-mix(in srgb, var(--background-modifier-border) 70%, transparent);
+}
+
+.expensica-category-color-preview {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid var(--background-modifier-border);
+  flex: 0 0 auto;
+}
+
+.expensica-category-color-input {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.expensica-category-color-palette-modal {
+  width: fit-content !important;
+  min-width: 0 !important;
+  height: fit-content !important;
+  min-height: 0 !important;
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  background: var(--background-primary);
+  border-radius: var(--expensica-radius);
+  box-sizing: border-box;
+  overflow: visible;
+  flex: 0 0 auto;
+}
+
+.modal:has(.expensica-category-color-palette-modal),
+.modal-content:has(.expensica-category-color-palette-modal) {
+  width: fit-content !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: fit-content !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.modal:has(.expensica-category-color-palette-modal) .modal-close-button {
+  display: none;
+}
+
+.modal-content:has(.expensica-category-color-palette-modal) {
+  padding: var(--expensica-gap-sm) !important;
+}
+
+.expensica-category-color-palette-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 24px);
+  grid-auto-rows: 24px;
+  gap: var(--expensica-gap-sm);
+  width: fit-content;
+  height: fit-content;
+}
+
+.expensica-category-color-swatch {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--expensica-radius-sm);
+  cursor: pointer;
+}
+
+.expensica-category-color-swatch.is-selected {
+  border-color: var(--text-normal);
+}
+
+@media screen and (max-width: 768px) {
+  .expensica-category-color-palette-grid {
+    grid-template-columns: repeat(4, 32px);
+    grid-auto-rows: 32px;
+  }
+}
+
+.expensica-emoji-picker-modal {
+  box-sizing: border-box;
+  padding: var(--expensica-gap-lg);
+  width: fit-content;
+  min-width: 0;
+  height: fit-content;
+  min-height: 0;
+  max-width: none;
+  max-height: none;
+}
+
+.expensica-emoji-picker-modal .expensica-modal-title {
+  margin: 0 0 var(--expensica-gap-md);
+}
+
+.modal:has(.expensica-emoji-picker-modal),
+.modal-content:has(.expensica-emoji-picker-modal) {
+  width: fit-content !important;
+  min-width: 0 !important;
+  height: fit-content !important;
+  min-height: 0 !important;
+  max-width: none !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.expensica-emoji-picker-modal .emoji-picker-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--expensica-gap-md);
+}
+
+.expensica-emoji-picker-modal .emoji-input {
+  margin: 0;
+  width: 100%;
+  box-sizing: border-box;
+  height: var(--size-4-8, 32px);
+  min-height: var(--size-4-8, 32px);
+  padding: var(--size-2-2, 4px) var(--size-4-2, 8px);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--expensica-radius-sm);
+  background-color: var(--background-primary);
+  box-shadow: none;
+  color: var(--text-normal);
+  font-size: var(--expensica-font-size-sm);
+  line-height: var(--expensica-line-height-tight);
+  outline: none;
+  transition: var(--expensica-transition);
+  text-align: center;
+}
+
+.expensica-emoji-picker-modal .emoji-input:hover {
+  border-color: var(--background-modifier-border);
+  background-color: var(--background-primary);
+  box-shadow: none;
+  transform: none;
+}
+
+.expensica-emoji-picker-modal .emoji-input:focus,
+.expensica-emoji-picker-modal .emoji-input:focus-within {
+  border-color: var(--interactive-accent);
+  background-color: var(--background-primary);
+  box-shadow: 0 0 0 var(--size-2-1, 2px) rgba(var(--interactive-accent-rgb), 0.2);
+  outline: none;
+}
+
+.expensica-emoji-picker-modal .common-emojis {
+  display: flex;
+  flex-direction: column;
+  gap: var(--expensica-gap-sm);
+}
+
+.expensica-emoji-picker-modal .common-emojis p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--expensica-font-size-sm);
+  line-height: var(--expensica-line-height-tight);
+}
+
+.expensica-emoji-picker-modal .emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--expensica-gap-sm);
+  width: fit-content;
+}
+
+.expensica-emoji-picker-modal .emoji-button {
+  width: auto;
+  min-width: 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--expensica-radius-sm);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: var(--expensica-font-size-xl);
+  box-shadow: none;
+  cursor: pointer;
+  transition: var(--expensica-transition);
+}
+
+.expensica-emoji-picker-modal .emoji-button:hover,
+.expensica-emoji-picker-modal .emoji-button:focus-visible {
+  border-color: var(--interactive-accent);
+  background: var(--background-primary-alt);
+  outline: none;
+}
+
+.expensica-emoji-picker-modal .button-container {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--expensica-gap-md);
+  margin-top: var(--expensica-gap-sm);
+  padding-top: var(--expensica-gap-md);
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.expensica-emoji-picker-modal .emoji-input,
+.expensica-emoji-picker-modal .button-container .expensica-btn {
+  background-color: var(--background-primary);
+  border-color: var(--background-modifier-border);
+  color: var(--text-normal);
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  font-size: var(--expensica-font-size-sm);
+  font-weight: 500;
+  line-height: 1;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.expensica-emoji-picker-modal .button-container .expensica-btn:hover,
+.expensica-emoji-picker-modal .button-container .expensica-btn:focus-visible {
+  border-color: var(--background-modifier-border-hover);
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+  outline: none;
+}
+
+.expensica-emoji-picker-modal .button-container .expensica-btn-primary {
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.expensica-emoji-picker-modal .button-container .expensica-btn-primary:hover {
+  background-color: var(--interactive-accent-hover);
   color: var(--text-on-accent);
 }
 
@@ -4286,13 +5279,14 @@ to {
 
 .expensica-select-display {
   width: 100%;
-  padding: 12px 16px;
-  border-radius: 8px;
+  min-height: var(--size-4-8, 32px);
+  padding: var(--size-2-2, 4px) var(--size-4-2, 8px);
+  border-radius: var(--expensica-radius-sm);
   border: 1px solid var(--background-modifier-border);
   background-color: var(--background-primary);
   color: var(--text-normal);
   font-weight: 500;
-  font-size: 15px;
+  font-size: var(--expensica-font-size-sm);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -4309,7 +5303,7 @@ to {
 .expensica-select-display-text {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--expensica-gap-md);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4329,12 +5323,12 @@ to {
   left: 0;
   right: 0;
   z-index: 10;
-  margin-top: 4px;
-  border-radius: 8px;
+  margin-top: var(--expensica-gap-sm);
+  border-radius: var(--expensica-radius-sm);
   border: 1px solid var(--background-modifier-border);
   background-color: var(--background-primary);
   box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-  max-height: 200px;
+  max-height: calc(var(--size-4-8, 32px) * 6);
   overflow-y: auto;
 }
 
@@ -4343,12 +5337,14 @@ to {
 }
 
 .expensica-select-option {
-  padding: 12px 16px;
+  min-height: var(--size-4-8, 32px);
+  padding: var(--size-2-2, 4px) var(--size-4-2, 8px);
   cursor: pointer;
   transition: background-color 0.15s ease;
   display: flex;
   align-items: center;
-  font-size: 14px;
+  font-size: var(--expensica-font-size-sm);
+  line-height: var(--expensica-line-height-tight);
 }
 
 .expensica-select-option:hover {
@@ -5082,71 +6078,263 @@ to {
     }
 }
 
-/* Search styling - more specific selectors to ensure they're applied */
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-search-section {
-    margin: 1.5rem 0;
-    padding: 0 1rem;
+.expensica-dashboard-transactions-tab > .expensica-search-section {
+    margin: 0;
+    padding: 0;
 }
 
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-search-container {
+.expensica-dashboard-transactions-tab > .expensica-transactions-tab-chips,
+.expensica-dashboard-transactions-tab > .expensica-search-section {
+    margin-block: 0;
+}
+
+.expensica-dashboard-transactions-tab > .expensica-transactions-tab-chips,
+.expensica-dashboard-transactions-tab > .expensica-search-section,
+.expensica-dashboard-transactions-tab > .expensica-pagination,
+.expensica-dashboard-transactions-tab > .expensica-transactions-section {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.expensica-dashboard-transactions-tab > .expensica-transactions-tab-chips {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: var(--expensica-gap-sm);
+    row-gap: var(--size-4-3, 12px);
+    justify-content: flex-start;
+    padding: 0;
+    width: 100%;
+}
+
+.is-mobile .expensica-dashboard.expensica-dashboard-transactions-tab > .expensica-search-section,
+.is-mobile .expensica-dashboard.expensica-dashboard-transactions-tab > .expensica-transactions-tab-chips {
+    padding: 0;
+}
+
+.expensica-dashboard-transactions-tab > .expensica-transactions-tab-chips .expensica-transaction-count {
+    margin-left: 0;
+    padding: 2px 6px;
+    font-size: var(--font-smallest, calc(var(--expensica-font-size-xs) - 1px));
+    line-height: var(--expensica-line-height-tight);
+}
+
+.expensica-dashboard-transactions-tab > .expensica-pagination {
+    padding: var(--size-4-4, 16px) 0;
+}
+
+.is-mobile .expensica-dashboard.expensica-dashboard-transactions-tab > .expensica-pagination {
+    padding: var(--size-4-2, 8px) 0;
+}
+
+.expensica-dashboard-transactions-tab .expensica-transactions {
+    gap: var(--expensica-gap-sm);
+}
+
+.expensica-dashboard-transactions-tab .expensica-search-controls {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-wrap: nowrap;
+    width: 100%;
+}
+
+.expensica-dashboard-transactions-tab .expensica-search-container {
     position: relative;
     width: 100%;
     max-width: 100%;
     margin: 0 auto;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
-.workspace-leaf-content[data-type="expensica-transactions-view"] #expensica-search-input,
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-search-input {
+.expensica-dashboard-transactions-tab .expensica-category-filter-container {
+    display: flex;
+    align-items: center;
+    position: absolute;
+    right: var(--expensica-gap-md);
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 3;
+}
+
+.expensica-dashboard-transactions-tab .expensica-category-filter-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--expensica-radius-sm);
+    background-color: var(--background-primary);
+    color: var(--text-normal);
+    cursor: pointer;
+}
+
+.expensica-dashboard-transactions-tab .expensica-category-filter-button:hover,
+.expensica-dashboard-transactions-tab .expensica-category-filter-button:focus-visible,
+.expensica-dashboard-transactions-tab .expensica-category-filter-container.is-open .expensica-category-filter-button {
+    background-color: var(--background-modifier-hover);
+    border-color: var(--background-modifier-border-hover);
+    color: var(--text-normal);
+    outline: none;
+}
+
+.expensica-dashboard-transactions-tab .expensica-filter-menu,
+.expensica-dashboard-transactions-tab .expensica-filter-submenu {
+    min-width: 190px;
+    padding: var(--expensica-gap-sm);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--expensica-radius-sm);
+    background: var(--background-primary);
+    background-color: var(--background-primary);
+    box-shadow: var(--expensica-shadow-dropdown);
+}
+
+.expensica-dashboard-transactions-tab .expensica-filter-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + var(--expensica-gap-sm));
+    display: flex;
+    flex-direction: column;
+    gap: var(--expensica-gap-sm);
+    z-index: var(--expensica-z-dropdown);
+}
+
+.expensica-dashboard-transactions-tab .expensica-filter-menu.is-hidden,
+.expensica-dashboard-transactions-tab .expensica-filter-submenu {
+    display: none;
+}
+
+.expensica-dashboard-transactions-tab .expensica-filter-menu-title,
+.expensica-dashboard-transactions-tab .expensica-filter-menu-item,
+.expensica-dashboard-transactions-tab .expensica-filter-category-option,
+.expensica-dashboard-transactions-tab .expensica-filter-menu-empty {
+    padding: var(--expensica-gap-md);
+}
+
+.expensica-dashboard-transactions-tab .expensica-filter-menu-item {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--expensica-gap-md);
+    min-height: 34px;
+    border-radius: var(--expensica-radius-sm);
+    color: var(--text-normal);
+}
+
+.expensica-dashboard-transactions-tab .expensica-filter-menu-item:hover {
+    background-color: var(--background-modifier-hover);
+}
+
+.expensica-dashboard-transactions-tab .expensica-filter-submenu {
+    position: absolute;
+    max-height: min(320px, calc(100vh - 160px));
+    overflow-y: auto;
+    right: calc(100% - 1px);
+    top: 0;
+}
+
+.expensica-dashboard-transactions-tab .expensica-filter-menu-parent:hover .expensica-filter-submenu,
+.expensica-dashboard-transactions-tab .expensica-filter-menu-parent:focus-within .expensica-filter-submenu,
+.expensica-dashboard-transactions-tab .expensica-filter-menu-parent.is-open .expensica-filter-submenu {
+    display: flex;
+    flex-direction: column;
+    gap: var(--expensica-gap-sm);
+}
+
+.expensica-dashboard-transactions-tab .expensica-filter-category-option {
+    all: unset;
+    box-sizing: border-box;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--expensica-gap-md);
+    min-height: 32px;
+    width: 100%;
+    padding: var(--expensica-gap-md);
+    border: 0;
+    border-radius: 0;
+    background: var(--background-primary);
+    color: var(--text-normal);
+    cursor: pointer;
+    font-size: var(--expensica-font-size-sm);
+    text-align: left;
+    box-shadow: none;
+    text-shadow: none;
+    filter: none;
+    transition: background-color 0.1s;
+}
+
+.expensica-dashboard-transactions-tab .expensica-filter-category-option:hover,
+.expensica-dashboard-transactions-tab .expensica-filter-category-option.is-selected {
+    background: var(--background-modifier-hover);
+    background-color: var(--background-modifier-hover);
+}
+
+.expensica-dashboard-transactions-tab .expensica-filter-category-option.is-selected {
+    color: var(--text-accent);
+    font-weight: 600;
+}
+
+.expensica-dashboard-transactions-tab .expensica-selected-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: max(var(--expensica-gap-md), 8px);
+    margin-top: var(--expensica-transactions-filter-gap);
+}
+
+.expensica-dashboard-transactions-tab .expensica-selected-filters.is-hidden {
+    display: none;
+}
+
+.expensica-dashboard-transactions-tab .expensica-selected-filter-chip {
+    width: auto;
+    min-width: 0;
+    max-width: 100%;
+    gap: var(--expensica-gap-sm);
+}
+
+.expensica-dashboard-transactions-tab .expensica-selected-filter-chip .expensica-category-chip-label {
+    max-width: 100%;
+}
+
+.expensica-dashboard-transactions-tab .expensica-selected-filter-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 14px;
+    width: 14px;
+    height: 14px;
+    color: inherit;
+    opacity: 0.7;
+}
+
+.expensica-dashboard-transactions-tab .expensica-selected-filter-remove svg {
+    width: 12px;
+    height: 12px;
+}
+
+.expensica-dashboard-transactions-tab #expensica-search-input,
+.expensica-dashboard-transactions-tab .expensica-search-input {
     width: 100%;
     height: 48px;
-    padding: 0.85rem 1rem 0.85rem 3rem;
+    padding: 0.85rem 3.5rem 0.85rem 3rem;
     border: 1px solid var(--background-modifier-border);
     border-radius: 8px;
     background-color: var(--background-primary);
     color: var(--text-normal);
     font-size: 1rem;
     line-height: 1.5;
-    transition: all 0.2s ease;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
-.workspace-leaf-content[data-type="expensica-transactions-view"] #expensica-search-input:focus,
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-search-input:focus {
-    outline: none;
-    border-color: var(--interactive-accent);
-    box-shadow: 0 0 0 2px var(--interactive-accent-tint);
-}
-
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-search-icon {
+.expensica-dashboard-transactions-tab .expensica-search-icon {
     position: absolute;
     left: 1rem;
     top: 50%;
     transform: translateY(-50%);
-    color: var(--text-muted);
     pointer-events: none;
-    transition: color 0.2s ease;
-    z-index: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-search-input:focus + .expensica-search-icon {
-    color: var(--interactive-accent);
-}
-
-@media (max-width: 768px) {
-    .workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-search-section {
-        margin: 1rem 0;
-        padding: 0 0.5rem;
-    }
-    
-    .workspace-leaf-content[data-type="expensica-transactions-view"] #expensica-search-input,
-    .workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-search-input {
-        padding: 0.75rem 0.75rem 0.75rem 2.5rem;
-        font-size: 0.9rem;
-        height: 42px;
-    }
 }
 
 /* Additional more specific selectors for the search input */
@@ -5161,7 +6349,7 @@ to {
 .expensica-custom-input {
     width: 100% !important;
     height: 48px !important;
-    padding: 0.85rem 1rem 0.85rem 3rem !important;
+    padding: 0.85rem 3.5rem 0.85rem 3rem !important;
     border: 1px solid var(--background-modifier-border) !important;
     border-radius: 8px !important;
     background-color: var(--background-primary) !important;
@@ -5197,7 +6385,7 @@ to {
 
 @media (max-width: 768px) {
     .expensica-custom-input {
-        padding: 0.75rem 0.75rem 0.75rem 2.75rem !important;
+        padding: 0.75rem 3.25rem 0.75rem 2.75rem !important;
         font-size: 0.9rem !important;
         height: 42px !important;
     }
@@ -5208,11 +6396,11 @@ to {
   .expensica-header {
     flex-direction: column;
     align-items: flex-start;
-    padding: var(--expensica-spacing) var(--expensica-spacing-lg);
+    padding: var(--expensica-gap-lg) var(--expensica-gap-xl);
   }
   
   .expensica-title-section {
-    margin-bottom: var(--expensica-spacing);
+    margin-bottom: var(--expensica-gap-lg);
   }
   
   .expensica-actions {
@@ -5281,7 +6469,7 @@ to {
 .expensica-calendar-container {
   background-color: var(--background-primary);
   border-radius: 8px;
-  padding: var(--expensica-calendar-panel-spacing);
+  padding: var(--expensica-gap-lg);
   border: 1px solid var(--background-modifier-border);
   margin-bottom: 0;
   box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px, 
@@ -5296,7 +6484,7 @@ to {
 
 .expensica-calendar-flex-container {
   display: flex;
-  gap: var(--expensica-calendar-panel-gap);
+  gap: var(--expensica-gap-lg);
   align-items: flex-start;
   flex-wrap: wrap;
   margin-bottom: 0;
@@ -5347,10 +6535,6 @@ to {
   text-transform: uppercase;
 }
 
-.theme-dark .expensica-calendar-header span {
-  color: var(--text-muted);
-}
-
 /* Calendar Day cells */
 .expensica-calendar-day {
   aspect-ratio: 1;
@@ -5372,17 +6556,9 @@ to {
   overflow: hidden;
 }
 
-.theme-dark .expensica-calendar-day {
-  border: 1px solid var(--background-modifier-border);
-}
-
 .expensica-calendar-day:hover {
   background-color: var(--background-modifier-hover);
   transform: none;
-}
-
-.theme-dark .expensica-calendar-day:hover {
-  background-color: var(--background-modifier-hover);
 }
 
 .expensica-calendar-day-number {
@@ -5414,13 +6590,18 @@ to {
   max-width: 100%;
   background-color: var(--background-primary);
   border-radius: 8px;
-  padding: var(--expensica-calendar-panel-spacing);
+  padding: var(--expensica-gap-lg);
   border: 1px solid var(--background-modifier-border);
-  max-height: 500px;
-  overflow-y: auto;
+  max-height: none;
+  overflow-y: visible;
   box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px, 
               rgba(15, 15, 15, 0.05) 0px 2px 4px;
   transition: box-shadow 0.15s ease;
+}
+
+.expensica-calendar-flex-container:not(.expensica-calendar-stacked) > .expensica-calendar-details-container {
+  max-height: 500px;
+  overflow-y: auto;
 }
 
 .expensica-calendar-details-container:hover {
@@ -5428,27 +6609,35 @@ to {
               rgba(15, 15, 15, 0.08) 0px 4px 6px;
 }
 
-.theme-dark .expensica-calendar-details-container {
-  border: 1px solid var(--background-modifier-border);
-}
-
 /* Calendar Details Title */
 .expensica-calendar-details-title {
   margin: 0 0 16px 0;
-  font-size: 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--background-modifier-border);
+  box-shadow: none;
+  color: var(--text-normal) !important;
+  display: block;
+  font-size: var(--expensica-font-size-lg);
   font-weight: 600;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--background-modifier-border);
   letter-spacing: -0.01em;
-  color: var(--text-normal);
-}
-
-.theme-dark .expensica-calendar-details-title {
-  border-bottom: 1px solid var(--background-modifier-border);
+  line-height: 1.3;
+  min-height: 1.3em;
+  max-width: 100%;
+  opacity: 1 !important;
+  overflow: visible;
+  padding: 0 0 10px 0;
+  position: relative;
+  transform: none;
+  visibility: visible !important;
+  white-space: normal;
+  width: 100%;
+  -webkit-text-fill-color: var(--text-normal) !important;
 }
 
 /* Tooltip Redesign */
 .expensica-calendar-tooltip {
+  display: none;
   background-color: var(--background-primary);
   border-radius: 4px;
   padding: 8px 12px;
@@ -5486,7 +6675,7 @@ to {
   }
   
   .expensica-calendar-flex-container {
-    gap: var(--expensica-calendar-panel-gap);
+    gap: var(--expensica-gap-lg);
   }
   
   .expensica-calendar-title {
@@ -5506,8 +6695,7 @@ to {
 
 .expensica-chart-title,
 .expensica-calendar-header-content .expensica-calendar-title,
-.expensica-section-header .expensica-transactions-title,
-.expensica-calendar-details-title {
+.expensica-section-header .expensica-transactions-title {
   background: transparent;
   border: none;
   box-shadow: none;
@@ -5552,17 +6740,9 @@ to {
   display: none;
 }
 
-.expensica-calendar-details-title {
-  border-bottom: 1px solid var(--background-modifier-border);
-  margin: 0 0 16px 0;
-  padding-bottom: 10px;
-  width: 100%;
-}
-
 h2.expensica-calendar-title,
 h2.expensica-transactions-title,
 h3.expensica-chart-title,
-h3.expensica-calendar-details-title,
 h4.expensica-transactions-title {
   -webkit-text-fill-color: var(--text-normal) !important;
   color: var(--text-normal) !important;
@@ -5584,18 +6764,10 @@ h4.expensica-transactions-title {
   flex-wrap: wrap;
 }
 
-.theme-dark .expensica-calendar-legend {
-  border-top: 1px solid var(--background-modifier-border);
-}
-
 .expensica-legend-item {
   display: flex;
   align-items: center;
   font-size: 12px;
-  color: var(--text-muted);
-}
-
-.theme-dark .expensica-legend-item {
   color: var(--text-muted);
 }
 
@@ -5614,21 +6786,15 @@ h4.expensica-transactions-title {
   font-weight: 400;
 }
 
-.theme-dark .week-label, 
-.theme-dark .week-number {
-  color: var(--text-faint);
-}
-
 /* Calendar transactions styling improvements */
 .expensica-calendar-transaction-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--expensica-gap-sm);
   margin-top: 16px;
 }
 
-.expensica-calendar-transaction-item {
-  display: flex;
+.expensica-calendar-transaction-item:not(.expensica-transaction) {
   align-items: center;
   padding: 8px;
   border-radius: 4px;
@@ -5637,16 +6803,30 @@ h4.expensica-transactions-title {
   transition: background-color 0.15s ease;
 }
 
-.theme-dark .expensica-calendar-transaction-item {
-  border: 1px solid var(--background-modifier-border);
-}
-
-.expensica-calendar-transaction-item:hover {
+.expensica-calendar-transaction-item:not(.expensica-transaction):hover {
   background-color: var(--background-modifier-hover);
 }
 
-.theme-dark .expensica-calendar-transaction-item:hover {
-  background-color: var(--background-modifier-hover);
+.expensica-calendar-transaction-item.expensica-transaction .expensica-transaction-meta {
+  display: flex;
+  align-items: center;
+  column-gap: var(--expensica-gap-sm);
+  row-gap: var(--expensica-gap-sm);
+  flex-wrap: nowrap;
+}
+
+.expensica-calendar-transaction-item.expensica-transaction .expensica-transaction-date,
+.expensica-calendar-transaction-item.expensica-transaction .expensica-transaction-category {
+  grid-column: auto;
+}
+
+.expensica-calendar-transaction-item.expensica-transaction .expensica-transaction-date {
+  flex: 0 0 auto;
+}
+
+.expensica-calendar-transaction-item.expensica-transaction .expensica-transaction-category {
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .expensica-calendar-transaction-icon {
@@ -5675,19 +6855,11 @@ h4.expensica-transactions-title {
   color: var(--text-muted);
 }
 
-.theme-dark .expensica-calendar-transaction-meta {
-  color: var(--text-muted);
-}
-
 .expensica-calendar-transaction-category {
   padding: 2px 6px;
   background-color: var(--background-modifier-hover);
   border-radius: 3px;
   font-size: 11px;
-}
-
-.theme-dark .expensica-calendar-transaction-category {
-  background-color: var(--background-modifier-hover);
 }
 
 /* Calendar Summary Styling */
@@ -5699,9 +6871,11 @@ h4.expensica-transactions-title {
   border: 1px solid var(--background-modifier-border);
 }
 
-.theme-dark .expensica-calendar-summary {
-  background-color: var(--background-secondary);
-  border: 1px solid var(--background-modifier-border);
+.expensica-calendar-details-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .expensica-calendar-insight {
@@ -5709,10 +6883,6 @@ h4.expensica-transactions-title {
   color: var(--text-muted);
   margin-bottom: 8px;
   line-height: 1.5;
-}
-
-.theme-dark .expensica-calendar-insight {
-  color: var(--text-muted);
 }
 
 /* Animation for selected day */
@@ -5757,10 +6927,6 @@ h4.expensica-transactions-title {
   width: 24px;
   border-radius: 4px;
   margin-right: 4px;
-}
-
-.theme-dark .expensica-calendar-details-icon {
-  background-color: var(--background-modifier-hover);
 }
 
 .expensica-calendar-details-text {
@@ -6201,7 +7367,7 @@ h4.expensica-transactions-title {
   justify-content: space-between;
   align-items: flex-start;
   flex-direction: column;
-  padding: var(--expensica-panel-gap);
+  padding: var(--expensica-gap-lg);
   border-radius: var(--expensica-radius);
   background-color: var(--background-primary);
   border: 1px solid var(--background-modifier-border);
@@ -6209,13 +7375,13 @@ h4.expensica-transactions-title {
   position: relative;
   animation: fadeIn 0.3s ease;
   flex-wrap: wrap;
-  gap: var(--expensica-header-action-gap);
+  gap: var(--expensica-gap-md);
 }
 
 .shadcn-title-section {
   display: flex;
   align-items: center;
-  gap: var(--expensica-title-gap);
+  gap: var(--expensica-gap-md);
   width: 100%;
 }
 
@@ -6228,12 +7394,12 @@ h4.expensica-transactions-title {
   line-height: 1;
   display: flex;
   align-items: center;
-  gap: var(--expensica-title-gap);
+  gap: var(--expensica-gap-md);
 }
 
 .shadcn-actions {
   display: flex;
-  gap: var(--expensica-control-gap);
+  gap: var(--expensica-gap-md);
   align-items: center;
   flex-wrap: wrap;
   width: 100%;
@@ -6248,7 +7414,7 @@ h4.expensica-transactions-title {
   font-weight: 500;
   height: 36px;
   padding: 0 12px;
-  gap: var(--expensica-control-gap);
+  gap: var(--expensica-gap-md);
   cursor: pointer;
   transition: background-color 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s;
   border: 1px solid var(--background-modifier-border);
@@ -6358,7 +7524,7 @@ h4.expensica-transactions-title {
   z-index: var(--expensica-z-dropdown);
   background-color: var(--background-primary);
   border-radius: var(--expensica-radius-sm);
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--expensica-shadow-dropdown);
   border: 1px solid var(--background-modifier-border);
   overflow: hidden;
   animation: dropdown-in 0.2s ease;
@@ -6423,64 +7589,6 @@ h4.expensica-transactions-title {
   }
 }
 
-/* Dark theme styles for shadcn/ui components */
-.theme-dark .shadcn-header {
-  background-color: var(--background-primary);
-  border-color: var(--background-modifier-border);
-}
-
-.theme-dark .shadcn-title {
-  color: var(--text-normal);
-}
-
-.theme-dark .shadcn-btn {
-  background-color: var(--background-secondary);
-  border-color: var(--background-modifier-border);
-  color: var(--text-normal);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-.theme-dark .shadcn-btn:hover {
-  background-color: var(--background-modifier-hover);
-  border-color: var(--background-modifier-border-hover);
-}
-
-.theme-dark .shadcn-btn-primary {
-  background-color: var(--interactive-accent);
-  color: var(--text-on-accent);
-  border-color: var(--interactive-accent);
-}
-
-.theme-dark .shadcn-btn-primary:hover {
-  background-color: var(--interactive-accent-hover);
-  border-color: var(--interactive-accent-hover);
-}
-
-.theme-dark .shadcn-date-range-current {
-  background-color: var(--background-secondary);
-  border-color: var(--background-modifier-border);
-  color: var(--text-normal);
-}
-
-.theme-dark .shadcn-date-range-current:hover {
-  background-color: var(--background-modifier-hover);
-  border-color: var(--background-modifier-border-hover);
-}
-
-.theme-dark .shadcn-date-range-options {
-  background-color: var(--background-secondary);
-  border-color: var(--background-modifier-border);
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
-}
-
-.theme-dark .shadcn-date-range-option:hover {
-  background-color: var(--background-modifier-hover);
-}
-
-.theme-dark .shadcn-date-range-option-active {
-  background-color: var(--background-modifier-hover);
-}
-
 /* Expensica spacing contract: parent containers own external gaps; panels own only internal padding. */
 .expensica-dashboard > .shadcn-header,
 .expensica-dashboard > .expensica-tabs,
@@ -6489,6 +7597,29 @@ h4.expensica-transactions-title {
 .expensica-dashboard > .expensica-dashboard-grid {
   margin-top: 0;
   margin-bottom: 0;
+}
+
+.expensica-dashboard > .expensica-categories-tab {
+  margin-top: calc(var(--expensica-gap-sm) - var(--expensica-gap-lg));
+  margin-bottom: 0;
+}
+
+.expensica-category-chart-type-selector-overlay {
+  position: absolute;
+  top: var(--expensica-gap-md);
+  right: var(--expensica-gap-md);
+  z-index: var(--expensica-z-dropdown);
+  margin: 0;
+  margin-bottom: 0;
+  padding: 0;
+  border-bottom: 0;
+  background: transparent;
+  width: auto;
+  display: block;
+}
+
+.expensica-category-chart-type-selector-overlay .expensica-chart-type-current {
+  min-width: 0;
 }
 
 .expensica-summary,
@@ -6502,80 +7633,30 @@ h4.expensica-transactions-title {
 
 .expensica-dashboard-grid,
 .expensica-calendar-flex-container {
-  gap: var(--expensica-panel-gap);
+  gap: var(--expensica-gap-lg);
 }
 
 .expensica-chart-container,
 .expensica-calendar-container,
-.expensica-calendar-details-container,
 .shadcn-header,
 .expensica-filter-section {
-  padding: var(--expensica-panel-gap);
+  padding: var(--expensica-gap-lg);
 }
 
-.expensica-card,
-.expensica-transaction {
-  padding: var(--expensica-panel-gap);
+.expensica-card {
+  padding: var(--expensica-gap-md);
 }
 
 .expensica-summary {
-  gap: var(--expensica-card-gap);
+  gap: var(--expensica-gap-lg);
 }
 
 .expensica-transactions {
-  gap: var(--expensica-list-gap);
+  gap: var(--expensica-gap-sm);
 }
 
 .expensica-pagination {
-  gap: var(--expensica-control-gap);
-}
-
-/* Transactions view spacing contract: the view container owns vertical gaps. */
-.workspace-leaf-content[data-type="expensica-transactions-view"] .transactions-container {
-  gap: var(--expensica-section-gap);
-}
-
-.workspace-leaf-content[data-type="expensica-transactions-view"] .transactions-container > .expensica-header,
-.workspace-leaf-content[data-type="expensica-transactions-view"] .transactions-container > .expensica-search-section,
-.workspace-leaf-content[data-type="expensica-transactions-view"] .transactions-container > .expensica-pagination,
-.workspace-leaf-content[data-type="expensica-transactions-view"] .transactions-container > .expensica-transactions-section {
-  margin-top: 0;
-  margin-bottom: 0;
-}
-
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-search-section {
-  padding: 0;
-}
-
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-search-container,
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-custom-search {
-  margin: 0;
-}
-
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-transactions-view-header,
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-pagination {
-  padding: var(--expensica-panel-gap);
-}
-
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-transactions-section {
-  overflow: visible;
-}
-
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-transactions {
-  gap: var(--expensica-list-gap);
-}
-
-.workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-transaction {
-  padding: var(--expensica-panel-gap);
-}
-
-.is-mobile .workspace-leaf-content[data-type="expensica-transactions-view"] .transactions-container {
-  gap: var(--expensica-section-gap);
-}
-
-.is-mobile .workspace-leaf-content[data-type="expensica-transactions-view"] .expensica-pagination {
-  padding: var(--expensica-control-gap) var(--expensica-gap-page);
-  row-gap: var(--expensica-section-gap);
+  gap: var(--expensica-gap-md);
 }
 
 /* Calendar navigation buttons mirror pagination controls. */
@@ -6583,7 +7664,7 @@ h4.expensica-transactions-title {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: var(--expensica-control-gap);
+  gap: var(--expensica-gap-md);
   margin: 0;
   padding: 0;
 }
@@ -6621,9 +7702,201 @@ h4.expensica-transactions-title {
   font-size: var(--expensica-font-size-sm);
 }
 
+.expensica-standard-button,
+button.expensica-standard-button,
+.shadcn-date-range-current,
+.shadcn-btn,
+.expensica-btn,
+.expensica-tab,
+.expensica-chart-option,
+.expensica-chart-type-current,
+.expensica-pagination-btn,
+.expensica-calendar-nav-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--expensica-gap-md);
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--expensica-radius-sm);
+  appearance: none;
+  background: var(--background-primary);
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+  font-size: var(--expensica-font-size-sm);
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: var(--expensica-shadow-control);
+  transition: all 0.2s ease;
+}
+
+.expensica-standard-button.expensica-btn-primary,
+.expensica-standard-button.expensica-btn-secondary,
+.expensica-standard-button.expensica-btn-success,
+.expensica-standard-button.expensica-btn-danger,
+.expensica-standard-button.shadcn-btn-primary,
+.expensica-standard-button.shadcn-btn-success,
+.expensica-standard-button.shadcn-btn-danger {
+  border-color: var(--background-modifier-border);
+  background: var(--background-primary);
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+}
+
+.expensica-standard-button:hover,
+.expensica-standard-button:focus-visible,
+button.expensica-standard-button:hover,
+button.expensica-standard-button:focus-visible,
+.shadcn-date-range-current:hover,
+.shadcn-date-range-current:focus-visible,
+.shadcn-btn:hover,
+.shadcn-btn:focus-visible,
+.expensica-btn:hover,
+.expensica-btn:focus-visible,
+.expensica-tab:hover,
+.expensica-tab:focus-visible,
+.expensica-chart-option:hover,
+.expensica-chart-option:focus-visible,
+.expensica-chart-type-current:hover,
+.expensica-chart-type-current:focus-visible,
+.expensica-pagination-btn:hover:not(.disabled),
+.expensica-pagination-btn:focus-visible:not(.disabled),
+.expensica-calendar-nav-button:hover,
+.expensica-calendar-nav-button:focus-visible {
+  border-color: var(--background-modifier-border-hover);
+  background: var(--background-modifier-hover);
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+  outline: none;
+}
+
+.expensica-standard-button.expensica-btn-primary:hover,
+.expensica-standard-button.expensica-btn-secondary:hover,
+.expensica-standard-button.expensica-btn-success:hover,
+.expensica-standard-button.expensica-btn-danger:hover,
+.expensica-standard-button.shadcn-btn-primary:hover,
+.expensica-standard-button.shadcn-btn-success:hover,
+.expensica-standard-button.shadcn-btn-danger:hover,
+.expensica-standard-button.expensica-btn-primary:focus-visible,
+.expensica-standard-button.expensica-btn-secondary:focus-visible,
+.expensica-standard-button.expensica-btn-success:focus-visible,
+.expensica-standard-button.expensica-btn-danger:focus-visible,
+.expensica-standard-button.shadcn-btn-primary:focus-visible,
+.expensica-standard-button.shadcn-btn-success:focus-visible,
+.expensica-standard-button.shadcn-btn-danger:focus-visible {
+  border-color: var(--background-modifier-border-hover);
+  background: var(--background-modifier-hover);
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.expensica-standard-button.active,
+.expensica-tab.active,
+.expensica-chart-option.active,
+.expensica-pagination-btn.active {
+  border-color: var(--background-modifier-border);
+  background: var(--background-modifier-hover);
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
 /* Dashboard titles share one left alignment; panel padding owns the offset. */
 .expensica-chart-header,
 .expensica-section-header {
   padding-left: 0;
   padding-right: 0;
+}
+
+.expensica-dashboard > .expensica-overview-summary.expensica-summary,
+.expensica-overview-summary.expensica-summary.expensica-budget-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--expensica-gap-md);
+}
+
+.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card,
+.expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card {
+  flex: 1 1 max-content;
+  height: auto;
+  min-height: min-content;
+  min-width: max-content;
+  padding: var(--expensica-gap-md);
+}
+
+.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-title,
+.expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card > .expensica-card-title {
+  gap: var(--expensica-gap-md);
+  margin-block-end: var(--expensica-gap-sm);
+  font-size: var(--font-smallest, var(--font-ui-smallest));
+  font-weight: 400;
+  line-height: var(--expensica-line-height-normal);
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-title svg,
+.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-title span.emoji,
+.expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card > .expensica-card-title svg,
+.expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card > .expensica-card-title span.emoji {
+  width: var(--size-2-3);
+  height: var(--size-2-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  margin-inline-end: var(--expensica-gap-xs);
+}
+
+.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-value,
+.expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card > .expensica-card-value {
+  font-size: var(--font-ui-large);
+  line-height: var(--expensica-line-height-normal);
+  padding-block: var(--expensica-gap-sm);
+  white-space: nowrap;
+}
+
+.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-trend,
+.expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card > .expensica-card-trend {
+  gap: var(--expensica-gap-md);
+  margin-block-start: var(--expensica-gap-sm);
+  font-size: var(--expensica-card-trend-font-size);
+  font-weight: 400;
+  line-height: var(--expensica-line-height-normal);
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-trend svg,
+.expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card > .expensica-card-trend svg {
+  width: var(--expensica-card-trend-icon-size);
+  height: var(--expensica-card-trend-icon-size);
+  stroke-width: var(--expensica-card-trend-icon-stroke-width);
+  flex: 0 0 var(--expensica-card-trend-icon-size);
+}
+
+.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-title,
+.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-value,
+.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-trend,
+.expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card > .expensica-card-title,
+.expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card > .expensica-card-value,
+.expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card > .expensica-card-trend {
+  position: relative;
+  z-index: 1;
+}
+
+.expensica-modal .expensica-category-name-row > .expensica-category-picker-trigger,
+.expensica-modal .expensica-category-name-row > .expensica-category-color-button {
+  box-sizing: border-box;
+  width: var(--size-4-8, 32px);
+  min-width: var(--size-4-8, 32px);
+  height: var(--size-4-8, 32px);
+  min-height: var(--size-4-8, 32px);
+  padding: 0;
+  flex: 0 0 var(--size-4-8, 32px);
+  align-self: center;
 }
