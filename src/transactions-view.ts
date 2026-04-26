@@ -678,6 +678,19 @@ export class ExpensicaTransactionsView implements TransactionView {
         }
     }
 
+    applyCategoryFilter(categoryId: string) {
+        this.selectedCategoryIds = this.plugin.getCategoryById(categoryId) ? [categoryId] : [];
+        this.currentPage = 1;
+        this.applyFilters(true);
+        this.persistTransactionsState();
+
+        if (this.embeddedContentEl) {
+            this.refreshTransactionsListOnly();
+            this.refreshSelectedFilterChips();
+            this.refreshCategoryFilterOptions();
+        }
+    }
+
     createDateRangeFromState(type: DateRangeType, startDate?: Date, endDate?: Date): DateRange {
         if (type === DateRangeType.CUSTOM && startDate && endDate) {
             return this.getDateRange(DateRangeType.CUSTOM, startDate, endDate);
