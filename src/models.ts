@@ -2,12 +2,20 @@
 
 export enum TransactionType {
     EXPENSE = 'expense',
-    INCOME = 'income'
+    INCOME = 'income',
+    INTERNAL = 'internal'
   }
   
-  export enum CategoryType {
+export enum CategoryType {
     EXPENSE = 'expense',
     INCOME = 'income'
+  }
+
+  export enum AccountType {
+    CHEQUING = 'chequing',
+    SAVING = 'saving',
+    CREDIT = 'credit',
+    OTHER = 'other'
   }
   
   export enum ColorScheme {
@@ -25,6 +33,16 @@ export enum TransactionType {
     id: string;
     name: string;
     type: CategoryType;
+  }
+
+  export interface Account {
+    id: string;
+    name: string;
+    type: AccountType;
+    createdAt: string;
+    color?: string;
+    creditLimit?: number;
+    isDefault?: boolean;
   }
 
   export type CategoryEmojiSettings = Record<string, string>;
@@ -87,6 +105,7 @@ export enum TransactionType {
     subscriptions: ColorPalette.softPeriwinkle,
     insurance: ColorPalette.bronze,
     taxes: ColorPalette.lightCoral,
+    internal: ColorPalette.coolSteel,
     other_expense: ColorPalette.coolSteel
   };
 
@@ -110,6 +129,7 @@ export enum TransactionType {
     subscriptions: CATEGORY_COLORS_BY_ID.subscriptions,
     insurance: CATEGORY_COLORS_BY_ID.insurance,
     taxes: CATEGORY_COLORS_BY_ID.taxes,
+    internal: CATEGORY_COLORS_BY_ID.internal,
     'other expenses': CATEGORY_COLORS_BY_ID.other_expense
   };
   
@@ -127,8 +147,37 @@ export interface Transaction {
   amount: number;
     description: string;
     category: string; // Category ID
+  account?: string; // type-name
+  fromAccount?: string; // type-name
+  toAccount?: string; // type-name
   notes?: string;
 }
+
+export const INTERNAL_CATEGORY_ID = 'internal';
+
+export const DEFAULT_ACCOUNT_ID = 'default-account';
+export const DEFAULT_ACCOUNT_NAME = 'Default';
+export const DEFAULT_ACCOUNT: Account = {
+  id: DEFAULT_ACCOUNT_ID,
+  name: DEFAULT_ACCOUNT_NAME,
+  type: AccountType.OTHER,
+  createdAt: new Date(0).toISOString(),
+  isDefault: true
+};
+
+const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
+  [AccountType.CHEQUING]: 'Chequing',
+  [AccountType.SAVING]: 'Savings',
+  [AccountType.CREDIT]: 'Credit',
+  [AccountType.OTHER]: 'Other'
+};
+
+const ACCOUNT_TYPE_EMOJIS: Record<AccountType, string> = {
+  [AccountType.CHEQUING]: '🏦',
+  [AccountType.SAVING]: '🏦',
+  [AccountType.CREDIT]: '💳',
+  [AccountType.OTHER]: '🏦'
+};
 
 let hasWarnedAboutIdFallback = false;
   
@@ -146,6 +195,133 @@ export function generateId(): string {
     : fallbackRandomIdPart();
 
   return `${datePart}-${timePart}-${randomPart}`;
+}
+
+export function normalizeAccountName(name: string): string {
+  return name.trim().replace(/\s+/g, ' ');
+}
+
+export function formatAccountReference(type: AccountType, name: string): string {
+  const normalizedName = normalizeAccountName(name).toLowerCase();
+  return `${type}-${normalizedName}`;
+}
+
+export function parseAccountReference(account?: string | null): { type: AccountType; name: string; reference: string } {
+  if (!account) {
+    return {
+      type: DEFAULT_ACCOUNT.type,
+      name: DEFAULT_ACCOUNT.name,
+      reference: formatAccountReference(DEFAULT_ACCOUNT.type, DEFAULT_ACCOUNT.name)
+    };
+  }
+
+  const [rawType, ...nameParts] = account.split('-');
+  const normalizedType = rawType?.toLowerCase();
+  const type = normalizedType === AccountType.CREDIT
+    ? AccountType.CREDIT
+    : normalizedType === AccountType.SAVING
+      ? AccountType.SAVING
+      : normalizedType === AccountType.OTHER
+        ? AccountType.OTHER
+        : AccountType.CHEQUING;
+  const rawName = normalizeAccountName(nameParts.join('-')) || ACCOUNT_TYPE_LABELS[type];
+  const name = rawName
+    .split(' ')
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+
+  return {
+    type,
+    name,
+    reference: formatAccountReference(type, rawName)
+  };
+}
+
+export function getAccountTypeLabel(type: AccountType): string {
+  return ACCOUNT_TYPE_LABELS[type];
+}
+
+export function getAccountEmoji(type: AccountType): string {
+  return ACCOUNT_TYPE_EMOJIS[type];
+}
+
+export function normalizePaletteColor(color?: string | null): string | null {
+  if (!color) {
+    return null;
+  }
+
+  if (/^#[0-9a-f]{6}$/i.test(color)) {
+    return color;
+  }
+
+  if (/^#[0-9a-f]{8}$/i.test(color)) {
+    return color.slice(0, 7);
+  }
+
+  if (/^#[0-9a-f]{3}$/i.test(color)) {
+    return `#${color.slice(1).split('').map(char => `${char}${char}`).join('')}`;
+  }
+
+  return null;
+}
+
+export function getAccountColor(account: Account, accounts: Account[] = [account]): string {
+  const storedColor = normalizePaletteColor(account.color);
+  if (storedColor) {
+    return storedColor;
+  }
+
+  const palette = ColorPalette.colors.map(color => color.slice(0, 7));
+  const stableKey = account.id || formatAccountReference(account.type, account.name);
+  const index = Array.from(stableKey).reduce((hash, character) => {
+    return ((hash * 31) + character.charCodeAt(0)) >>> 0;
+  }, 0) % palette.length;
+
+  return palette[index];
+}
+
+export function getNextAccountColor(accounts: Account[]): string {
+  const palette = ColorPalette.colors.map(color => color.slice(0, 7));
+  const usedColors = new Set(accounts
+    .map(account => normalizePaletteColor(account.color))
+    .filter((color): color is string => !!color));
+
+  const availableColor = palette.find(color => !usedColors.has(color));
+  if (availableColor) {
+    return availableColor;
+  }
+
+  return palette[accounts.length % palette.length];
+}
+
+export function compareAccounts(a: Account, b: Account): number {
+  if (a.isDefault && !b.isDefault) {
+    return -1;
+  }
+
+  if (!a.isDefault && b.isDefault) {
+    return 1;
+  }
+
+  const order = {
+    [AccountType.CHEQUING]: 1,
+    [AccountType.CREDIT]: 2,
+    [AccountType.SAVING]: 3,
+    [AccountType.OTHER]: 4
+  };
+
+  const typeDifference = order[a.type] - order[b.type];
+  if (typeDifference !== 0) {
+    return typeDifference;
+  }
+
+  const createdAtDifference = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  if (createdAtDifference !== 0) {
+    return createdAtDifference;
+  }
+
+  return a.name.localeCompare(b.name);
 }
 
 function fallbackRandomIdPart(): string {
@@ -204,6 +380,25 @@ function fallbackRandomIdPart(): string {
     return getTransactionTime(transaction)?.slice(0, 5) ?? null;
   }
 
+  export function getCategoryTypeForTransactionType(type: TransactionType): CategoryType {
+    return type === TransactionType.INCOME ? CategoryType.INCOME : CategoryType.EXPENSE;
+  }
+
+  export function isInternalTransaction(transaction: Transaction): boolean {
+    return transaction.type === TransactionType.INTERNAL;
+  }
+
+  export function getDefaultTransactionCategory(type: TransactionType, categories: Category[]): string {
+    if (type === TransactionType.INTERNAL) {
+      return INTERNAL_CATEGORY_ID;
+    }
+
+    const fallbackId = type === TransactionType.INCOME ? 'other_income' : 'other_expense';
+    return categories.find(category => category.id === fallbackId)?.id
+      || categories.find(category => category.type === getCategoryTypeForTransactionType(type))?.id
+      || '';
+  }
+
   export function sortTransactionsByDateTimeDesc<T extends Transaction>(transactions: T[]): T[] {
     return transactions
       .map((transaction, index) => ({ transaction, index }))
@@ -235,9 +430,11 @@ function fallbackRandomIdPart(): string {
     return sortTransactionsByDateTimeDesc(transactions)
       .reverse()
       .reduce((balances, transaction) => {
-        runningBalance += transaction.type === TransactionType.INCOME
-          ? transaction.amount
-          : -transaction.amount;
+        if (transaction.type === TransactionType.INCOME) {
+          runningBalance += transaction.amount;
+        } else if (transaction.type === TransactionType.EXPENSE) {
+          runningBalance -= transaction.amount;
+        }
 
         balances[transaction.id] = runningBalance;
         return balances;
@@ -512,6 +709,7 @@ function fallbackRandomIdPart(): string {
     { id: 'subscriptions', name: 'Subscriptions', type: CategoryType.EXPENSE },
     { id: 'insurance', name: 'Insurance', type: CategoryType.EXPENSE },
     { id: 'taxes', name: 'Taxes', type: CategoryType.EXPENSE },
+    { id: 'internal', name: 'Internal', type: CategoryType.EXPENSE },
     { id: 'other_expense', name: 'Other Expenses', type: CategoryType.EXPENSE },
   ];
   
@@ -548,6 +746,7 @@ function fallbackRandomIdPart(): string {
     subscriptions: '💳',
     insurance: '☂️',
     taxes: '📝',
+    internal: '🔁',
     other_expense: '🤷‍♂️',
     salary: '💵',
     freelance: '💻',

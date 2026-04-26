@@ -1,7 +1,89 @@
-import { Transaction, TransactionType, formatCurrency, ColorScheme, parseLocalDate, getCategoryColor, sortTransactionsByDateTimeDesc, getRunningBalanceByTransactionId } from '../models';
+import { AccountType, Transaction, TransactionType, formatCurrency, ColorScheme, parseLocalDate, sortTransactionsByDateTimeDesc, getCurrencyByCode } from '../models';
 import ExpensicaPlugin from '../../main';
 import * as d3 from 'd3';
 import { renderTransactionCard } from '../transaction-card';
+
+function getAccountTransactionAmount(plugin: ExpensicaPlugin, transaction: Transaction, accountReference: string): number {
+    const account = plugin.findAccountByReference(accountReference);
+    const isCredit = account?.type === AccountType.CREDIT;
+
+    if (transaction.type === TransactionType.INTERNAL) {
+        const fromAccount = transaction.fromAccount ? plugin.normalizeTransactionAccountReference(transaction.fromAccount) : '';
+        const toAccount = transaction.toAccount ? plugin.normalizeTransactionAccountReference(transaction.toAccount) : '';
+        if (fromAccount === accountReference) {
+            return isCredit ? transaction.amount : -transaction.amount;
+        }
+        if (toAccount === accountReference) {
+            return isCredit ? -transaction.amount : transaction.amount;
+        }
+        return 0;
+    }
+
+    const transactionAccount = Object.prototype.hasOwnProperty.call(transaction, 'account')
+        ? plugin.normalizeTransactionAccountReference(transaction.account)
+        : plugin.normalizeTransactionAccountReference(undefined);
+
+    if (transactionAccount !== accountReference) {
+        return 0;
+    }
+
+    if (transaction.type === TransactionType.INCOME) {
+        return isCredit ? -transaction.amount : transaction.amount;
+    }
+
+    return transaction.type === TransactionType.EXPENSE
+        ? (isCredit ? transaction.amount : -transaction.amount)
+        : 0;
+}
+
+function getRunningBalanceByTransactionIdForAccount(
+    plugin: ExpensicaPlugin,
+    accountReference: string,
+    transactions: Transaction[]
+): Record<string, number> {
+    let runningBalance = 0;
+    const normalizeBalanceValue = (value: number) => Math.abs(value) < 0.000001 ? 0 : value;
+
+    return sortTransactionsByDateTimeDesc(transactions)
+        .reverse()
+        .reduce((balances, transaction) => {
+            runningBalance = normalizeBalanceValue(runningBalance + getAccountTransactionAmount(plugin, transaction, accountReference));
+            balances[transaction.id] = runningBalance;
+            return balances;
+        }, {} as Record<string, number>);
+}
+
+function formatRunningBalanceLabel(plugin: ExpensicaPlugin, balance: number, accountReference?: string): string {
+    const currency = getCurrencyByCode(plugin.settings.defaultCurrency) || getCurrencyByCode('USD');
+    const code = currency?.code || 'USD';
+    const fallbackSymbol = currency?.symbol || '$';
+    let symbol = fallbackSymbol;
+
+    try {
+        symbol = new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: code,
+            currencyDisplay: 'narrowSymbol'
+        }).formatToParts(0).find(part => part.type === 'currency')?.value || fallbackSymbol;
+    } catch {
+        symbol = fallbackSymbol;
+    }
+
+    const normalizedSymbol = symbol.replace(/[A-Za-z]+/g, '').trim() || '$';
+    const absoluteAmount = Math.abs(balance);
+    const fractionDigits = new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(absoluteAmount);
+    const sign = balance < 0 ? '-' : '';
+    const amount = `${sign}${normalizedSymbol}${fractionDigits}`;
+    if (!accountReference) {
+        return amount;
+    }
+
+    const account = plugin.getTransactionAccountDisplay(accountReference);
+    return `${account.name}: ${amount}`;
+}
 
 interface DayData {
     date: Date;
@@ -713,12 +795,11 @@ export class CalendarHeatmap {
             59,
             999
         );
+        const defaultAccountReference = this.plugin.normalizeTransactionAccountReference(undefined);
         const dayBalance = this.plugin.getAllTransactions()
             .filter(t => parseLocalDate(t.date).getTime() <= selectedDayEnd.getTime())
             .reduce((balance, transaction) => {
-                return transaction.type === TransactionType.INCOME
-                    ? balance + transaction.amount
-                    : balance - transaction.amount;
+                return balance + getAccountTransactionAmount(this.plugin, transaction, defaultAccountReference);
             }, 0);
         
         // Add title with day of week
@@ -831,17 +912,24 @@ export class CalendarHeatmap {
                 }
                 
                 // Add category breakdown if there are multiple categories
-                const categories = new Map<string, number>();
+                const categories = new Map<string, { amount: number; color: string }>();
                 
                 expenseTransactions.forEach(t => {
                     const category = this.plugin.getCategoryById(t.category);
                     const categoryName = category ? category.name : 'Unknown';
+                    const categoryColor = category
+                        ? this.plugin.getCategoryColor(category.id, category.name)
+                        : this.plugin.getCategoryColor(t.category, categoryName);
                     
                     if (!categories.has(categoryName)) {
-                        categories.set(categoryName, 0);
+                        categories.set(categoryName, {
+                            amount: 0,
+                            color: categoryColor
+                        });
                     }
                     
-                    categories.set(categoryName, categories.get(categoryName)! + t.amount);
+                    const existingCategory = categories.get(categoryName)!;
+                    existingCategory.amount += t.amount;
                 });
                 
                 if (categories.size > 1) {
@@ -866,16 +954,17 @@ export class CalendarHeatmap {
                     
                     // Sort categories by amount
                     const sortedCategories = Array.from(categories.entries())
-                        .sort((a, b) => b[1] - a[1]);
+                        .sort((a, b) => b[1].amount - a[1].amount);
                     
                     // Calculate bar widths based on percentage
-                    sortedCategories.forEach(([categoryName, amount]) => {
+                    sortedCategories.forEach(([categoryName, categoryData]) => {
+                        const amount = categoryData.amount;
                         const percentage = (amount / totalExpenses) * 100;
                         const categoryBar = breakdownChart.createDiv('expensica-category-bar');
                         
                         // Create the color bar
                         const colorBar = categoryBar.createDiv('expensica-bar-fill color-bar-fill color-bar-hue');
-                        colorBar.setAttribute('style', `--color-bar-percentage: ${percentage}%; --category-color: ${getCategoryColor(categoryName)}`);
+                        colorBar.setAttribute('style', `--color-bar-percentage: ${percentage}%; --category-color: ${categoryData.color}`);
 
                         // Label with amount and percentage
                         const labelEl = categoryBar.createDiv('expensica-bar-label');
@@ -901,14 +990,59 @@ export class CalendarHeatmap {
         
         // Sort transactions by creation time (newest first), with legacy ID/JSON-order fallbacks.
         const sortedTransactions = sortTransactionsByDateTimeDesc(expenseTransactions);
-        const runningBalances = getRunningBalanceByTransactionId(this.plugin.getAllTransactions());
+        const runningBalances = getRunningBalanceByTransactionIdForAccount(
+            this.plugin,
+            defaultAccountReference,
+            this.plugin.getAllTransactions()
+        );
+        const internalBalanceMaps = new Map<string, Record<string, number>>();
+        const ensureBalanceMap = (accountReference: string): Record<string, number> => {
+            const existing = internalBalanceMaps.get(accountReference);
+            if (existing) {
+                return existing;
+            }
+
+            const balances = accountReference === defaultAccountReference
+                ? runningBalances
+                : getRunningBalanceByTransactionIdForAccount(this.plugin, accountReference, this.plugin.getAllTransactions());
+            internalBalanceMaps.set(accountReference, balances);
+            return balances;
+        };
         
         // Add each transaction
         sortedTransactions.forEach((transaction, index) => {
+            const transactionAccountReference = this.plugin.settings.enableAccounts
+                ? this.plugin.normalizeTransactionAccountReference(transaction.account)
+                : defaultAccountReference;
+            const transactionBalances = ensureBalanceMap(transactionAccountReference);
+            let runningBalanceLabel = formatRunningBalanceLabel(
+                this.plugin,
+                transactionBalances[transaction.id] ?? 0
+            );
+            let secondaryRunningBalanceLabel: string | undefined;
+
+            if (this.plugin.settings.enableAccounts && transaction.type === TransactionType.INTERNAL) {
+                const fromAccountReference = this.plugin.normalizeTransactionAccountReference(transaction.fromAccount);
+                const toAccountReference = this.plugin.normalizeTransactionAccountReference(transaction.toAccount);
+                const fromBalances = ensureBalanceMap(fromAccountReference);
+                const toBalances = ensureBalanceMap(toAccountReference);
+                runningBalanceLabel = formatRunningBalanceLabel(
+                    this.plugin,
+                    fromBalances[transaction.id] ?? 0,
+                    fromAccountReference
+                );
+                secondaryRunningBalanceLabel = formatRunningBalanceLabel(
+                    this.plugin,
+                    toBalances[transaction.id] ?? 0,
+                    toAccountReference
+                );
+            }
+
             const transactionEl = renderTransactionCard(transactionList, {
                 plugin: this.plugin,
                 transaction,
-                runningBalance: runningBalances[transaction.id] ?? 0,
+                runningBalanceLabel,
+                secondaryRunningBalanceLabel,
                 onEdit: this.onTransactionEdit,
                 onCategoryChange: async (transaction, categoryId) => {
                     await this.updateTransactionCategory(transaction, categoryId);

@@ -1,19 +1,24 @@
 import { Menu } from 'obsidian';
 import {
     CategoryType,
+    getAccountColor,
     getCurrencyByCode,
     getTransactionDisplayTime,
+    INTERNAL_CATEGORY_ID,
+    parseAccountReference,
     Transaction,
     TransactionType
 } from './models';
 import type ExpensicaPlugin from '../main';
 import { renderCategoryChip } from './category-chip';
 import { showCategoryQuickMenu } from './category-quick-menu';
+import { showExpensicaNotice } from './notice';
 
 interface TransactionCardOptions {
     plugin: ExpensicaPlugin;
     transaction: Transaction;
-    runningBalance: number;
+    runningBalanceLabel: string;
+    secondaryRunningBalanceLabel?: string;
     onEdit?: (transaction: Transaction) => void;
     onCategoryChange?: (transaction: Transaction, categoryId: string) => void | Promise<void>;
     selectable?: boolean;
@@ -22,7 +27,7 @@ interface TransactionCardOptions {
 }
 
 export function renderTransactionCard(container: HTMLElement, options: TransactionCardOptions): HTMLElement {
-    const { plugin, transaction, runningBalance, onEdit, onCategoryChange, selectable, selected, onSelectionToggle } = options;
+    const { plugin, transaction, runningBalanceLabel, secondaryRunningBalanceLabel, onEdit, onCategoryChange, selectable, selected, onSelectionToggle } = options;
     const transactionEl = container.createDiv('expensica-transaction');
     transactionEl.setAttribute('data-transaction-id', transaction.id);
     transactionEl.toggleClass('is-selected', !!selected);
@@ -90,6 +95,24 @@ export function renderTransactionCard(container: HTMLElement, options: Transacti
         timeEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> ${transactionTime}`;
     }
 
+    if (plugin.settings.enableAccounts && transaction.type === TransactionType.INTERNAL) {
+        const fromAccount = parseAccountReference(transaction.fromAccount || plugin.normalizeTransactionAccountReference(undefined));
+        const toAccount = parseAccountReference(transaction.toAccount || plugin.normalizeTransactionAccountReference(undefined));
+        const accounts = plugin.getAccounts();
+        const fromAccountRecord = plugin.findAccountByReference(transaction.fromAccount);
+        const toAccountRecord = plugin.findAccountByReference(transaction.toAccount);
+        const accountEl = metaEl.createEl('span', { cls: 'expensica-transaction-account' });
+        renderTransactionAccountEndpoint(accountEl, fromAccount.name, fromAccountRecord ? getAccountColor(fromAccountRecord, accounts) : undefined);
+        const separatorEl = accountEl.createSpan({ cls: 'expensica-transaction-account-separator' });
+        separatorEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg>';
+        renderTransactionAccountEndpoint(accountEl, toAccount.name, toAccountRecord ? getAccountColor(toAccountRecord, accounts) : undefined);
+    } else if (plugin.settings.enableAccounts) {
+        const accountDisplay = plugin.getTransactionAccountDisplay(transaction.account);
+        const accountEl = metaEl.createEl('span', { cls: 'expensica-transaction-account' });
+        accountEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg> ${accountDisplay.name}`;
+        accountEl.style.color = getAccountColor(accountDisplay, plugin.getAccounts());
+    }
+
     if (plugin.settings.showTransactionCategoryLabels) {
         const categorySpan = renderCategoryChip(metaEl, {
             emoji: categoryDisplay.emoji,
@@ -110,6 +133,10 @@ export function renderTransactionCard(container: HTMLElement, options: Transacti
             categorySpan.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
+                if (transaction.category === INTERNAL_CATEGORY_ID || transaction.type === TransactionType.INTERNAL) {
+                    showExpensicaNotice('You cannot change this category');
+                    return;
+                }
                 showTransactionCategoryMenu(event, plugin, transaction, categoryDisplay.type, onCategoryChange);
             });
             categorySpan.addEventListener('keydown', (event) => {
@@ -119,6 +146,10 @@ export function renderTransactionCard(container: HTMLElement, options: Transacti
 
                 event.preventDefault();
                 event.stopPropagation();
+                if (transaction.category === INTERNAL_CATEGORY_ID || transaction.type === TransactionType.INTERNAL) {
+                    showExpensicaNotice('You cannot change this category');
+                    return;
+                }
                 showTransactionCategoryMenu(event, plugin, transaction, categoryDisplay.type, onCategoryChange);
             });
         }
@@ -126,16 +157,27 @@ export function renderTransactionCard(container: HTMLElement, options: Transacti
 
     const amountEl = transactionEl.createDiv('expensica-transaction-amount');
     const formattedAmount = formatTransactionCardCurrency(transaction.amount, plugin.settings.defaultCurrency);
-    const amountClass = transaction.type === TransactionType.INCOME ? 'expensica-income' : 'expensica-expense';
-    const amountPrefix = transaction.type === TransactionType.INCOME ? '+' : '-';
+    const amountClass = transaction.type === TransactionType.INCOME
+        ? 'expensica-income'
+        : transaction.type === TransactionType.EXPENSE
+            ? 'expensica-expense'
+            : '';
+    const amountPrefix = transaction.type === TransactionType.INCOME ? '+' : transaction.type === TransactionType.EXPENSE ? '-' : '';
     amountEl.createEl('span', {
         text: `${amountPrefix}${formattedAmount}`,
         cls: amountClass
     });
-    amountEl.createEl('span', {
-        text: formatTransactionCardCurrency(runningBalance, plugin.settings.defaultCurrency),
-        cls: 'expensica-transaction-balance'
+    const balanceEl = amountEl.createDiv('expensica-transaction-balance');
+    balanceEl.createEl('span', {
+        text: runningBalanceLabel,
+        cls: 'expensica-transaction-balance-label'
     });
+    if (secondaryRunningBalanceLabel) {
+        balanceEl.createEl('span', {
+            text: secondaryRunningBalanceLabel,
+            cls: 'expensica-transaction-balance-label'
+        });
+    }
 
     return transactionEl;
 }
@@ -185,6 +227,21 @@ function getTransactionCardCurrencySymbol(currencyCode: string, fallbackSymbol: 
 
 function stripCurrencyAbbreviation(symbol: string): string {
     return symbol.replace(/[A-Za-z]+/g, '').trim();
+}
+
+function renderTransactionAccountEndpoint(container: HTMLElement, name: string, color?: string): void {
+    const endpointEl = container.createSpan({ cls: 'expensica-transaction-account-endpoint' });
+    if (color) {
+        endpointEl.style.color = color;
+    }
+
+    const iconEl = endpointEl.createSpan({ cls: 'expensica-transaction-account-icon' });
+    iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>';
+
+    endpointEl.createSpan({
+        text: name,
+        cls: 'expensica-transaction-account-name'
+    });
 }
 
 function showTransactionCategoryMenu(
