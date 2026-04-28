@@ -3863,6 +3863,7 @@ to {
 
 .expensica-page-size-selector {
     min-width: 80px;
+    z-index: 1;
 }
 
 .expensica-page-size-current {
@@ -6632,6 +6633,10 @@ button.expensica-category-card-search-button:active {
     outline: none;
 }
 
+.expensica-dashboard-transactions-tab .expensica-category-filter-container.is-open {
+    z-index: calc(var(--expensica-z-dropdown) + 6);
+}
+
 .expensica-dashboard-transactions-tab .expensica-filter-menu,
 .expensica-dashboard-transactions-tab .expensica-filter-submenu {
     min-width: 190px;
@@ -6650,7 +6655,7 @@ button.expensica-category-card-search-button:active {
     display: flex;
     flex-direction: column;
     gap: var(--expensica-gap-sm);
-    z-index: var(--expensica-z-dropdown);
+    z-index: calc(var(--expensica-z-dropdown) + 20);
 }
 
 .expensica-dashboard-transactions-tab .expensica-filter-menu.is-hidden,
@@ -6686,6 +6691,7 @@ button.expensica-category-card-search-button:active {
     overflow-y: auto;
     right: calc(100% - 1px);
     top: 0;
+    z-index: calc(var(--expensica-z-dropdown) + 21);
 }
 
 .expensica-dashboard-transactions-tab .expensica-filter-submenu-options {

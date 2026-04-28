@@ -916,7 +916,7 @@ export class CalendarHeatmap {
                 
                 expenseTransactions.forEach(t => {
                     const category = this.plugin.getCategoryById(t.category);
-                    const categoryName = category ? category.name : 'Unknown';
+                    const categoryName = category ? category.name : 'Other Expenses';
                     const categoryColor = category
                         ? this.plugin.getCategoryColor(category.id, category.name)
                         : this.plugin.getCategoryColor(t.category, categoryName);

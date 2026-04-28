@@ -52,10 +52,10 @@ export function renderTransactionCard(container: HTMLElement, options: Transacti
     const categoryDisplay = category ?
         { id: category.id, name: category.name, emoji: plugin.getCategoryEmoji(category.id), type: category.type } :
         {
-            id: 'unknown',
-            name: 'Unknown Category',
-            emoji: '?',
-            type: transaction.type === TransactionType.INCOME ? CategoryType.INCOME : CategoryType.EXPENSE
+            id: 'other_expense',
+            name: 'Other Expenses',
+            emoji: plugin.getCategoryEmoji('other_expense'),
+            type: CategoryType.EXPENSE
         };
     const selectorEl = transactionEl.createEl('button', {
         cls: 'expensica-transaction-selector',
@@ -121,10 +121,6 @@ export function renderTransactionCard(container: HTMLElement, options: Transacti
             title: !category ? 'This category was deleted. Edit the transaction to select a new category.' : undefined
         });
         categorySpan.addClass('expensica-transaction-category');
-
-        if (!category) {
-            categorySpan.addClass('category-unknown');
-        }
 
         if (onCategoryChange) {
             categorySpan.setAttribute('role', 'button');

@@ -92,7 +92,7 @@ export class ExportService {
     // Generate CSV rows
     transactions.forEach(transaction => {
       const category = categories.find(c => c.id === transaction.category);
-      const categoryName = category ? category.name : 'Unknown';
+      const categoryName = category ? category.name : 'Other Expenses';
       
       // Format each field and handle potential commas in text fields
       const date = transaction.date;
@@ -183,7 +183,7 @@ export class ExportService {
               day: 'numeric'
             }),
             transaction.description,
-            category ? category.name : 'Unknown',
+            category ? category.name : 'Other Expenses',
             transaction.type === TransactionType.EXPENSE ? 'Expense' : 'Income',
             Math.abs(transaction.amount).toLocaleString(locale, {
               minimumFractionDigits: 2,
