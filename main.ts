@@ -89,6 +89,7 @@ type LegacyCategory = Category & { emoji?: string };
 const LEADING_CATEGORY_EMOJI_PATTERN = /^([\p{Extended_Pictographic}\uFE0F\u200D]+)\s+/u;
 const INTERNAL_CATEGORY_NAME = DEFAULT_CATEGORIES.find(category => category.id === INTERNAL_CATEGORY_ID)?.name || 'Internal';
 const DEFAULT_CATEGORY_IDS = new Set(DEFAULT_CATEGORIES.map(category => category.id));
+const LEGACY_UNKNOWN_CATEGORY_IDS = new Set(['unknown', 'unknown_category', 'unknown category']);
 
 // Define a separate interface for our transactions data
 interface TransactionsData {
@@ -726,7 +727,10 @@ export default class ExpensicaPlugin extends Plugin {
 
     // Get category by ID
     getCategoryById(id: string): Category | undefined {
-        return this.settings.categories.find(c => c.id === id);
+        const normalizedId = typeof id === 'string' && LEGACY_UNKNOWN_CATEGORY_IDS.has(id.trim().toLowerCase())
+            ? 'other_expense'
+            : id;
+        return this.settings.categories.find(c => c.id === normalizedId);
     }
 
     getCategoryEmoji(categoryId: string): string {
@@ -1088,9 +1092,12 @@ export default class ExpensicaPlugin extends Plugin {
             };
         }
 
+        const normalizedCategory = this.getCategoryById(transaction.category)?.id || 'other_expense';
+
         return {
             ...transaction,
             description,
+            category: normalizedCategory,
             account: this.normalizeTransactionAccountReference(transaction.account),
             fromAccount: undefined,
             toAccount: undefined
@@ -1184,9 +1191,12 @@ export default class ExpensicaPlugin extends Plugin {
                 };
             }
 
+            const normalizedCategory = this.getCategoryById(transaction.category)?.id || 'other_expense';
+
             return {
                 ...transaction,
                 type: normalizedType,
+                category: normalizedCategory,
                 account: Object.prototype.hasOwnProperty.call(transaction, 'account')
                     ? this.normalizeTransactionAccountReference(transaction.account)
                     : undefined,
@@ -1380,7 +1390,7 @@ export default class ExpensicaPlugin extends Plugin {
                 // Add each transaction to the table
                 for (const transaction of sortedTransactions) {
                     const category = this.getCategoryById(transaction.category);
-                    const categoryName = category ? `${this.getCategoryEmoji(category.id)} ${category.name}` : '❓ Unknown';
+                    const categoryName = category ? `${this.getCategoryEmoji(category.id)} ${category.name}` : `${this.getCategoryEmoji('other_expense')} Other Expenses`;
                     const notes = transaction.notes || '';
                     
                     // Format amount with color indicator
@@ -1512,7 +1522,7 @@ export default class ExpensicaPlugin extends Plugin {
                     // Add each transaction to the table
                     for (const transaction of sortedTransactions) {
                         const category = this.getCategoryById(transaction.category);
-                        const categoryName = category ? `${this.getCategoryEmoji(category.id)} ${category.name}` : '❓ Unknown';
+                        const categoryName = category ? `${this.getCategoryEmoji(category.id)} ${category.name}` : `${this.getCategoryEmoji('other_expense')} Other Expenses`;
                         const notes = transaction.notes || '';
                         
                         // Format amount with color indicator

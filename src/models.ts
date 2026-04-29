@@ -879,7 +879,7 @@ function fallbackRandomIdPart(): string {
         .filter(t => t.type === TransactionType.EXPENSE)
         .forEach(t => {
           const category = categories.find(c => c.id === t.category);
-          const categoryName = category ? category.name : 'Unknown Category';
+          const categoryName = category ? category.name : 'Other Expenses';
           if (!expenses[categoryName]) {
             expenses[categoryName] = 0;
           }

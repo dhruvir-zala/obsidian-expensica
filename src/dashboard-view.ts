@@ -4590,7 +4590,7 @@ export class ExpensicaDashboardView extends ItemView {
             }
 
             const category = this.plugin.settings.categories.find(candidate => candidate.id === transaction.category);
-            const name = category?.name || 'Unknown Category';
+            const name = category?.name || 'Other Expenses';
             const existing = totals.get(name);
 
             if (existing) {
@@ -4618,7 +4618,7 @@ export class ExpensicaDashboardView extends ItemView {
             }
 
             const category = this.plugin.settings.categories.find(candidate => candidate.id === transaction.category);
-            const name = category?.name || 'Unknown Category';
+            const name = category?.name || 'Other Expenses';
             const existing = totals.get(name);
 
             if (existing) {
