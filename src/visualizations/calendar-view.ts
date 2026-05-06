@@ -87,7 +87,9 @@ function formatRunningBalanceLabel(plugin: ExpensicaPlugin, balance: number, acc
 
 interface DayData {
     date: Date;
+    dateKey: string;
     totalAmount: number;
+    dayBalance: number;
     transactions: Transaction[];
     formattedDate: string;
 }
@@ -116,6 +118,9 @@ export class CalendarHeatmap {
     private selectedDate: Date | null;
     private onSelectedDateChange?: (date: Date) => void;
     private onTransactionEdit?: (transaction: Transaction) => void;
+    private allTransactions: Transaction[] = [];
+    private monthlyExpenseTotal: number = 0;
+    private runningBalanceCache = new Map<string, Record<string, number>>();
 
     constructor(
         container: HTMLElement,
@@ -198,43 +203,87 @@ export class CalendarHeatmap {
     }
 
     private prepareData() {
-        // Get all days in the month
         const year = this.currentDate.getFullYear();
         const month = this.currentDate.getMonth();
         const daysInMonth = new Date(year, month + 1, 0).getDate();
-        
+
         this.calendarData = [];
-        
-        // Initialize data for each day of the month
+        this.maxAmount = 0;
+        this.monthlyExpenseTotal = 0;
+        this.runningBalanceCache.clear();
+        this.allTransactions = this.plugin.getAllTransactions();
+
+        const monthlyTransactionsByDate = new Map<string, Transaction[]>();
+        this.transactions.forEach((transaction) => {
+            const dateKey = transaction.date;
+            const dayTransactions = monthlyTransactionsByDate.get(dateKey);
+            if (dayTransactions) {
+                dayTransactions.push(transaction);
+            } else {
+                monthlyTransactionsByDate.set(dateKey, [transaction]);
+            }
+
+            if (transaction.type === TransactionType.EXPENSE) {
+                this.monthlyExpenseTotal += transaction.amount;
+            }
+        });
+
+        const defaultAccountReference = this.plugin.normalizeTransactionAccountReference(undefined);
+        const balancesByDate = new Map<string, number>();
+        let runningBalance = 0;
+        sortTransactionsByDateTimeDesc(this.allTransactions)
+            .reverse()
+            .forEach((transaction) => {
+                runningBalance += getAccountTransactionAmount(this.plugin, transaction, defaultAccountReference);
+                balancesByDate.set(transaction.date, Math.abs(runningBalance) < 0.000001 ? 0 : runningBalance);
+            });
+
+        let carriedBalance = 0;
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(year, month, day);
+            const dateKey = this.getDateKey(date);
             const dateStr = this.formatDate(date);
-            
-            // Filter transactions for this date
-            const dayTransactions = this.transactions.filter(t => {
-                const tDate = parseLocalDate(t.date);
-                return tDate.getFullYear() === year && 
-                       tDate.getMonth() === month && 
-                       tDate.getDate() === day;
-            });
-            
-            // Calculate total spending for this day
+            const dayTransactions = monthlyTransactionsByDate.get(dateKey) ?? [];
             const totalAmount = dayTransactions
                 .filter(t => t.type === TransactionType.EXPENSE)
                 .reduce((sum, t) => sum + t.amount, 0);
-            
+
+            const dayBalance = balancesByDate.get(dateKey);
+            if (typeof dayBalance === 'number') {
+                carriedBalance = dayBalance;
+            }
+
             this.calendarData.push({
                 date: date,
+                dateKey,
                 totalAmount: totalAmount,
+                dayBalance: carriedBalance,
                 transactions: dayTransactions,
                 formattedDate: dateStr
             });
-            
-            // Update the maximum amount if needed
+
             if (totalAmount > this.maxAmount) {
                 this.maxAmount = totalAmount;
             }
         }
+    }
+
+    private getDateKey(date: Date): string {
+        const year = date.getFullYear();
+        const month = `${date.getMonth() + 1}`.padStart(2, '0');
+        const day = `${date.getDate()}`.padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    private getRunningBalanceMap(accountReference: string): Record<string, number> {
+        const existing = this.runningBalanceCache.get(accountReference);
+        if (existing) {
+            return existing;
+        }
+
+        const balances = getRunningBalanceByTransactionIdForAccount(this.plugin, accountReference, this.allTransactions);
+        this.runningBalanceCache.set(accountReference, balances);
+        return balances;
     }
 
     private formatDate(date: Date): string {
@@ -786,21 +835,8 @@ export class CalendarHeatmap {
         
         // Get total expenses
         const totalExpenses = expenseTransactions.reduce((sum, t) => sum + t.amount, 0);
-        const selectedDayEnd = new Date(
-            dayData.date.getFullYear(),
-            dayData.date.getMonth(),
-            dayData.date.getDate(),
-            23,
-            59,
-            59,
-            999
-        );
         const defaultAccountReference = this.plugin.normalizeTransactionAccountReference(undefined);
-        const dayBalance = this.plugin.getAllTransactions()
-            .filter(t => parseLocalDate(t.date).getTime() <= selectedDayEnd.getTime())
-            .reduce((balance, transaction) => {
-                return balance + getAccountTransactionAmount(this.plugin, transaction, defaultAccountReference);
-            }, 0);
+        const dayBalance = dayData.dayBalance;
         
         // Add title with day of week
         const dayOfWeek = dayData.date.toLocaleDateString('en-US', { weekday: 'long' });
@@ -868,9 +904,7 @@ export class CalendarHeatmap {
         // Calculate and show additional insights if there are expenses
         if (totalExpenses > 0) {
             // Monthly context
-            const monthlyTotal = this.transactions
-                .filter(t => t.type === TransactionType.EXPENSE)
-                .reduce((sum, t) => sum + t.amount, 0);
+            const monthlyTotal = this.monthlyExpenseTotal;
             
             // Only show insights if we have some monthly spending
             if (monthlyTotal > 0) {
@@ -990,11 +1024,7 @@ export class CalendarHeatmap {
         
         // Sort transactions by creation time (newest first), with legacy ID/JSON-order fallbacks.
         const sortedTransactions = sortTransactionsByDateTimeDesc(expenseTransactions);
-        const runningBalances = getRunningBalanceByTransactionIdForAccount(
-            this.plugin,
-            defaultAccountReference,
-            this.plugin.getAllTransactions()
-        );
+        const runningBalances = this.getRunningBalanceMap(defaultAccountReference);
         const internalBalanceMaps = new Map<string, Record<string, number>>();
         const ensureBalanceMap = (accountReference: string): Record<string, number> => {
             const existing = internalBalanceMaps.get(accountReference);
@@ -1004,7 +1034,7 @@ export class CalendarHeatmap {
 
             const balances = accountReference === defaultAccountReference
                 ? runningBalances
-                : getRunningBalanceByTransactionIdForAccount(this.plugin, accountReference, this.plugin.getAllTransactions());
+                : this.getRunningBalanceMap(accountReference);
             internalBalanceMaps.set(accountReference, balances);
             return balances;
         };

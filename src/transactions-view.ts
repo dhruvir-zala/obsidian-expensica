@@ -1,4 +1,4 @@
-import { App } from 'obsidian';
+import { App, Modal } from 'obsidian';
 import {
     AccountType,
     CategoryType,
@@ -101,6 +101,72 @@ function formatRunningBalanceLabel(plugin: ExpensicaPlugin, balance: number, acc
 
     const account = plugin.getTransactionAccountDisplay(accountReference);
     return `${account.name}: ${amount}`;
+}
+
+class BulkRenameTransactionsModal extends Modal {
+    private readonly onSubmit: (name: string) => Promise<void> | void;
+
+    constructor(app: App, onSubmit: (name: string) => Promise<void> | void) {
+        super(app);
+        this.onSubmit = onSubmit;
+    }
+
+    onOpen() {
+        const { contentEl } = this;
+        this.modalEl.addClass('expensica-transaction-modal', 'expensica-bulk-rename-modal-shell');
+        contentEl.addClass('expensica-modal', 'expensica-bulk-rename-modal');
+
+        const title = contentEl.createEl('h2', { cls: 'expensica-modal-title' });
+        title.innerHTML = '<span class="expensica-modal-title-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg></span> Bulk Rename';
+
+        const form = contentEl.createEl('form', { cls: 'expensica-form' });
+        const formGroup = form.createDiv('expensica-form-group');
+        formGroup.createEl('label', {
+            text: 'Name',
+            cls: 'expensica-form-label',
+            attr: { for: 'expensica-bulk-rename-input' }
+        });
+
+        const input = formGroup.createEl('input', {
+            type: 'text',
+            cls: 'expensica-form-input expensica-edit-field',
+            attr: {
+                id: 'expensica-bulk-rename-input',
+                autocomplete: 'off'
+            }
+        });
+
+        const footer = form.createDiv('expensica-form-footer expensica-bulk-rename-modal-footer');
+        const cancelButton = footer.createEl('button', {
+            text: 'Cancel',
+            cls: 'expensica-standard-button expensica-btn expensica-btn-secondary',
+            attr: { type: 'button' }
+        });
+        footer.createEl('button', {
+            text: 'Update',
+            cls: 'expensica-standard-button expensica-btn expensica-btn-primary',
+            attr: { type: 'submit' }
+        });
+
+        cancelButton.addEventListener('click', () => {
+            this.close();
+        });
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const nextName = input.value.trim();
+            if (!nextName) {
+                showExpensicaNotice('Transaction name is required.');
+                input.focus();
+                return;
+            }
+
+            await this.onSubmit(nextName);
+            this.close();
+        });
+
+        window.setTimeout(() => input.focus(), 0);
+    }
 }
 
 export interface TransactionView {
@@ -1012,6 +1078,21 @@ export class ExpensicaTransactionsView implements TransactionView {
             });
         }
 
+        const renameButton = actionsGroup.createEl('button', {
+            cls: 'expensica-standard-button expensica-transaction-bulk-icon-button expensica-transaction-bulk-rename',
+            attr: {
+                type: 'button',
+                'aria-label': 'Rename selected transactions',
+                title: 'Rename selected transactions'
+            }
+        });
+        renameButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>';
+        renameButton.addEventListener('click', () => {
+            new BulkRenameTransactionsModal(this.app, async (name) => {
+                await this.bulkRenameSelectedTransactions(name);
+            }).open();
+        });
+
         const deleteButton = actionsGroup.createEl('button', {
             cls: 'expensica-standard-button expensica-btn expensica-btn-danger-solid expensica-transaction-bulk-icon-button expensica-transaction-bulk-delete',
             attr: {
@@ -1068,6 +1149,25 @@ export class ExpensicaTransactionsView implements TransactionView {
         this.persistTransactionsState();
         this.refreshTransactionsListOnly();
         showExpensicaNotice('Transactions updated successfully');
+    }
+
+    private async bulkRenameSelectedTransactions(name: string) {
+        const selectedTransactions = this.getSelectedTransactions();
+        if (selectedTransactions.length === 0) {
+            return;
+        }
+
+        await Promise.all(selectedTransactions.map(transaction =>
+            this.plugin.updateTransaction({
+                ...transaction,
+                description: name
+            }, this)
+        ));
+
+        await this.loadTransactionsData(false);
+        this.persistTransactionsState();
+        this.refreshTransactionsListOnly();
+        showExpensicaNotice('Transactions renamed successfully');
     }
 
     private async deleteSelectedTransactions() {

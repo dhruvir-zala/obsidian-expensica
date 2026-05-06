@@ -486,6 +486,11 @@
   transition: box-shadow 0.15s ease;
 }
 
+.expensica-expenses-chart-container.expensica-chart-container-donut {
+  align-self: start;
+  height: auto;
+}
+
 .expensica-chart-container:hover {
   transform: none;
   box-shadow: var(--expensica-shadow-panel-hover);
@@ -650,6 +655,28 @@
   min-height: 200px;
   padding: 20px;
   text-align: center;
+}
+
+.expensica-canvas-container.is-empty {
+  aspect-ratio: auto;
+  height: auto;
+  max-height: none;
+  min-height: 0;
+}
+
+.expensica-category-chart-layout .expensica-canvas-container.is-empty {
+  aspect-ratio: auto;
+  height: auto;
+  max-height: none;
+  min-height: 0;
+}
+
+.expensica-canvas-container.is-empty .expensica-empty-charts {
+  min-height: 0;
+  padding-top: 12px;
+  padding-bottom: 12px;
+  background-color: var(--background-secondary);
+  border-radius: 12px;
 }
 
 .expensica-empty-icon {
@@ -967,6 +994,94 @@ button.expensica-category-chip {
   opacity: 0.6;
 }
 
+.expensica-cumulative-expenses-legend {
+  display: grid;
+  grid-template-columns: repeat(var(--expensica-cumulative-legend-columns, 1), minmax(0, 130px));
+  justify-content: center;
+  justify-items: stretch;
+  column-gap: var(--expensica-gap-md);
+  row-gap: var(--expensica-gap-sm);
+  margin-top: var(--expensica-gap-md);
+  max-width: 100%;
+  width: 100%;
+  flex: none;
+}
+
+.expensica-cumulative-expenses-legend-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--expensica-gap-sm);
+  width: 100%;
+  min-width: 0;
+  max-width: 130px;
+  cursor: default;
+}
+
+.expensica-cumulative-expenses-legend-line {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 2px;
+  border-radius: 999px;
+}
+
+.expensica-cumulative-expenses-legend-label {
+  min-width: 0;
+  color: var(--text-normal);
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.expensica-chart-range-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--expensica-gap-xs, 4px);
+  margin-top: var(--expensica-gap-md);
+  margin-bottom: var(--expensica-gap-lg);
+}
+
+button.expensica-chart-range-button {
+  appearance: none;
+  -webkit-appearance: none;
+  width: auto;
+  padding: 6px 10px;
+  min-width: 0;
+  border: none !important;
+  border-radius: 10px;
+  background: transparent !important;
+  background-color: transparent !important;
+  color: var(--text-faint) !important;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.2;
+  cursor: pointer;
+  box-shadow: none !important;
+  text-shadow: none;
+  outline: none !important;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+button.expensica-chart-range-button:hover,
+button.expensica-chart-range-button:focus,
+button.expensica-chart-range-button:focus-visible,
+button.expensica-chart-range-button:active {
+  background: var(--background-modifier-hover) !important;
+  background-color: var(--background-modifier-hover) !important;
+  color: var(--text-normal) !important;
+  outline: none !important;
+}
+
+button.expensica-chart-range-button.is-active {
+  background: var(--background-modifier-hover) !important;
+  background-color: var(--background-modifier-hover) !important;
+  color: var(--text-normal) !important;
+  outline: none !important;
+}
+
 .expensica-donut-category-legend .expensica-category-chip {
   width: 100%;
   min-width: 0;
@@ -1088,8 +1203,7 @@ button.expensica-category-chip {
   cursor: pointer;
 }
 
-.expensica-transaction-interactive:hover,
-.expensica-transaction-interactive:focus-visible {
+.expensica-transaction-interactive:hover {
   background-color: var(--background-modifier-hover);
   box-shadow: var(--expensica-shadow);
   border-color: var(--background-modifier-border-hover, var(--background-modifier-border));
@@ -1098,6 +1212,7 @@ button.expensica-category-chip {
 .expensica-transaction-interactive:focus-visible {
   outline: var(--size-2-1, 2px) solid var(--interactive-accent);
   outline-offset: var(--size-2-1, 2px);
+  box-shadow: none;
 }
 
 .expensica-transaction-selector {
@@ -1125,13 +1240,17 @@ button.expensica-category-chip {
   opacity: 0;
 }
 
-.expensica-transaction-selector:hover,
-.expensica-transaction-selector:focus-visible {
+.expensica-transaction-selector:hover {
   border-color: var(--background-modifier-border-hover);
   color: var(--text-accent);
   background: var(--background-modifier-hover);
   outline: none;
   transform: none;
+}
+
+.expensica-transaction-selector:focus-visible {
+  outline: var(--size-2-1, 2px) solid rgba(var(--interactive-accent-rgb), 0.35);
+  outline-offset: 2px;
 }
 
 .expensica-transaction-selector.is-selected {
@@ -1282,6 +1401,14 @@ button.expensica-transaction-bulk-icon-button {
   outline: none;
 }
 
+.expensica-transaction-bulk-rename:hover,
+.expensica-transaction-bulk-rename:focus-visible {
+  border-color: var(--background-modifier-border-hover);
+  background: color-mix(in srgb, var(--background-modifier-hover) 42%, transparent);
+  background-color: color-mix(in srgb, var(--background-modifier-hover) 42%, transparent);
+  outline: none;
+}
+
 button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expensica-transaction-bulk-delete {
   border-color: var(--text-error);
   background: color-mix(in srgb, var(--text-error) 58%, transparent);
@@ -1316,8 +1443,30 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
 .expensica-transaction-date {
   grid-column: 1;
   justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: var(--expensica-font-size-sm);
   color: var(--text-faint);
+}
+
+.expensica-transaction-selector svg {
+  width: 14px;
+  height: 14px;
+  min-width: 10.5px;
+  min-height: 10.5px;
+  flex: 0 1 14px;
+}
+
+.expensica-transaction-date > svg,
+.expensica-transaction-account-separator svg,
+.expensica-transaction-account > svg,
+.expensica-transaction-account-icon {
+  width: 12px;
+  height: 12px;
+  min-width: 9px;
+  min-height: 9px;
+  flex: 0 1 12px;
 }
 
 .expensica-transaction-account {
@@ -1340,6 +1489,16 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
 .expensica-transaction-account-icon {
   display: inline-flex;
   align-items: center;
+}
+
+.expensica-transaction-selector svg,
+.expensica-transaction-date > svg,
+.expensica-transaction-account-separator svg,
+.expensica-transaction-account > svg,
+.expensica-transaction-account-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .expensica-transaction-account-endpoint {
@@ -1449,13 +1608,17 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
   transition: background-color 0.1s;
 }
 
-.expensica-category-quick-menu button.expensica-category-quick-menu-item:hover,
-.expensica-category-quick-menu button.expensica-category-quick-menu-item:focus-visible {
+.expensica-category-quick-menu button.expensica-category-quick-menu-item:hover {
   background: var(--background-modifier-hover) !important;
   background-color: var(--background-modifier-hover) !important;
   background-image: none !important;
   box-shadow: none !important;
   outline: none;
+}
+
+.expensica-category-quick-menu button.expensica-category-quick-menu-item:focus-visible {
+  outline: 2px solid rgba(var(--interactive-accent-rgb), 0.35);
+  outline-offset: 2px;
 }
 
 .expensica-category-quick-menu button.expensica-category-quick-menu-item.is-selected {
@@ -1588,6 +1751,31 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
 .expensica-transaction-modal .modal-content.expensica-modal {
   max-width: none;
   width: 100%;
+}
+
+.expensica-transaction-modal.expensica-bulk-rename-modal-shell {
+  width: auto;
+  max-width: calc(100vw - var(--size-4-8, 32px));
+}
+
+.expensica-transaction-modal .modal-content.expensica-modal.expensica-bulk-rename-modal {
+  width: auto;
+  min-width: min(320px, calc(100vw - var(--size-4-8, 32px)));
+  max-width: min(420px, calc(100vw - var(--size-4-8, 32px)));
+}
+
+.expensica-bulk-rename-modal .expensica-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.expensica-bulk-rename-modal .expensica-form-group {
+  margin-bottom: 0;
+}
+
+.expensica-bulk-rename-modal-footer {
+  margin-top: 18px;
 }
 
 .expensica-account-editor-modal {
@@ -3350,6 +3538,23 @@ to {
   font-size: var(--expensica-category-chip-font-size);
 }
 
+.is-mobile .expensica-cumulative-expenses-legend {
+  grid-template-columns: repeat(var(--expensica-cumulative-legend-columns, 1), minmax(0, 112px));
+  column-gap: var(--expensica-gap-md);
+}
+
+.is-mobile .expensica-cumulative-expenses-legend-item {
+  max-width: 112px;
+}
+
+.is-mobile .expensica-chart-range-buttons {
+  gap: var(--expensica-gap-xs, 4px);
+}
+
+.is-mobile .expensica-chart-range-button {
+  padding: 6px 8px;
+}
+
 .is-mobile .expensica-chart-legend-column {
   display: flex;
   flex-direction: column;
@@ -4093,21 +4298,10 @@ to {
 }
 
 .color-dropdown-container .expensica-select-display {
-    font-size: 14px;
-    padding: 8px 10px;
-    border-radius: 4px;
-    background-color: var(--background-secondary);
-    border: 1px solid var(--background-modifier-border);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    transition: all 0.2s ease;
-}
-
-.color-dropdown-container .expensica-select-display:hover {
-    border-color: var(--interactive-accent);
-    background-color: var(--background-secondary-alt);
+    width: 100%;
+    justify-content: flex-start;
+    text-align: left;
+    box-shadow: var(--expensica-shadow-control);
 }
 
 .color-dropdown-container .expensica-select-options {
@@ -4115,32 +4309,31 @@ to {
     top: 100%;
     left: 0;
     right: 0;
-    margin-top: 4px;
-    background-color: var(--background-secondary);
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 4px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    margin-top: var(--expensica-gap-sm);
     z-index: 1000;
     max-height: 300px;
     overflow-y: auto;
 }
 
 .color-dropdown-container .expensica-select-option {
-    padding: 8px 10px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    transition: background-color 0.2s ease;
-}
-
-.color-dropdown-container .expensica-select-option:hover {
-    background-color: var(--background-secondary-alt);
+    width: 100%;
+    justify-content: flex-start;
+    text-align: left;
 }
 
 .color-dropdown-container .expensica-option-selected {
     background-color: var(--background-modifier-hover);
-    font-weight: bold;
+    font-weight: 500;
+}
+
+.color-dropdown-container .expensica-select-display-text {
+    flex: 1 1 auto;
+    justify-content: flex-start;
+    min-width: 0;
+}
+
+.color-dropdown-container .expensica-select-arrow {
+    margin-left: auto;
 }
 
 .color-preview {
@@ -4475,16 +4668,6 @@ to {
   box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.2);
 }
 
-/* Toggle styling */
-.expensica-settings-container .checkbox-container {
-  border-radius: 16px;
-  height: 24px;
-}
-
-.expensica-settings-container .checkbox-container.is-enabled {
-  background-color: var(--interactive-accent);
-}
-
 /* Responsive adjustments */
 @media screen and (max-width: 768px) {
   .categories-container {
@@ -4617,13 +4800,17 @@ to {
     transition: all 0.2s ease;
 }
 
-.expensica-account-card-interactive:hover,
-.expensica-account-card-interactive:focus-visible {
+.expensica-account-card-interactive:hover {
     background-color: var(--background-modifier-hover);
     border-color: var(--background-modifier-border-hover);
     box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px,
                 rgba(15, 15, 15, 0.05) 0px 2px 4px;
     outline: none;
+}
+
+.expensica-account-card-interactive:focus-visible {
+    outline: 2px solid rgba(var(--interactive-accent-rgb), 0.2);
+    outline-offset: 2px;
 }
 
 .expensica-account-card-header {
@@ -4996,9 +5183,9 @@ button.expensica-category-card-search-button:active {
 }
 
 .expensica-category-card-interactive:focus-visible {
-    outline: none;
-    border-color: var(--background-modifier-border-hover, var(--background-modifier-border));
-    box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.2);
+    outline: 2px solid rgba(var(--interactive-accent-rgb), 0.2);
+    outline-offset: 2px;
+    box-shadow: none;
 }
 
 .expensica-category-card-meta {
@@ -6625,12 +6812,16 @@ button.expensica-category-card-search-button:active {
 }
 
 .expensica-dashboard-transactions-tab .expensica-category-filter-button:hover,
-.expensica-dashboard-transactions-tab .expensica-category-filter-button:focus-visible,
 .expensica-dashboard-transactions-tab .expensica-category-filter-container.is-open .expensica-category-filter-button {
     background-color: var(--background-modifier-hover);
     border-color: var(--background-modifier-border-hover);
     color: var(--text-normal);
     outline: none;
+}
+
+.expensica-dashboard-transactions-tab .expensica-category-filter-button:focus-visible {
+    outline: 2px solid rgba(var(--interactive-accent-rgb), 0.2);
+    outline-offset: 2px;
 }
 
 .expensica-dashboard-transactions-tab .expensica-category-filter-container.is-open {
@@ -6979,6 +7170,10 @@ button.expensica-category-card-search-button:active {
 
 .expensica-calendar-flex-container.expensica-calendar-stacked > .expensica-calendar-details-container {
   flex-basis: 100%;
+  flex-grow: 1;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
 }
 
 .expensica-calendar-grid-container {
@@ -7416,11 +7611,6 @@ h4.expensica-transactions-title {
     border: 1px solid var(--background-modifier-border);
     margin-top: var(--expensica-gap-lg);
     margin-bottom: 24px;
-    transition: all 0.2s ease;
-}
-
-.notion-budget-progress-container:hover {
-    background-color: var(--background-modifier-hover);
 }
 
 .notion-budget-progress-container h3 {
@@ -7490,12 +7680,174 @@ h4.expensica-transactions-title {
     border-radius: 8px;
     border: 1px solid var(--background-modifier-border);
     overflow: hidden;
-    transition: all 0.2s ease;
     margin-bottom: 24px;
 }
 
-.notion-budget-items:hover {
-    background-color: var(--background-modifier-hover);
+.expensica-budget-cards {
+    display: flex;
+    flex-direction: column;
+    gap: var(--expensica-gap-sm);
+    max-height: 400px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 8px;
+}
+
+.expensica-budget-cards::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.expensica-budget-cards::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.expensica-budget-cards::-webkit-scrollbar-thumb {
+    background-color: var(--background-modifier-border-hover);
+    border-radius: 3px;
+}
+
+.expensica-budget-card {
+    --expensica-transaction-icon-size: 36px;
+    align-items: flex-start;
+}
+
+.expensica-budget-card-icon {
+    grid-column: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--expensica-transaction-icon-size);
+    height: var(--expensica-transaction-icon-size);
+    min-width: var(--expensica-transaction-icon-size);
+    min-height: var(--expensica-transaction-icon-size);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--expensica-radius);
+    background: color-mix(in srgb, var(--background-primary) 80%, transparent);
+    font-size: 18px;
+    line-height: 1;
+}
+
+.expensica-budget-card-details {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.expensica-budget-card-header {
+    display: grid;
+    grid-template-columns: minmax(0, 0.7fr) minmax(220px, 1.3fr);
+    align-items: center;
+    gap: var(--expensica-gap-md);
+}
+
+.expensica-budget-card-title {
+    margin: 0;
+}
+
+.expensica-budget-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--expensica-gap-sm);
+    order: 3;
+}
+
+.expensica-budget-card-period {
+    grid-column: auto;
+}
+
+.expensica-budget-card-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.expensica-budget-card-status.expensica-status-good {
+    background: color-mix(in srgb, var(--text-success, #2ea043) 16%, transparent);
+    color: var(--text-success, #2ea043);
+}
+
+.expensica-budget-card-status.expensica-status-warning {
+    background: color-mix(in srgb, var(--text-warning, #bf8700) 16%, transparent);
+    color: var(--text-warning, #bf8700);
+}
+
+.expensica-budget-card-status.expensica-status-danger {
+    background: color-mix(in srgb, var(--text-error) 16%, transparent);
+    color: var(--text-error);
+}
+
+.expensica-budget-card-progress-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.expensica-budget-card-progress {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-self: center;
+    align-items: center;
+    gap: var(--expensica-gap-sm);
+    min-width: 0;
+}
+
+.expensica-budget-card-progress .notion-budget-bar {
+    margin-bottom: 0;
+    align-self: center;
+}
+
+.expensica-budget-card-amount {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+    min-height: 100%;
+}
+
+.expensica-budget-card-value {
+    font-size: var(--expensica-font-size-lg);
+    font-weight: 600;
+    line-height: 1.1;
+}
+
+.expensica-budget-card-balance {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 3px;
+}
+
+.expensica-budget-card-percentage {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-normal);
+    white-space: nowrap;
+}
+
+.expensica-status-warning .expensica-budget-card-percentage {
+    color: var(--expensica-warning);
+}
+
+.expensica-status-danger .expensica-budget-card-percentage {
+    color: var(--expensica-error);
+}
+
+@container (max-width: 620px) {
+    .expensica-budget-card-header {
+        grid-template-columns: 1fr;
+    }
+
+    .expensica-budget-card-amount,
+    .expensica-budget-card-balance {
+        align-items: flex-start;
+    }
 }
 
 .notion-budget-header {
@@ -7515,16 +7867,11 @@ h4.expensica-transactions-title {
     grid-template-columns: 25% 15% 15% 15% 20% 10%;
     padding: 12px 16px;
     border-bottom: 1px solid var(--notion-border);
-    transition: background 0.2s ease;
     position: relative;
 }
 
 .notion-budget-item:last-child {
     border-bottom: none;
-}
-
-.notion-budget-item:hover {
-    background: var(--notion-bg-hover);
 }
 
 .notion-category-container {
@@ -8325,30 +8672,34 @@ button.expensica-standard-button,
 }
 
 .expensica-standard-button:hover,
-.expensica-standard-button:focus-visible,
 button.expensica-standard-button:hover,
-button.expensica-standard-button:focus-visible,
 .shadcn-date-range-current:hover,
-.shadcn-date-range-current:focus-visible,
 .shadcn-btn:hover,
-.shadcn-btn:focus-visible,
 .expensica-btn:hover,
-.expensica-btn:focus-visible,
 .expensica-tab:hover,
-.expensica-tab:focus-visible,
 .expensica-chart-option:hover,
-.expensica-chart-option:focus-visible,
 .expensica-chart-type-current:hover,
-.expensica-chart-type-current:focus-visible,
 .expensica-pagination-btn:hover:not(.disabled),
-.expensica-pagination-btn:focus-visible:not(.disabled),
-.expensica-calendar-nav-button:hover,
-.expensica-calendar-nav-button:focus-visible {
+.expensica-calendar-nav-button:hover {
   border-color: var(--background-modifier-border-hover);
   background: var(--background-modifier-hover);
   background-color: var(--background-modifier-hover);
   color: var(--text-normal);
   outline: none;
+}
+
+.expensica-standard-button:focus-visible,
+button.expensica-standard-button:focus-visible,
+.shadcn-date-range-current:focus-visible,
+.shadcn-btn:focus-visible,
+.expensica-btn:focus-visible,
+.expensica-tab:focus-visible,
+.expensica-chart-option:focus-visible,
+.expensica-chart-type-current:focus-visible,
+.expensica-pagination-btn:focus-visible:not(.disabled),
+.expensica-calendar-nav-button:focus-visible {
+  outline: 2px solid rgba(var(--interactive-accent-rgb), 0.2);
+  outline-offset: 2px;
 }
 
 .expensica-standard-button.expensica-btn-primary:hover,
@@ -8357,14 +8708,7 @@ button.expensica-standard-button:focus-visible,
 .expensica-standard-button.expensica-btn-danger:hover,
 .expensica-standard-button.shadcn-btn-primary:hover,
 .expensica-standard-button.shadcn-btn-success:hover,
-.expensica-standard-button.shadcn-btn-danger:hover,
-.expensica-standard-button.expensica-btn-primary:focus-visible,
-.expensica-standard-button.expensica-btn-secondary:focus-visible,
-.expensica-standard-button.expensica-btn-success:focus-visible,
-.expensica-standard-button.expensica-btn-danger:focus-visible,
-.expensica-standard-button.shadcn-btn-primary:focus-visible,
-.expensica-standard-button.shadcn-btn-success:focus-visible,
-.expensica-standard-button.shadcn-btn-danger:focus-visible {
+.expensica-standard-button.shadcn-btn-danger:hover {
   border-color: var(--background-modifier-border-hover);
   background: var(--background-modifier-hover);
   background-color: var(--background-modifier-hover);
@@ -8474,6 +8818,23 @@ button.expensica-standard-button:focus-visible,
   height: var(--expensica-card-trend-icon-size);
   stroke-width: var(--expensica-card-trend-icon-stroke-width);
   flex: 0 0 var(--expensica-card-trend-icon-size);
+}
+
+.expensica-card-trend-indicator {
+  display: inline-flex;
+  align-items: center;
+}
+
+.expensica-card-trend-indicator.is-positive {
+  color: var(--text-success);
+}
+
+.expensica-card-trend-indicator.is-negative {
+  color: var(--text-error);
+}
+
+.expensica-card-trend-indicator.is-neutral {
+  color: var(--text-muted);
 }
 
 .expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-title,
