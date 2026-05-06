@@ -68,6 +68,7 @@ declare global {
 // Define the settings interface for our plugin
 interface ExpensicaSettings {
     defaultCurrency: string;
+    timeFormat: '12' | '24';
     categories: Category[];
     deletedDefaultCategoryIds: string[];
     categoryEmojis: CategoryEmojiSettings;
@@ -75,6 +76,8 @@ interface ExpensicaSettings {
     calendarColorScheme: ColorScheme;
     customCalendarColor: string;
     showWeekNumbers: boolean;
+    showChartAxes: boolean;
+    showChartGrid: boolean;
     showTransactionCategoryLabels: boolean;
     enableAccounts: boolean;
     enableBudgeting: boolean;
@@ -115,6 +118,7 @@ export interface SharedDateRangeState {
 // Define default settings
 const DEFAULT_SETTINGS: ExpensicaSettings = {
     defaultCurrency: 'USD',
+    timeFormat: '12',
     categories: DEFAULT_CATEGORIES,
     deletedDefaultCategoryIds: [],
     categoryEmojis: {},
@@ -122,6 +126,8 @@ const DEFAULT_SETTINGS: ExpensicaSettings = {
     calendarColorScheme: ColorScheme.BLUE,
     customCalendarColor: '#2196f3',
     showWeekNumbers: false,
+    showChartAxes: false,
+    showChartGrid: false,
     showTransactionCategoryLabels: true,
     enableAccounts: true,
     enableBudgeting: true,
@@ -1605,6 +1611,7 @@ export default class ExpensicaPlugin extends Plugin {
 class ExpensicaSettingTab extends PluginSettingTab {
     plugin: ExpensicaPlugin;
     updateCustomColorVisibility: () => void;
+    private cleanupCallbacks: Array<() => void> = [];
 
     constructor(app: App, plugin: ExpensicaPlugin) {
         super(app, plugin);
@@ -1635,8 +1642,35 @@ class ExpensicaSettingTab extends PluginSettingTab {
         }
     }
 
+    private registerCleanup(callback: () => void) {
+        this.cleanupCallbacks.push(callback);
+    }
+
+    private clearCleanupCallbacks() {
+        this.cleanupCallbacks.forEach((callback) => callback());
+        this.cleanupCallbacks = [];
+    }
+
+    private registerOutsideClick(
+        owner: HTMLElement,
+        onOutsideClick: () => void
+    ) {
+        const documentClickHandler = (event: MouseEvent) => {
+            const target = event.target as Node | null;
+            if (target && !owner.contains(target)) {
+                onOutsideClick();
+            }
+        };
+
+        document.addEventListener('click', documentClickHandler);
+        this.registerCleanup(() => {
+            document.removeEventListener('click', documentClickHandler);
+        });
+    }
+
     display(): void {
         const { containerEl } = this;
+        this.clearCleanupCallbacks();
 
         containerEl.empty();
         containerEl.addClass('expensica-settings-container');
@@ -1700,6 +1734,27 @@ class ExpensicaSettingTab extends PluginSettingTab {
                 );
             });
 
+        new Setting(containerEl)
+            .setName('Time Format')
+            .setDesc('Choose 12-hour or 24-hour time for chart hour labels.')
+            .then((setting) => {
+                const container = setting.controlEl.createDiv('currency-dropdown-container');
+                this.renderTimeFormatDropdown(
+                    container,
+                    this.plugin.settings.timeFormat,
+                    async (value) => {
+                        this.plugin.settings.timeFormat = value;
+                        await this.plugin.saveSettings();
+
+                        this.plugin.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE).forEach((leaf) => {
+                            if (leaf.view instanceof ExpensicaDashboardView) {
+                                leaf.view.renderDashboard();
+                            }
+                        });
+                    }
+                );
+            });
+
         // Calendar color scheme
         new Setting(containerEl)
             .setName('Calendar Color Scheme')
@@ -1708,7 +1763,10 @@ class ExpensicaSettingTab extends PluginSettingTab {
                 const container = setting.controlEl.createDiv('color-dropdown-container');
                 
                 // Create the select display
-                const selectDisplay = container.createDiv('expensica-select-display');
+                const selectDisplay = container.createEl('button', {
+                    cls: 'expensica-select-display expensica-standard-button expensica-settings-select-button',
+                    attr: { type: 'button', 'aria-label': 'Select calendar color scheme' }
+                });
                 const previewColor = this.getColorPreview(this.plugin.settings.calendarColorScheme);
                 const colorPreview = selectDisplay.createDiv('color-preview color-preview-bg');
                 colorPreview.setAttribute('style', `--color-preview: ${previewColor}`);
@@ -1719,7 +1777,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
                 const selectArrow = selectDisplay.createSpan({ cls: 'expensica-select-arrow' });
                 selectArrow.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
                 
-                const optionsContainer = container.createDiv('expensica-select-options options-container-hidden');
+                const optionsContainer = container.createDiv('expensica-select-options expensica-select-hidden expensica-settings-select-options');
                 
                 // Color options
                 const colorOptions = [
@@ -1734,7 +1792,10 @@ class ExpensicaSettingTab extends PluginSettingTab {
                 ];
                 
                 colorOptions.forEach(option => {
-                    const optionEl = optionsContainer.createDiv('expensica-select-option');
+                    const optionEl = optionsContainer.createEl('button', {
+                        cls: 'expensica-select-option expensica-standard-button expensica-settings-select-option',
+                        attr: { type: 'button' }
+                    });
                     const optionColorPreview = optionEl.createDiv('color-preview');
                     optionColorPreview.setAttribute('style', `background-color: ${this.getColorPreview(option.value)}`);
                     optionEl.createSpan({ text: option.text });
@@ -1752,7 +1813,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
                         selectText.textContent = option.text;
                         
                         // Hide the options
-                        optionsContainer.classList.remove('options-container-hidden');
+                        optionsContainer.classList.add('expensica-select-hidden');
                         selectArrow.classList.remove('expensica-select-arrow-open');
                         
                         // Show/hide custom color input
@@ -1762,22 +1823,18 @@ class ExpensicaSettingTab extends PluginSettingTab {
                 
                 // Toggle options on click
                 selectDisplay.addEventListener('click', () => {
-                    const isHidden = optionsContainer.classList.contains('options-container-hidden');
-                    optionsContainer.classList.toggle('options-container-hidden', !isHidden);
+                    const isHidden = optionsContainer.classList.contains('expensica-select-hidden');
+                    optionsContainer.classList.toggle('expensica-select-hidden', !isHidden);
                     selectArrow.classList.toggle('expensica-select-arrow-open', !isHidden);
                     if (!isHidden) {
                         const input = selectDisplay.querySelector('input');
                         if (input) input.focus();
                     }
                 });
-                
-                // Close options when clicking outside
-                document.addEventListener('click', (e) => {
-                    const target = e.target as Node;
-                    if (!container.contains(target)) {
-                        optionsContainer.classList.add('options-container-hidden');
-                        selectArrow.classList.remove('expensica-select-arrow-open');
-                    }
+
+                this.registerOutsideClick(container, () => {
+                    optionsContainer.classList.add('expensica-select-hidden');
+                    selectArrow.classList.remove('expensica-select-arrow-open');
                 });
             });
             
@@ -1820,6 +1877,38 @@ class ExpensicaSettingTab extends PluginSettingTab {
                 .onChange(async (value) => {
                     this.plugin.settings.showWeekNumbers = value;
                     await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Show Chart Axes')
+            .setDesc('Display chart axis lines and values in dashboard charts.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.showChartAxes)
+                .onChange(async (value) => {
+                    this.plugin.settings.showChartAxes = value;
+                    await this.plugin.saveSettings();
+
+                    this.plugin.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE).forEach((leaf) => {
+                        if (leaf.view instanceof ExpensicaDashboardView) {
+                            leaf.view.renderDashboard();
+                        }
+                    });
+                }));
+
+        new Setting(containerEl)
+            .setName('Show Chart Grid')
+            .setDesc('Display chart grid lines in dashboard charts.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.showChartGrid)
+                .onChange(async (value) => {
+                    this.plugin.settings.showChartGrid = value;
+                    await this.plugin.saveSettings();
+
+                    this.plugin.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE).forEach((leaf) => {
+                        if (leaf.view instanceof ExpensicaDashboardView) {
+                            leaf.view.renderDashboard();
+                        }
+                    });
                 }));
 
         new Setting(containerEl)
@@ -1942,6 +2031,11 @@ class ExpensicaSettingTab extends PluginSettingTab {
                 }));
     }
 
+    hide(): void {
+        this.clearCleanupCallbacks();
+        super.hide();
+    }
+
     renderCurrencyDropdown(
         container: HTMLElement,
         selectedCode: string,
@@ -2023,14 +2117,65 @@ class ExpensicaSettingTab extends PluginSettingTab {
                 searchInput.focus();
             }
         });
-        
-        // Close dropdown when clicking outside
-        document.addEventListener('click', (event) => {
-            const target = event.target as Node;
-            if (!currencySelectContainer.contains(target)) {
-                currencyOptions.addClass('expensica-select-hidden');
-                arrowIcon.removeClass('expensica-select-arrow-open');
+
+        this.registerOutsideClick(currencySelectContainer, () => {
+            currencyOptions.addClass('expensica-select-hidden');
+            arrowIcon.removeClass('expensica-select-arrow-open');
+        });
+    }
+
+    renderTimeFormatDropdown(
+        container: HTMLElement,
+        selectedFormat: '12' | '24',
+        onChange: (timeFormat: '12' | '24') => void
+    ): void {
+        const selectContainer = container.createDiv('currency-select-container');
+        const selectDisplay = selectContainer.createDiv('expensica-select-display');
+        const selectText = selectDisplay.createDiv('expensica-select-text');
+        const arrowIcon = selectDisplay.createDiv('expensica-select-arrow');
+        const optionsContainer = selectContainer.createDiv('expensica-select-options expensica-select-hidden');
+        const options = [
+            { value: '12' as const, label: '12 hours' },
+            { value: '24' as const, label: '24 hours' }
+        ];
+
+        const updateSelectedText = (value: '12' | '24') => {
+            const selectedOption = options.find(option => option.value === value) ?? options[0];
+            selectText.textContent = selectedOption.label;
+        };
+
+        updateSelectedText(selectedFormat);
+        arrowIcon.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
+
+        options.forEach((option) => {
+            const optionItem = optionsContainer.createDiv('expensica-select-option');
+            optionItem.textContent = option.label;
+
+            if (option.value === selectedFormat) {
+                optionItem.addClass('expensica-option-selected');
             }
+
+            optionItem.addEventListener('click', () => {
+                onChange(option.value);
+                updateSelectedText(option.value);
+                optionsContainer.addClass('expensica-select-hidden');
+                arrowIcon.removeClass('expensica-select-arrow-open');
+
+                Array.from(optionsContainer.children).forEach((child, index) => {
+                    child.toggleClass?.('expensica-option-selected', options[index].value === option.value);
+                });
+            });
+        });
+
+        selectDisplay.addEventListener('click', () => {
+            const isHidden = optionsContainer.hasClass('expensica-select-hidden');
+            optionsContainer.toggleClass('expensica-select-hidden', !isHidden);
+            arrowIcon.toggleClass('expensica-select-arrow-open', !isHidden);
+        });
+
+        this.registerOutsideClick(selectContainer, () => {
+            optionsContainer.addClass('expensica-select-hidden');
+            arrowIcon.removeClass('expensica-select-arrow-open');
         });
     }
 
