@@ -2,6 +2,7 @@ import { App, Editor, MarkdownView, Modal, Plugin, PluginSettingTab, Setting, Wo
 
 import { ExpensicaDashboardView, EXPENSICA_VIEW_TYPE, TransactionModal, DateRangeType, DashboardTab } from './src/dashboard-view';
 import { ExpensicaTransactionsView } from './src/transactions-view';
+import type { TransactionNavigationFilter } from './src/transactions-view';
 
 import {
     Transaction,
@@ -80,6 +81,7 @@ interface ExpensicaSettings {
     showChartGrid: boolean;
     showTransactionCategoryLabels: boolean;
     enableAccounts: boolean;
+    lastSelectedAccountId: string | null;
     enableBudgeting: boolean;
     enableDailyFinanceReview: boolean;
     enableDailyFinanceReviewForAnyDate: boolean;
@@ -130,6 +132,7 @@ const DEFAULT_SETTINGS: ExpensicaSettings = {
     showChartGrid: false,
     showTransactionCategoryLabels: true,
     enableAccounts: true,
+    lastSelectedAccountId: null,
     enableBudgeting: true,
     enableDailyFinanceReview: true,
     enableDailyFinanceReviewForAnyDate: true,
@@ -461,30 +464,22 @@ export default class ExpensicaPlugin extends Plugin {
         }
     }
 
-    async openTransactionsView() {
+    async openTransactionsView(filter?: TransactionNavigationFilter) {
         await this.openDashboard();
         const leaves = this.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE);
         const dashboard = leaves.find(leaf => leaf.view instanceof ExpensicaDashboardView)?.view as ExpensicaDashboardView | undefined;
         if (dashboard) {
             await dashboard.loadTransactionsData();
             dashboard.switchDashboardTab(DashboardTab.TRANSACTIONS);
+            if (filter) {
+                this.dashboardTransactionsViews.get(dashboard)?.applyNavigationFilter(filter);
+            }
             dashboard.scrollToTop();
         }
     }
 
     async openTransactionsViewForCategory(categoryId: string) {
-        await this.openDashboard();
-        const leaves = this.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE);
-        const dashboard = leaves.find(leaf => leaf.view instanceof ExpensicaDashboardView)?.view as ExpensicaDashboardView | undefined;
-        if (!dashboard) {
-            return;
-        }
-
-        await dashboard.loadTransactionsData();
-        dashboard.switchDashboardTab(DashboardTab.TRANSACTIONS);
-        const transactionsView = this.dashboardTransactionsViews.get(dashboard);
-        transactionsView?.applyCategoryFilter(categoryId);
-        dashboard.scrollToTop();
+        await this.openTransactionsView({ categoryId });
     }
 
     renderDashboardTransactionsTab(dashboard: ExpensicaDashboardView, container: HTMLElement) {
@@ -1736,7 +1731,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName('Time Format')
-            .setDesc('Choose 12-hour or 24-hour time for chart hour labels.')
+            .setDesc('Choose 12-hour or 24-hour time for transactions and chart hour labels.')
             .then((setting) => {
                 const container = setting.controlEl.createDiv('currency-dropdown-container');
                 this.renderTimeFormatDropdown(

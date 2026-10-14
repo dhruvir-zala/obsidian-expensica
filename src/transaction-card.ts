@@ -13,6 +13,7 @@ import type ExpensicaPlugin from '../main';
 import { renderCategoryChip } from './category-chip';
 import { showCategoryQuickMenu } from './category-quick-menu';
 import { showExpensicaNotice } from './notice';
+import { formatTimeForDisplay } from './time-selector-modal';
 
 interface TransactionCardOptions {
     plugin: ExpensicaPlugin;
@@ -88,7 +89,7 @@ export function renderTransactionCard(container: HTMLElement, options: Transacti
     detailsEl.createEl('div', { text: transaction.description, cls: 'expensica-transaction-title' });
     const metaEl = detailsEl.createDiv('expensica-transaction-meta');
 
-    const transactionTime = getTransactionDisplayTime(transaction);
+    const transactionTime = formatTimeForDisplay(getTransactionDisplayTime(transaction) || '', plugin.settings.timeFormat);
     if (transactionTime) {
         const timeEl = metaEl.createEl('span', { cls: 'expensica-transaction-date' });
         timeEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> ${transactionTime}`;

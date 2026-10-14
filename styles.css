@@ -76,6 +76,7 @@
   --expensica-transaction-mobile-inline-padding: var(--size-4-2, 8px);
   
   /* Typography */
+  --expensica-font-size-2xs: 10px;
   --expensica-font-size-xs: 12px;
   --expensica-font-size-sm: 14px;
   --expensica-font-size: 16px;
@@ -84,6 +85,9 @@
   --expensica-font-size-2xl: 24px;
   --expensica-font-size-donut: 32px;
   --expensica-font-size-donut-mini: 18px;
+  --expensica-font-size-donut-amount: var(--expensica-font-size-xl);
+  --expensica-font-size-donut-amount-mini: var(--expensica-font-size-xs);
+  --expensica-donut-label-gap: var(--expensica-gap-xs);
   --expensica-card-trend-font-size: var(--font-smallest, var(--font-ui-smallest, var(--expensica-font-size-xs)));
   --expensica-card-trend-icon-size: 1em;
   --expensica-card-trend-icon-stroke-width: 3;
@@ -719,6 +723,8 @@
   --expensica-mini-donut-max-size: 160px;
   --expensica-mini-donut-size: var(--expensica-mini-donut-max-size);
   --expensica-font-size-donut-current: var(--expensica-font-size-donut-mini);
+  --expensica-font-size-donut-amount-current: var(--expensica-font-size-donut-amount-mini);
+  --expensica-donut-label-gap: var(--expensica-gap-xs);
 
   align-items: center;
   align-self: center;
@@ -755,6 +761,7 @@
 .expensica-category-chart-layout.is-narrow .expensica-mini-donut-canvas-container {
   --expensica-mini-donut-size: var(--expensica-mini-donut-min-size);
   --expensica-font-size-donut-current: var(--expensica-font-size-donut-mini);
+  --expensica-font-size-donut-amount-current: var(--expensica-font-size-donut-amount-mini);
 }
 
 .expensica-chart-html-legend {
@@ -1484,6 +1491,11 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
   white-space: nowrap;
 }
 
+.is-mobile .expensica-transaction:not(.expensica-budget-card) .expensica-transaction-date,
+.is-mobile .expensica-transaction:not(.expensica-budget-card) .expensica-transaction-account {
+  font-size: var(--expensica-font-size-xs);
+}
+
 .expensica-transaction-account-endpoint,
 .expensica-transaction-account-separator,
 .expensica-transaction-account-icon {
@@ -1994,22 +2006,548 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
   font-size: var(--expensica-font-size-sm);
 }
 
-.expensica-modal .expensica-time-field {
-  position: relative;
-  padding-left: calc(var(--size-4-2, 8px) + var(--icon-size, var(--size-4-4, 16px)) + var(--size-2-2, 4px));
+.expensica-modal button.expensica-time-field,
+.expensica-modal button.expensica-date-field {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--expensica-gap-sm);
+  cursor: pointer;
+  text-align: left;
 }
 
-.expensica-modal .expensica-time-field::-webkit-calendar-picker-indicator {
-  position: absolute;
-  left: var(--size-4-2, 8px);
-  top: 50%;
-  right: auto;
+.expensica-modal button.expensica-time-field svg,
+.expensica-modal button.expensica-date-field svg {
   width: var(--icon-size, var(--size-4-4, 16px));
   height: var(--icon-size, var(--size-4-4, 16px));
-  margin: 0;
+  flex-shrink: 0;
   color: var(--text-muted);
+}
+
+.expensica-time-field-icon,
+.expensica-date-field-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.expensica-time-field-label,
+.expensica-date-field-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Shared analog time selector */
+.modal.expensica-time-selector-modal {
+  --expensica-primary: var(--interactive-accent);
+  --expensica-text-primary: var(--text-normal);
+  --expensica-text-secondary: var(--text-muted);
+  --expensica-bg-primary: var(--background-primary);
+  --expensica-bg-secondary: var(--background-secondary);
+  --expensica-bg-tertiary: var(--background-modifier-hover);
+  --expensica-border-primary: var(--background-modifier-border);
+  --expensica-time-clock-size: calc(var(--expensica-gap-2xl) * 8 + var(--expensica-gap-lg));
+  --expensica-time-hand-tip-size: var(--size-4-8, 32px);
+  --expensica-time-value-scale: 1.3;
+  box-sizing: border-box;
+  width: min(calc(var(--expensica-time-clock-size) + var(--expensica-gap-xl) * 2), calc(100vw - var(--expensica-gap-2xl)));
+  max-width: calc(100vw - var(--expensica-gap-2xl));
+  max-height: calc(100vh - var(--expensica-gap-2xl));
+  max-height: calc(100dvh - var(--expensica-gap-2xl));
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border-radius: var(--expensica-radius-lg);
+}
+
+.expensica-time-selector-modal .modal-content.expensica-time-selector {
+  width: 100%;
+  max-width: none;
+  max-height: calc(100vh - var(--expensica-gap-2xl));
+  max-height: calc(100dvh - var(--expensica-gap-2xl));
+  min-height: 0;
+  margin: 0;
+  padding: var(--expensica-gap-xl);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  color: var(--expensica-text-primary);
+  background-color: var(--expensica-bg-primary);
+}
+
+.expensica-time-selector .expensica-modal-title {
+  margin-bottom: var(--expensica-gap-lg);
+  font-size: var(--expensica-font-size-xl);
+}
+
+.expensica-time-selector-header,
+.expensica-time-selector-values {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.expensica-time-selector-header {
+  width: min(100%, var(--expensica-time-clock-size));
+  margin-inline: auto;
+  gap: var(--expensica-gap-lg);
+}
+
+.expensica-time-selector-values {
+  flex: 1;
+  min-width: 0;
+  gap: var(--expensica-gap-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.expensica-time-selector button.expensica-time-selector-value,
+.expensica-time-selector input.expensica-time-selector-input {
+  min-width: calc((var(--expensica-gap-3xl) + var(--expensica-gap-md)) * var(--expensica-time-value-scale));
+  min-height: calc((var(--expensica-gap-2xl) + var(--expensica-gap-md) + var(--expensica-gap-sm)) * var(--expensica-time-value-scale));
+  height: auto;
+  padding: calc(var(--expensica-gap-md) * var(--expensica-time-value-scale));
+  border: 1px solid transparent;
+  border-radius: var(--expensica-radius);
+  background-color: var(--expensica-bg-secondary);
+  color: var(--expensica-text-primary);
+  box-shadow: none;
+  font-size: calc(var(--expensica-font-size-donut) * var(--expensica-time-value-scale));
+  font-weight: var(--font-medium, 500);
+  line-height: var(--expensica-line-height-tight);
+  font-variant-numeric: tabular-nums;
   cursor: pointer;
-  transform: translateY(-50%);
+}
+
+.expensica-time-selector input.expensica-time-selector-input {
+  width: calc((var(--expensica-gap-3xl) + var(--expensica-gap-md)) * var(--expensica-time-value-scale));
+  border-color: var(--expensica-border-primary);
+  text-align: center;
+  cursor: text;
+}
+
+.expensica-time-selector input.expensica-time-selector-input:focus {
+  border-color: var(--expensica-primary);
+  background-color: var(--expensica-bg-primary);
+}
+
+.expensica-time-selector [hidden] {
+  display: none !important;
+}
+
+.expensica-time-selector-separator {
+  color: var(--expensica-text-secondary);
+  font-size: var(--expensica-font-size-2xl);
+}
+
+.expensica-time-selector-period {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: var(--expensica-gap-xs);
+}
+
+.expensica-time-selector button.expensica-time-selector-period-button {
+  min-width: var(--expensica-gap-3xl);
+  height: calc(var(--expensica-gap-2xl) + var(--expensica-gap-md) + var(--expensica-gap-sm));
+  padding: var(--expensica-gap-sm) var(--expensica-gap-md);
+  border: 1px solid var(--expensica-border-primary);
+  border-radius: var(--expensica-radius-sm);
+  background-color: var(--expensica-bg-secondary);
+  color: var(--expensica-text-primary);
+  box-shadow: none;
+  font-size: var(--expensica-font-size-sm);
+  cursor: pointer;
+}
+
+.expensica-time-selector button.expensica-time-selector-value:hover,
+.expensica-time-selector button.expensica-time-selector-period-button:hover {
+  background-color: var(--expensica-bg-tertiary);
+}
+
+.expensica-time-selector button.expensica-time-selector-value.is-active,
+.expensica-time-selector button.expensica-time-selector-period-button.is-active {
+  border-color: var(--expensica-primary);
+  background-color: var(--expensica-primary);
+  color: var(--text-on-accent);
+}
+
+.expensica-time-selector-clock {
+  position: relative;
+  isolation: isolate;
+  width: min(100%, var(--expensica-time-clock-size));
+  aspect-ratio: 1;
+  margin-top: var(--expensica-gap-xl);
+  margin-inline: auto;
+  border-radius: 50%;
+  background-color: var(--expensica-bg-secondary);
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.expensica-time-selector-hand {
+  position: absolute;
+  z-index: 0;
+  bottom: 50%;
+  left: 50%;
+  width: var(--expensica-gap-xs);
+  margin-left: calc(var(--expensica-gap-xs) / -2);
+  background-color: var(--expensica-primary);
+  transform-origin: bottom center;
+  pointer-events: none;
+}
+
+.expensica-time-selector-hand-tip {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: var(--expensica-time-hand-tip-size);
+  height: var(--expensica-time-hand-tip-size);
+  border-radius: 50%;
+  background-color: var(--expensica-primary);
+  transform: translate(-50%, -50%);
+}
+
+.expensica-time-selector-hand-tip.is-precise {
+  width: var(--expensica-gap-md);
+  height: var(--expensica-gap-md);
+}
+
+.expensica-time-selector-center {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 50%;
+  width: var(--expensica-gap-md);
+  height: var(--expensica-gap-md);
+  border-radius: 50%;
+  background-color: var(--expensica-primary);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.expensica-time-selector-labels {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+}
+
+.expensica-time-selector-number {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--expensica-time-hand-tip-size);
+  height: var(--expensica-time-hand-tip-size);
+  color: var(--expensica-text-primary);
+  font-size: var(--expensica-font-size);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.expensica-time-selector-number.is-inner {
+  color: var(--expensica-text-secondary);
+  font-size: var(--expensica-font-size-sm);
+}
+
+.expensica-time-selector-number.is-selected {
+  color: var(--text-on-accent);
+}
+
+.expensica-time-selector :is(button, input, .expensica-time-selector-clock):focus-visible {
+  outline: var(--expensica-gap-xs) solid var(--expensica-primary);
+  outline-offset: var(--expensica-gap-xs);
+}
+
+.expensica-time-selector input.expensica-time-selector-input[aria-invalid="true"] {
+  border-color: var(--text-error);
+  outline-color: var(--text-error);
+}
+
+.expensica-time-selector .expensica-form-footer {
+  gap: var(--expensica-gap-md);
+  margin-top: var(--expensica-gap-xl);
+  padding-top: var(--expensica-gap-lg);
+}
+
+.expensica-time-selector .expensica-form-footer .expensica-btn {
+  flex: 1;
+  min-width: 0;
+  min-height: calc(var(--expensica-gap-2xl) + var(--expensica-gap-md) + var(--expensica-gap-sm));
+}
+
+.expensica-time-selector .expensica-form-footer .expensica-time-selector-mode-toggle {
+  flex: 0 0 calc(var(--expensica-gap-2xl) + var(--expensica-gap-md) + var(--expensica-gap-sm));
+  width: calc(var(--expensica-gap-2xl) + var(--expensica-gap-md) + var(--expensica-gap-sm));
+  padding: 0;
+}
+
+.expensica-time-selector-mode-toggle svg {
+  width: var(--icon-size, var(--size-4-4, 16px));
+  height: var(--icon-size, var(--size-4-4, 16px));
+  flex-shrink: 0;
+}
+
+/* Shared calendar date selector */
+.modal.expensica-date-selector-modal {
+  --expensica-primary: var(--interactive-accent);
+  --expensica-text-primary: var(--text-normal);
+  --expensica-text-secondary: var(--text-muted);
+  --expensica-bg-primary: var(--background-primary);
+  --expensica-bg-secondary: var(--background-secondary);
+  --expensica-bg-tertiary: var(--background-modifier-hover);
+  --expensica-border-primary: var(--background-modifier-border);
+  --expensica-date-calendar-size: calc(var(--expensica-gap-2xl) * 9 + var(--expensica-gap-lg));
+  --expensica-date-control-size: calc(var(--expensica-gap-2xl) + var(--expensica-gap-md) + var(--expensica-gap-sm));
+  --expensica-date-value-scale: 1.3;
+  --expensica-date-icon-size: var(--expensica-font-size-sm);
+  box-sizing: border-box;
+  width: min(calc(var(--expensica-date-calendar-size) + var(--expensica-gap-xl) * 2), calc(100vw - var(--expensica-gap-2xl)));
+  max-width: calc(100vw - var(--expensica-gap-2xl));
+  max-height: calc(100vh - var(--expensica-gap-2xl));
+  max-height: calc(100dvh - var(--expensica-gap-2xl));
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border-radius: var(--expensica-radius-lg);
+}
+
+.expensica-date-selector-modal .modal-content.expensica-date-selector {
+  width: 100%;
+  max-width: none;
+  max-height: calc(100vh - var(--expensica-gap-2xl));
+  max-height: calc(100dvh - var(--expensica-gap-2xl));
+  min-height: 0;
+  margin: 0;
+  padding: var(--expensica-gap-xl);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  color: var(--expensica-text-primary);
+  background-color: var(--expensica-bg-primary);
+}
+
+.expensica-date-selector .expensica-modal-title {
+  margin-bottom: var(--expensica-gap-lg);
+  font-size: var(--expensica-font-size-xl);
+}
+
+.expensica-date-selector-entry {
+  display: flex;
+  align-items: center;
+  gap: var(--expensica-gap-md);
+}
+
+.expensica-date-selector-value {
+  flex: 1;
+  min-width: 0;
+  color: var(--expensica-text-primary);
+  font-size: calc(var(--expensica-font-size-lg) * var(--expensica-date-value-scale));
+  line-height: var(--expensica-line-height-tight);
+}
+
+.expensica-date-selector input.expensica-date-selector-input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  height: var(--expensica-date-control-size);
+  padding: var(--expensica-gap-md);
+  border: 1px solid var(--expensica-border-primary);
+  border-radius: var(--expensica-radius);
+  background-color: var(--expensica-bg-secondary);
+  color: var(--expensica-text-primary);
+  box-shadow: none;
+  font-size: var(--expensica-font-size-lg);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--expensica-line-height-tight);
+}
+
+.expensica-date-selector input.expensica-date-selector-input:focus {
+  border-color: var(--expensica-primary);
+}
+
+.expensica-date-selector button:is(.expensica-date-selector-edit, .expensica-date-selector-previous, .expensica-date-selector-next) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 var(--expensica-date-control-size);
+  width: var(--expensica-date-control-size);
+  min-width: 0;
+  height: var(--expensica-date-control-size);
+  padding: 0;
+  border: 1px solid var(--expensica-border-primary);
+  border-radius: var(--expensica-radius-sm);
+  background-color: var(--expensica-bg-primary);
+  color: var(--expensica-text-primary);
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.expensica-date-selector button svg {
+  width: var(--expensica-date-icon-size);
+  height: var(--expensica-date-icon-size);
+  flex-shrink: 0;
+}
+
+.expensica-date-selector-navigation {
+  display: grid;
+  grid-template-columns: var(--expensica-date-control-size) minmax(0, 1fr) var(--expensica-date-control-size);
+  align-items: center;
+  gap: var(--expensica-gap-sm);
+  margin-top: var(--expensica-gap-lg);
+  margin-bottom: var(--expensica-gap-md);
+}
+
+.expensica-date-selector-heading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  gap: var(--expensica-gap-sm);
+  font-size: var(--expensica-font-size-sm);
+  font-weight: var(--font-medium, 500);
+  white-space: nowrap;
+}
+
+.expensica-date-selector-month {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.expensica-date-selector button.expensica-date-selector-year {
+  flex-shrink: 0;
+  min-width: 0;
+  height: var(--expensica-date-control-size);
+  padding: 0 var(--expensica-gap-sm);
+  border: 1px solid transparent;
+  border-radius: var(--expensica-radius-sm);
+  background-color: transparent;
+  color: var(--expensica-text-primary);
+  box-shadow: none;
+  font-size: inherit;
+  font-weight: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.expensica-date-selector-calendar,
+.expensica-date-selector-years {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 1;
+}
+
+.expensica-date-selector-calendar {
+  grid-template-rows: 1fr 6fr;
+}
+
+.expensica-date-selector-weekdays,
+.expensica-date-selector-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.expensica-date-selector-weekdays {
+  align-items: center;
+  color: var(--expensica-text-secondary);
+  font-size: var(--expensica-font-size-xs);
+  text-align: center;
+}
+
+.expensica-date-selector-days {
+  grid-template-rows: repeat(6, minmax(0, 1fr));
+}
+
+.expensica-date-selector-years {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  gap: var(--expensica-gap-md);
+}
+
+.expensica-date-selector button:is(.expensica-date-selector-day, .expensica-date-selector-year-option) {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--expensica-radius-sm);
+  background-color: transparent;
+  color: var(--expensica-text-primary);
+  box-shadow: none;
+  font-size: var(--expensica-font-size-sm);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.expensica-date-selector button.expensica-date-selector-day {
+  aspect-ratio: 1;
+  border-radius: 50%;
+}
+
+.expensica-date-selector button:is(.expensica-date-selector-edit, .expensica-date-selector-previous, .expensica-date-selector-next, .expensica-date-selector-year, .expensica-date-selector-day, .expensica-date-selector-year-option):hover:not(:disabled) {
+  background-color: var(--expensica-bg-tertiary);
+}
+
+.expensica-date-selector button:is(.expensica-date-selector-day, .expensica-date-selector-year-option).is-selected {
+  background-color: var(--expensica-primary);
+  color: var(--text-on-accent);
+}
+
+.expensica-date-selector button:is(.expensica-date-selector-day, .expensica-date-selector-year-option).is-today::after {
+  content: '';
+  position: absolute;
+  bottom: var(--expensica-gap-sm);
+  left: 50%;
+  width: var(--expensica-gap-sm);
+  height: var(--expensica-gap-sm);
+  border-radius: 50%;
+  background-color: currentColor;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.expensica-date-selector button:disabled {
+  cursor: default;
+  opacity: var(--disabled-opacity, 0.5);
+}
+
+.expensica-date-selector :is(button, input):focus-visible {
+  outline: var(--expensica-gap-xs) solid var(--expensica-primary);
+  outline-offset: calc(var(--expensica-gap-xs) * -1);
+}
+
+.expensica-date-selector input.expensica-date-selector-input[aria-invalid="true"] {
+  border-color: var(--text-error);
+  outline-color: var(--text-error);
+}
+
+.expensica-date-selector [hidden] {
+  display: none !important;
+}
+
+.expensica-date-selector .expensica-form-footer {
+  gap: var(--expensica-gap-md);
+  margin-top: var(--expensica-gap-xl);
+  padding-top: var(--expensica-gap-lg);
+}
+
+.expensica-date-selector .expensica-form-footer .expensica-btn {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--expensica-date-control-size);
 }
 
 .expensica-select-display-text {
@@ -5119,7 +5657,7 @@ to {
     transition: all 0.2s ease;
 }
 
-button.expensica-category-card-search-button {
+button.expensica-category-card-edit-button {
     width: auto;
     aspect-ratio: 1 / 1;
     align-self: stretch;
@@ -5137,8 +5675,8 @@ button.expensica-category-card-search-button {
     cursor: pointer;
 }
 
-button.expensica-category-card-search-button:hover,
-button.expensica-category-card-search-button:focus-visible {
+button.expensica-category-card-edit-button:hover,
+button.expensica-category-card-edit-button:focus-visible {
     border-color: var(--background-modifier-border-hover);
     background: var(--background-modifier-hover);
     background-color: var(--background-modifier-hover);
@@ -5147,7 +5685,7 @@ button.expensica-category-card-search-button:focus-visible {
     outline: none;
 }
 
-button.expensica-category-card-search-button:active {
+button.expensica-category-card-edit-button:active {
     border-color: var(--background-modifier-border-hover, var(--background-modifier-border));
     background: var(--background-modifier-hover);
     background-color: var(--background-modifier-hover);
@@ -8752,6 +9290,19 @@ button.expensica-standard-button:focus-visible,
   padding: var(--expensica-gap-md);
 }
 
+.expensica-overview-card-interactive {
+  cursor: pointer;
+}
+
+.expensica-overview-card-interactive:focus-visible {
+  outline: 2px solid rgba(var(--interactive-accent-rgb), 0.2);
+  outline-offset: 2px;
+}
+
+body:not(.is-mobile) .expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card-primary + .expensica-overview-card-balance {
+  grid-column-start: 1;
+}
+
 .expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card {
   flex: 1 1 max-content;
   height: auto;
@@ -8783,6 +9334,15 @@ button.expensica-standard-button:focus-visible,
   justify-content: center;
   flex: 0 0 auto;
   margin-inline-end: var(--expensica-gap-xs);
+}
+
+.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-title span.emoji,
+.expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card > .expensica-card-title span.emoji {
+  /* Emoji glyphs need their natural width inside the clipped title. */
+  width: auto;
+  min-width: 1em;
+  height: auto;
+  letter-spacing: normal;
 }
 
 .expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-value,
