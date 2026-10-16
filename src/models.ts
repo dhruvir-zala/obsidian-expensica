@@ -341,7 +341,7 @@ function fallbackRandomIdPart(): string {
     return `${hours}:${minutes}:${seconds}`;
   }
 
-  function getTimeInSeconds(time: string | undefined): number | null {
+  export function getTimeInSeconds(time: string | undefined): number | null {
     if (!time) {
       return null;
     }
@@ -443,16 +443,19 @@ function fallbackRandomIdPart(): string {
   
   // Helper function to format a date
   export function formatDate(date: Date): string {
-    const year = date.getFullYear();
+    const year = String(date.getFullYear()).padStart(4, '0');
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   }
 
-  // Parse a YYYY-MM-DD string as a local calendar date instead of UTC.
-  export function parseLocalDate(dateString: string): Date {
+  // Parse local date components; callers can use noon for calendar navigation.
+  export function parseLocalDate(dateString: string, hour = 0): Date {
     const [year, month, day] = dateString.substring(0, 10).split('-').map(Number);
-    return new Date(year, month - 1, day);
+    const date = new Date(0);
+    date.setHours(hour, 0, 0, 0);
+    date.setFullYear(year, month - 1, day);
+    return date;
   }
 
   // Shared category colors for dashboard, chips, and calendar breakdowns.

@@ -1,8 +1,9 @@
 import {
-    App, Editor, MarkdownView, Modal, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, WorkspaceLeaf, ItemView, ViewStateResult
+    App, Editor, MarkdownView, Modal, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, WorkspaceLeaf, ItemView, ViewStateResult, setIcon
 } from 'obsidian';
 import Chart from 'chart.js/auto';
-import type { ArcElement, Chart as ChartJS, Plugin as ChartPlugin } from 'chart.js';
+import { Tooltip } from 'chart.js';
+import type { ArcElement, Chart as ChartJS, Plugin as ChartPlugin, TooltipPositionerFunction } from 'chart.js';
 import { 
     Transaction, Category, TransactionType, CategoryType, Currency, ColorScheme,
     formatCurrency, formatDate, formatTime, parseLocalDate, getMonthName, getYear, generateId, TransactionAggregator,
@@ -13,8 +14,11 @@ import {
 } from './models';
 import ExpensicaPlugin from '../main';
 import type { SharedDateRangeState } from '../main';
+import type { TransactionNavigationFilter } from './transactions-view';
 import { PremiumVisualizations } from './dashboard-integration';
 import { ConfirmationModal } from './confirmation-modal';
+import { DateSelectorModal, formatDateForDisplay } from './date-selector-modal';
+import { TimeSelectorModal, formatTimeForDisplay } from './time-selector-modal';
 import { showExpensicaNotice } from './notice';
 import { renderTransactionCard } from './transaction-card';
 import { renderBudgetCard } from './budget-cards';
@@ -25,10 +29,30 @@ import { EmojiPickerModal } from './emoji-picker-modal';
 import { showCategoryQuickMenu } from './category-quick-menu';
 import { getLastAccountTransaction, renderAccountCard, renderCreateAccountCard } from './account-card';
 
+declare module 'chart.js' {
+    interface TooltipPositionerMap {
+        expensicaDoughnutOuterEdge: TooltipPositionerFunction<'doughnut'>;
+    }
+}
+
+Tooltip.positioners.expensicaDoughnutOuterEdge = (items) => {
+    const arc = items[0]?.element as ArcElement | undefined;
+    if (!arc || !arc.hasValue()) {
+        return false;
+    }
+
+    const angle = (arc.startAngle + arc.endAngle) / 2;
+    const radius = arc.outerRadius - (arc.outerRadius - arc.innerRadius) * 0.1 + arc.options.offset / 4;
+    return {
+        x: arc.x + Math.cos(angle) * radius,
+        y: arc.y + Math.sin(angle) * radius
+    };
+};
+
 // Extend the plugin interface to include the new method
 declare module '../main' {
     interface ExpensicaPlugin {
-        openTransactionsView(): Promise<void>;
+        openTransactionsView(filter?: TransactionNavigationFilter): Promise<void>;
         openTransactionsViewForCategory(categoryId: string): Promise<void>;
         renderDashboardTransactionsTab(dashboard: ExpensicaDashboardView, container: HTMLElement): void;
         renderDashboardAccountsTab(dashboard: ExpensicaDashboardView, container: HTMLElement): void;
@@ -483,6 +507,8 @@ export class ExpensicaDashboardView extends ItemView {
     private doughnutLabelAnimationStartTime: number = 0;
     private doughnutLabelAnimationTarget: number = 0;
     private doughnutLabelAnimationValue: number = 0;
+    private doughnutAmountAnimationTarget: number = 0;
+    private doughnutAmountAnimationValue: number = 0;
     private paneResizeObserver: ResizeObserver | null = null;
     private lastObservedDashboardWidth = 0;
     private lastObservedDashboardHeight = 0;
@@ -1356,7 +1382,7 @@ export class ExpensicaDashboardView extends ItemView {
         }, 0);
     }
 
-    private getActiveDoughnutPercentageValue(chart: ChartJS<'doughnut', number[], unknown>): { index: number; percentage: number } | null {
+    private getActiveDoughnutPercentageValue(chart: ChartJS<'doughnut', number[], unknown>): { index: number; percentage: number; amount: number } | null {
         const [activeElement] = chart.getActiveElements();
         if (!activeElement || !chart.getDataVisibility(activeElement.index)) {
             return null;
@@ -1373,7 +1399,8 @@ export class ExpensicaDashboardView extends ItemView {
 
         return {
             index: activeElement.index,
-            percentage: (value / total) * 100
+            percentage: (value / total) * 100,
+            amount: value
         };
     }
 
@@ -1411,13 +1438,17 @@ export class ExpensicaDashboardView extends ItemView {
         this.doughnutLabelAnimationStartTime = 0;
         this.doughnutLabelAnimationTarget = 0;
         this.doughnutLabelAnimationValue = 0;
+        this.doughnutAmountAnimationTarget = 0;
+        this.doughnutAmountAnimationValue = 0;
     }
 
-    private startDoughnutLabelAnimation(chart: ChartJS<'doughnut', number[], unknown>, index: number, targetPercentage: number) {
+    private startDoughnutLabelAnimation(chart: ChartJS<'doughnut', number[], unknown>, index: number, targetPercentage: number, targetAmount: number) {
         this.cancelDoughnutLabelAnimation();
         this.doughnutLabelAnimationIndex = index;
         this.doughnutLabelAnimationTarget = targetPercentage;
         this.doughnutLabelAnimationValue = 0;
+        this.doughnutAmountAnimationTarget = targetAmount;
+        this.doughnutAmountAnimationValue = 0;
         this.doughnutLabelAnimationStartTime = performance.now();
 
         const duration = 450;
@@ -1428,7 +1459,9 @@ export class ExpensicaDashboardView extends ItemView {
             }
 
             const progress = Math.min(1, (now - this.doughnutLabelAnimationStartTime) / duration);
-            this.doughnutLabelAnimationValue = targetPercentage * this.easeOutDoughnutLabelAnimation(progress);
+            const easedProgress = this.easeOutDoughnutLabelAnimation(progress);
+            this.doughnutLabelAnimationValue = targetPercentage * easedProgress;
+            this.doughnutAmountAnimationValue = targetAmount * easedProgress;
             chart.draw();
 
             if (progress < 1) {
@@ -1437,6 +1470,7 @@ export class ExpensicaDashboardView extends ItemView {
             }
 
             this.doughnutLabelAnimationValue = targetPercentage;
+            this.doughnutAmountAnimationValue = targetAmount;
             this.doughnutLabelAnimationFrame = null;
             chart.draw();
         };
@@ -1457,8 +1491,9 @@ export class ExpensicaDashboardView extends ItemView {
                 if (
                     this.doughnutLabelAnimationIndex !== activePercentage.index
                     || Math.abs(this.doughnutLabelAnimationTarget - activePercentage.percentage) > 0.001
+                    || Math.abs(this.doughnutAmountAnimationTarget - activePercentage.amount) > 0.001
                 ) {
-                    this.startDoughnutLabelAnimation(chart, activePercentage.index, activePercentage.percentage);
+                    this.startDoughnutLabelAnimation(chart, activePercentage.index, activePercentage.percentage, activePercentage.amount);
                 }
 
                 const meta = chart.getDatasetMeta(0);
@@ -1474,9 +1509,23 @@ export class ExpensicaDashboardView extends ItemView {
                 const fontSize = styles.getPropertyValue('--expensica-font-size-donut-current').trim()
                     || styles.getPropertyValue('--expensica-font-size-donut').trim()
                     || '64px';
+                const amountFontSize = styles.getPropertyValue('--expensica-font-size-donut-amount-current').trim()
+                    || styles.getPropertyValue('--expensica-font-size-donut-amount').trim()
+                    || '20px';
+                const currencySymbol = getCompactCurrencySymbol(this.plugin.settings.defaultCurrency);
+                const animatedCents = Math.round(this.doughnutAmountAnimationValue * 100);
+                const hasCents = Math.round(Math.abs(this.doughnutAmountAnimationTarget) * 100) % 100 !== 0;
+                const formattedAmount = (Math.abs(animatedCents) / 100).toLocaleString('en-US', {
+                    minimumFractionDigits: hasCents ? 2 : 0,
+                    maximumFractionDigits: hasCents ? 2 : 0
+                });
+                const amount = `${animatedCents < 0 ? '-' : ''}${currencySymbol}${formattedAmount}`;
                 const fontFamily = styles.fontFamily || getComputedStyle(document.body).fontFamily || 'sans-serif';
                 const x = chart.chartArea.left + (chart.chartArea.right - chart.chartArea.left) / 2;
                 const y = chart.chartArea.top + (chart.chartArea.bottom - chart.chartArea.top) / 2;
+                const gap = parseFloat(styles.getPropertyValue('--expensica-donut-label-gap')) || 8;
+                const amountY = y + (parseFloat(fontSize) + parseFloat(amountFontSize)) / 2 + gap;
+                const textWidth = Math.max(0, firstArc.innerRadius * 2 - 8);
 
                 ctx.save();
                 ctx.textAlign = 'center';
@@ -1484,6 +1533,8 @@ export class ExpensicaDashboardView extends ItemView {
                 ctx.fillStyle = styles.color || 'currentColor';
                 ctx.font = `700 ${fontSize} ${fontFamily}`;
                 ctx.fillText(label, x, y);
+                ctx.font = `400 ${amountFontSize} ${fontFamily}`;
+                ctx.fillText(amount, x, amountY, textWidth);
                 ctx.restore();
             }
         };
@@ -2578,8 +2629,8 @@ export class ExpensicaDashboardView extends ItemView {
                 {
                     onHoverStart: (index, event) => this.activateCategorySlice(this.expensesChart, index, event),
                     onHoverEnd: () => this.clearCategorySlice(this.expensesChart),
-                    onClick: (category) => this.openCategoryModal(category.id),
-                    onSearchClick: (category) => {
+                    onEditClick: (category) => this.openCategoryModal(category.id),
+                    onClick: (category) => {
                         if (category.id) {
                             void this.plugin.openTransactionsViewForCategory(category.id);
                         }
@@ -2602,8 +2653,8 @@ export class ExpensicaDashboardView extends ItemView {
                     formattedAmount: this.formatCategoryCardCurrency(0)
                 })),
                 {
-                    onClick: (category) => this.openCategoryModal(category.id),
-                    onSearchClick: (category) => {
+                    onEditClick: (category) => this.openCategoryModal(category.id),
+                    onClick: (category) => {
                         if (category.id) {
                             void this.plugin.openTransactionsViewForCategory(category.id);
                         }
@@ -3136,6 +3187,9 @@ export class ExpensicaDashboardView extends ItemView {
         const balance = this.getDefaultAccountBalanceThrough(this.dateRange.endDate);
 
         const comparison = this.getPreviousPeriodComparisonRange();
+        const comparisonLabel = comparison
+            ? this.getResolvedDateRangeLegendLabel(comparison.range, comparison.label, 'short')
+            : '';
         const comparisonTransactions = comparison ? this.getTransactionsForDateRange(comparison.range) : [];
         const prevTotalIncome = TransactionAggregator.getTotalIncome(comparisonTransactions);
         const prevTotalExpenses = TransactionAggregator.getTotalExpenses(comparisonTransactions);
@@ -3147,25 +3201,27 @@ export class ExpensicaDashboardView extends ItemView {
 
         // Income card
         const incomeCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-overview-card-primary expensica-animate');
+        this.linkSummaryCardToTransactions(incomeCard, 'View income transactions', { type: TransactionType.INCOME });
         const incomeCardTitle = incomeCard.createEl('h3', { cls: 'expensica-card-title' });
         incomeCardTitle.innerHTML = '<span class="emoji">💰</span> Income';
         renderOverviewCurrencyValue(incomeCard, this.plugin.settings.defaultCurrency, totalIncome, 'expensica-income');
 
         if (comparison) {
             const trendEl = incomeCard.createEl('div', { cls: 'expensica-card-trend' });
-            trendEl.innerHTML = getTrendMarkup(incomeTrend, comparison.label, totalIncome >= prevTotalIncome);
+            trendEl.innerHTML = getTrendMarkup(incomeTrend, comparisonLabel, totalIncome >= prevTotalIncome);
         }
 
 
         // Expenses card
         const expensesCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-overview-card-primary expensica-animate expensica-animate-delay-1');
+        this.linkSummaryCardToTransactions(expensesCard, 'View expense transactions', { type: TransactionType.EXPENSE });
         const expensesCardTitle = expensesCard.createEl('h3', { cls: 'expensica-card-title' });
         expensesCardTitle.innerHTML = '<span class="emoji">💸</span> Expenses';
         renderOverviewCurrencyValue(expensesCard, this.plugin.settings.defaultCurrency, totalExpenses, 'expensica-expense');
 
         if (comparison) {
             const trendEl = expensesCard.createEl('div', { cls: 'expensica-card-trend' });
-            trendEl.innerHTML = getTrendMarkup(expenseTrend, comparison.label, totalExpenses <= prevTotalExpenses);
+            trendEl.innerHTML = getTrendMarkup(expenseTrend, comparisonLabel, totalExpenses <= prevTotalExpenses);
         }
 
 
@@ -3177,7 +3233,7 @@ export class ExpensicaDashboardView extends ItemView {
 
         if (comparison) {
             const trendEl = netBalanceCard.createEl('div', { cls: 'expensica-card-trend' });
-            trendEl.innerHTML = getTrendMarkup(netBalanceTrend, comparison.label, netBalance >= prevNetBalance);
+            trendEl.innerHTML = getTrendMarkup(netBalanceTrend, comparisonLabel, netBalance >= prevNetBalance);
         }
 
         const balanceAccounts = this.plugin.settings.enableAccounts
@@ -3206,6 +3262,7 @@ export class ExpensicaDashboardView extends ItemView {
             const accountColor = getAccountColor(account, balanceAccounts);
 
             const balanceCard = summaryEl.createDiv(`expensica-card expensica-overview-card expensica-overview-card-balance expensica-animate expensica-animate-delay-${Math.min(3, index + 3)}`);
+            this.linkSummaryCardToTransactions(balanceCard, `View ${account.name} transactions`, { accountReference });
             const balanceCardTitle = balanceCard.createEl('h3', { cls: 'expensica-card-title' });
             balanceCardTitle.innerHTML = this.plugin.settings.enableAccounts
                 ? `<span class="emoji">${getAccountEmoji(account.type)}</span> ${account.name} Balance`
@@ -3223,10 +3280,29 @@ export class ExpensicaDashboardView extends ItemView {
                 const isPositiveNews = account.type === AccountType.CREDIT
                     ? normalizedAccountBalance <= prevAccountBalance
                     : normalizedAccountBalance >= prevAccountBalance;
-                trendEl.innerHTML = getTrendMarkup(accountBalanceTrend, comparison.label, isPositiveNews);
+                trendEl.innerHTML = getTrendMarkup(accountBalanceTrend, comparisonLabel, isPositiveNews);
             }
         });
 
+    }
+
+    private linkSummaryCardToTransactions(
+        card: HTMLElement,
+        label: string,
+        filter: { type?: TransactionType; accountReference?: string }
+    ) {
+        card.addClass('expensica-overview-card-interactive');
+        card.setAttribute('role', 'button');
+        card.setAttribute('tabindex', '0');
+        card.setAttribute('aria-label', label);
+        const open = () => void this.plugin.openTransactionsView(filter);
+        card.addEventListener('click', open);
+        card.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                open();
+            }
+        });
     }
 
     renderExpensesChart(container: HTMLElement) {
@@ -3942,7 +4018,7 @@ export class ExpensicaDashboardView extends ItemView {
         }
     }
 
-    private getResolvedDateRangeLegendLabel(dateRange?: DateRange, fallbackLabel?: string): string {
+    private getResolvedDateRangeLegendLabel(dateRange?: DateRange, fallbackLabel?: string, monthFormat: 'long' | 'short' = 'long'): string {
         if (!dateRange) {
             return fallbackLabel ?? '';
         }
@@ -3972,7 +4048,7 @@ export class ExpensicaDashboardView extends ItemView {
         if (isSingleDay) {
             return start.toLocaleDateString(undefined, {
                 weekday: 'long',
-                month: 'long',
+                month: monthFormat,
                 day: 'numeric',
                 ...(includeYear ? { year: 'numeric' } : {})
             });
@@ -3983,7 +4059,7 @@ export class ExpensicaDashboardView extends ItemView {
         }
 
         if (isFullMonth) {
-            return `${start.toLocaleDateString(undefined, { month: 'long' })}, ${start.getFullYear()}`;
+            return `${start.toLocaleDateString(undefined, { month: monthFormat })}, ${start.getFullYear()}`;
         }
 
         if (isFullYear) {
@@ -3998,7 +4074,7 @@ export class ExpensicaDashboardView extends ItemView {
             }
             case DateRangeType.THIS_MONTH:
             case DateRangeType.LAST_MONTH:
-                return `${start.toLocaleDateString(undefined, { month: 'long' })}, ${start.getFullYear()}`;
+                return `${start.toLocaleDateString(undefined, { month: monthFormat })}, ${start.getFullYear()}`;
             case DateRangeType.THIS_YEAR:
             case DateRangeType.LAST_YEAR:
                 return String(start.getFullYear());
@@ -4107,18 +4183,18 @@ export class ExpensicaDashboardView extends ItemView {
                     },
                     tooltip: {
                         enabled: showTooltip,
+                        position: 'expensicaDoughnutOuterEdge',
+                        displayColors: false,
                         backgroundColor: this.getTooltipBackgroundColor(),
                         titleColor: this.getTooltipTitleColor(),
                         bodyColor: this.getTooltipBodyColor(),
                         borderColor: this.getTooltipBorderColor(),
                         borderWidth: 1,
                         callbacks: {
+                            title: () => '',
                             label: (context) => {
-                                const label = context.label || '';
-                                const value = context.raw as number;
-                                const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0) as number;
-                                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
-                                return `${label}: ${this.formatWholeCurrency(value)} (${percentage}%)`;
+                                const emoji = categoryData[context.dataIndex]?.emoji;
+                                return emoji ? `${emoji} ${context.label || ''}` : context.label || '';
                             }
                         }
                     }
@@ -5863,6 +5939,9 @@ export class TransactionModal extends Modal {
     dashboardView: ExpensicaDashboardView;
     transaction: Transaction | null;
     defaultType: TransactionType;
+    private discardConfirmation: ConfirmationModal | null = null;
+    private dateSelector: DateSelectorModal | null = null;
+    private timeSelector: TimeSelectorModal | null = null;
 
     constructor(app: App, plugin: ExpensicaPlugin, dashboardView: ExpensicaDashboardView, transaction: Transaction | null = null, defaultType: TransactionType = TransactionType.EXPENSE) {
         super(app);
@@ -5953,6 +6032,9 @@ export class TransactionModal extends Modal {
         let selectedTransactionType = this.getTransactionType();
         const availableAccounts = this.plugin.getAccounts();
         const defaultAccountReference = this.plugin.normalizeTransactionAccountReference(undefined);
+        const lastSelectedAccount = this.plugin.settings.enableAccounts
+            ? availableAccounts.find(account => account.id === this.plugin.settings.lastSelectedAccountId)
+            : undefined;
         const secondAccountReference = availableAccounts.find(account =>
             formatAccountReference(account.type, account.name) !== defaultAccountReference
         )
@@ -5961,9 +6043,11 @@ export class TransactionModal extends Modal {
                 availableAccounts.find(account => formatAccountReference(account.type, account.name) !== defaultAccountReference)!.name
             )
             : defaultAccountReference;
-        let selectedAccountReference = this.transaction?.account
+        let selectedAccountReference = this.transaction
             ? this.plugin.normalizeTransactionAccountReference(this.transaction.account)
-            : defaultAccountReference;
+            : lastSelectedAccount
+                ? formatAccountReference(lastSelectedAccount.type, lastSelectedAccount.name)
+                : defaultAccountReference;
         let selectedFromAccountReference = this.transaction?.fromAccount
             ? this.plugin.normalizeTransactionAccountReference(this.transaction.fromAccount)
             : defaultAccountReference;
@@ -6069,13 +6153,50 @@ export class TransactionModal extends Modal {
             attr: { for: 'date' }
         });
         const dateInput = dateGroup.createEl('input', {
-            cls: 'expensica-form-input expensica-edit-field',
             attr: {
-                type: 'date',
-                id: 'date',
-                name: 'date',
-                required: 'required'
+                type: 'hidden',
+                name: 'date'
             }
+        });
+        const dateButton = dateGroup.createEl('button', {
+            cls: 'expensica-form-input expensica-edit-field expensica-date-field',
+            attr: {
+                type: 'button',
+                id: 'date',
+                'aria-haspopup': 'dialog',
+                'aria-expanded': 'false'
+            }
+        });
+        const dateIcon = dateButton.createSpan({
+            cls: 'expensica-date-field-icon',
+            attr: { 'aria-hidden': 'true' }
+        });
+        setIcon(dateIcon, 'calendar');
+        const dateLabel = dateButton.createSpan('expensica-date-field-label');
+        const updateDateDisplay = () => {
+            dateLabel.textContent = formatDateForDisplay(dateInput.value);
+            dateButton.setAttribute('aria-label', `Choose date, ${dateLabel.textContent}`);
+        };
+        dateButton.addEventListener('click', () => {
+            if (this.dateSelector) return;
+            closeModalSelectMenus();
+            const selector = new DateSelectorModal(
+                this.app,
+                dateInput.value,
+                (date) => {
+                    dateInput.value = date;
+                    updateDateDisplay();
+                },
+                () => {
+                    if (this.dateSelector !== selector) return;
+                    this.dateSelector = null;
+                    dateButton.setAttribute('aria-expanded', 'false');
+                    if (dateButton.isConnected) dateButton.focus();
+                }
+            );
+            this.dateSelector = selector;
+            dateButton.setAttribute('aria-expanded', 'true');
+            selector.open();
         });
         const timeGroup = dateTimeRow.createDiv('expensica-form-group');
         timeGroup.createEl('label', {
@@ -6084,14 +6205,51 @@ export class TransactionModal extends Modal {
             attr: { for: 'time' }
         });
         const timeInput = timeGroup.createEl('input', {
+            attr: {
+                type: 'hidden',
+                name: 'time'
+            }
+        });
+        const timeButton = timeGroup.createEl('button', {
             cls: 'expensica-form-input expensica-edit-field expensica-time-field',
             attr: {
-                type: 'time',
+                type: 'button',
                 id: 'time',
-                name: 'time',
-                step: '1',
-                required: 'required'
+                'aria-haspopup': 'dialog',
+                'aria-expanded': 'false'
             }
+        });
+        const timeIcon = timeButton.createSpan({
+            cls: 'expensica-time-field-icon',
+            attr: { 'aria-hidden': 'true' }
+        });
+        setIcon(timeIcon, 'clock');
+        const timeLabel = timeButton.createSpan('expensica-time-field-label');
+        const updateTimeDisplay = () => {
+            timeLabel.textContent = formatTimeForDisplay(timeInput.value, this.plugin.settings.timeFormat);
+            timeButton.setAttribute('aria-label', `Choose time, ${timeLabel.textContent}`);
+        };
+        timeButton.addEventListener('click', () => {
+            if (this.timeSelector) return;
+            closeModalSelectMenus();
+            const selector = new TimeSelectorModal(
+                this.app,
+                timeInput.value,
+                this.plugin.settings.timeFormat,
+                (time) => {
+                    timeInput.value = time;
+                    updateTimeDisplay();
+                },
+                () => {
+                    if (this.timeSelector !== selector) return;
+                    this.timeSelector = null;
+                    timeButton.setAttribute('aria-expanded', 'false');
+                    if (timeButton.isConnected) timeButton.focus();
+                }
+            );
+            this.timeSelector = selector;
+            timeButton.setAttribute('aria-expanded', 'true');
+            selector.open();
         });
 
         const taxonomyRow = form.createDiv('expensica-form-row');
@@ -6320,6 +6478,10 @@ export class TransactionModal extends Modal {
                 selectedAccountReference = formatAccountReference(parsedAccount.type, parsedAccount.name);
                 hiddenAccountSelect!.value = selectedAccountReference;
                 accountDisplayText.innerHTML = `${getCreditCardSvgMarkup()} ${parsedAccount.name} · ${getAccountTypeLabel(parsedAccount.type)}`;
+                const account = accountOptions.find(option =>
+                    formatAccountReference(option.type, option.name) === selectedAccountReference
+                );
+                accountDisplayText.style.color = account ? getAccountColor(account, availableAccounts) : '';
                 accountOptionsMenu.querySelectorAll('.expensica-select-option').forEach(option => {
                     option.removeClass('expensica-option-selected');
                 });
@@ -6337,6 +6499,7 @@ export class TransactionModal extends Modal {
                 const optionEl = accountOptionsMenu.createEl('div', { cls: 'expensica-select-option' });
                 optionEl.setAttribute('data-account-reference', accountReference);
                 optionEl.innerHTML = `${getCreditCardSvgMarkup()} ${account.name} · ${getAccountTypeLabel(account.type)}`;
+                optionEl.style.color = getAccountColor(account, availableAccounts);
                 optionEl.addEventListener('click', (event) => {
                     event.preventDefault();
                     event.stopPropagation();
@@ -6401,6 +6564,7 @@ export class TransactionModal extends Modal {
                     const optionEl = optionsMenu.createEl('div', { cls: 'expensica-select-option' });
                     optionEl.setAttribute(`data-${id}-reference`, reference);
                     optionEl.innerHTML = `${getCreditCardSvgMarkup()} ${account.name} · ${getAccountTypeLabel(account.type)}`;
+                    optionEl.style.color = getAccountColor(account, availableAccounts);
                     optionEl.addEventListener('click', (event) => {
                         event.preventDefault();
                         event.stopPropagation();
@@ -6412,6 +6576,10 @@ export class TransactionModal extends Modal {
                     select.value = reference;
                     const parsedAccount = parseAccountReference(reference);
                     displayText.innerHTML = `${getCreditCardSvgMarkup()} ${parsedAccount.name} · ${getAccountTypeLabel(parsedAccount.type)}`;
+                    const account = accountOptions.find(option =>
+                        formatAccountReference(option.type, option.name) === reference
+                    );
+                    displayText.style.color = account ? getAccountColor(account, availableAccounts) : '';
                     optionsMenu.querySelectorAll('.expensica-select-option').forEach(option => option.removeClass('expensica-option-selected'));
                     optionsMenu.querySelector(`[data-${id}-reference="${reference}"]`)?.addClass('expensica-option-selected');
                     optionsMenu.addClass('expensica-select-hidden');
@@ -6555,6 +6723,8 @@ export class TransactionModal extends Modal {
             dateInput.value = formatDate(this.dashboardView.getDefaultTransactionDate?.() || new Date());
             timeInput.value = formatTime().slice(0, 5);
         }
+        updateDateDisplay();
+        updateTimeDisplay();
 
         // Event listeners
         cancelBtn.addEventListener('click', () => {
@@ -6585,12 +6755,12 @@ export class TransactionModal extends Modal {
             }
 
             if (!dateInput.value) {
-                showValidationError('Please fill this field.', dateInput);
+                showValidationError('Please fill this field.', dateButton);
                 return;
             }
 
             if (!timeInput.value) {
-                showValidationError('Please fill this field.', timeInput);
+                showValidationError('Please fill this field.', timeButton);
                 return;
             }
 
@@ -6620,7 +6790,7 @@ export class TransactionModal extends Modal {
             const submittedTimeValue = formData.get('time') as string | null;
             const submittedDisplayTime = submittedTimeValue || '';
             const submittedTime = this.transaction && submittedDisplayTime === getTransactionFormTime(this.transaction)
-                ? this.transaction.time || normalizeTransactionTime(submittedTimeValue)
+                ? getTransactionTime(this.transaction) || this.transaction.time || normalizeTransactionTime(submittedTimeValue)
                 : normalizeTransactionTime(submittedTimeValue);
             const transaction: Transaction = {
                 id: this.transaction ? this.transaction.id : generateId(),
@@ -6664,11 +6834,52 @@ export class TransactionModal extends Modal {
                 await this.dashboardView.addTransaction(transaction);
             }
 
-            this.close();
+            if (this.plugin.settings.enableAccounts && transaction.type !== TransactionType.INTERNAL) {
+                const account = this.plugin.findAccountByReference(transaction.account);
+                if (account && this.plugin.settings.lastSelectedAccountId !== account.id) {
+                    this.plugin.settings.lastSelectedAccountId = account.id;
+                    await this.plugin.saveSettings(false);
+                }
+            }
+
+            super.close();
         });
     }
 
+    close() {
+        if (this.transaction) {
+            super.close();
+            return;
+        }
+
+        if (this.discardConfirmation) {
+            return;
+        }
+
+        this.discardConfirmation = new ConfirmationModal(
+            this.app,
+            'Discard Transaction?',
+            'This transaction has not been saved. Are you sure you want to discard it?',
+            (confirmed) => {
+                this.discardConfirmation = null;
+                if (confirmed) {
+                    super.close();
+                }
+            },
+            'Discard'
+        );
+        this.discardConfirmation.open();
+    }
+
     onClose() {
+        const dateSelector = this.dateSelector;
+        this.dateSelector = null;
+        dateSelector?.close();
+        const timeSelector = this.timeSelector;
+        this.timeSelector = null;
+        timeSelector?.close();
+        this.discardConfirmation?.close();
+        this.discardConfirmation = null;
         const {contentEl} = this;
         contentEl.empty();
     }

@@ -7,6 +7,7 @@ import {
     formatCurrency,
     formatDate,
     formatAccountReference,
+    getAccountColor,
     getAccountEmoji,
     getAccountTypeLabel,
     parseLocalDate,
@@ -21,6 +22,17 @@ import { showExpensicaNotice } from './notice';
 import { renderTransactionCard, showTransactionBulkCategoryMenu } from './transaction-card';
 import { renderCategoryChip } from './category-chip';
 import { showCategoryQuickMenu } from './category-quick-menu';
+
+function getTransactionAccountReferences(plugin: ExpensicaPlugin, transaction: Transaction): string[] {
+    if (transaction.type !== TransactionType.INTERNAL) {
+        return [plugin.normalizeTransactionAccountReference(transaction.account)];
+    }
+
+    // Transfers belong only to their endpoints; an absent main account is not the default account.
+    return [transaction.fromAccount, transaction.toAccount]
+        .filter((reference): reference is string => !!reference)
+        .map(reference => plugin.normalizeTransactionAccountReference(reference));
+}
 
 function getAccountTransactionAmount(plugin: ExpensicaPlugin, transaction: Transaction, accountReference: string): number {
     const account = plugin.findAccountByReference(accountReference);
@@ -177,6 +189,12 @@ export interface TransactionView {
     deleteTransaction(id: string): Promise<void>;
 }
 
+export interface TransactionNavigationFilter {
+    type?: TransactionType;
+    accountReference?: string;
+    categoryId?: string;
+}
+
 export class ExpensicaTransactionsView implements TransactionView {
     app: App;
     plugin: ExpensicaPlugin;
@@ -309,7 +327,6 @@ export class ExpensicaTransactionsView implements TransactionView {
 
         const filterMenu = filterContainer.createDiv('expensica-filter-menu');
         filterMenu.addClass('is-hidden');
-        filterMenu.createDiv({ text: 'Filter by', cls: 'expensica-filter-menu-title' });
 
         this.renderFilterMenuSection(filterMenu, 'Type', (submenu) => this.renderTypeFilterOptions(submenu));
         if (this.plugin.settings.enableAccounts) {
@@ -437,6 +454,7 @@ export class ExpensicaTransactionsView implements TransactionView {
                     'data-account-reference': accountReference
                 }
             });
+            button.style.color = getAccountColor(account, accounts);
             button.createSpan({ text: getAccountEmoji(account.type), cls: 'expensica-filter-category-emoji' });
             button.createSpan({ text: account.name, cls: 'expensica-filter-category-name' });
             button.addEventListener('click', (event) => {
@@ -530,13 +548,14 @@ export class ExpensicaTransactionsView implements TransactionView {
             this.renderTextFilterChip(selectedFiltersContainer, label, () => this.removeSelectedType(type));
         });
 
+        const accounts = this.plugin.getAccounts();
         this.selectedAccountReferences.forEach(accountReference => {
             const account = this.plugin.findAccountByReference(accountReference);
             if (!account) {
                 return;
             }
 
-            this.renderTextFilterChip(selectedFiltersContainer, account.name, () => this.removeSelectedAccount(accountReference));
+            this.renderTextFilterChip(selectedFiltersContainer, account.name, () => this.removeSelectedAccount(accountReference), getAccountColor(account, accounts));
         });
 
         this.selectedCategoryIds.forEach(categoryId => {
@@ -564,7 +583,7 @@ export class ExpensicaTransactionsView implements TransactionView {
         });
     }
 
-    private renderTextFilterChip(container: HTMLElement, text: string, onRemove: () => void) {
+    private renderTextFilterChip(container: HTMLElement, text: string, onRemove: () => void, color?: string) {
         const chip = container.createEl('button', {
             cls: 'expensica-selected-filter-chip expensica-selected-filter-chip-text',
             attr: {
@@ -572,6 +591,7 @@ export class ExpensicaTransactionsView implements TransactionView {
                 'aria-label': `Remove ${text} filter`
             }
         });
+        if (color) chip.style.color = color;
         chip.createSpan({ text });
         const removeIcon = chip.createSpan('expensica-selected-filter-remove');
         removeIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
@@ -703,16 +723,17 @@ export class ExpensicaTransactionsView implements TransactionView {
 
     private renderTransactionStatsHeader(container: HTMLElement) {
         const totals = this.getFilteredTransactionTotals();
+        const shares = this.getTransactionShares();
         const statChipsContainer = container.createDiv('expensica-transaction-total-chips expensica-transactions-tab-chips');
         statChipsContainer.createEl('span', {
             text: this.filteredTransactions.length > 0 ? `${this.filteredTransactions.length} total` : '',
             cls: `expensica-transaction-count expensica-transaction-count-chip ${this.filteredTransactions.length === 0 ? 'is-hidden' : ''}`.trim()
         });
-        this.renderTransactionTotalChip(statChipsContainer, 'spent', totals.expenses);
-        this.renderTransactionTotalChip(statChipsContainer, 'income', totals.income);
+        this.renderTransactionTotalChip(statChipsContainer, 'spent', totals.expenses, shares.spending);
+        this.renderTransactionTotalChip(statChipsContainer, 'income', totals.income, shares.income);
     }
 
-    private renderTransactionTotalChip(container: HTMLElement, type: 'spent' | 'income', amount: number) {
+    private renderTransactionTotalChip(container: HTMLElement, type: 'spent' | 'income', amount: number, percentage: number | null) {
         if (amount === 0) {
             return null;
         }
@@ -723,19 +744,19 @@ export class ExpensicaTransactionsView implements TransactionView {
             : 'expensica-transaction-total-income';
 
         return container.createEl('span', {
-            text: `${label} ${this.formatTransactionStatCurrency(amount)}`,
+            text: `${label} ${this.formatTransactionStatCurrency(amount)}${percentage === null ? '' : ` (${percentage.toFixed(1)}%)`}`,
             cls: `expensica-transaction-count expensica-transaction-total-chip ${className}`
         });
     }
 
-    private syncTransactionTotalChip(container: HTMLElement, type: 'spent' | 'income', amount: number) {
+    private syncTransactionTotalChip(container: HTMLElement, type: 'spent' | 'income', amount: number, percentage: number | null) {
         const className = type === 'spent'
             ? 'expensica-transaction-total-spent'
             : 'expensica-transaction-total-income';
         const existingChip = container.querySelector(`.${className}`);
 
         existingChip?.remove();
-        this.renderTransactionTotalChip(container, type, amount);
+        this.renderTransactionTotalChip(container, type, amount, percentage);
     }
 
     rememberScrollPosition() {
@@ -776,13 +797,22 @@ export class ExpensicaTransactionsView implements TransactionView {
         }
     }
 
-    applyCategoryFilter(categoryId: string) {
-        this.selectedCategoryIds = this.plugin.getCategoryById(categoryId) ? [categoryId] : [];
-        this.currentPage = 1;
+    applyNavigationFilter(filter: TransactionNavigationFilter) {
+        if (this._debounceTimeout) {
+            clearTimeout(this._debounceTimeout);
+            this._debounceTimeout = null;
+        }
+        this.searchQuery = '';
+        this.selectedCategoryIds = filter.categoryId && this.plugin.getCategoryById(filter.categoryId)
+            ? [filter.categoryId] : [];
+        this.selectedTypeFilters = filter.type ? [filter.type] : [];
+        this.selectedAccountReferences = filter.accountReference ? [filter.accountReference] : [];
         this.applyFilters(true);
         this.persistTransactionsState();
 
         if (this.embeddedContentEl) {
+            const searchInput = this.embeddedContentEl.querySelector<HTMLInputElement>('.expensica-search-input');
+            if (searchInput) searchInput.value = '';
             this.refreshTransactionsListOnly();
             this.refreshSelectedFilterChips();
             this.refreshCategoryFilterOptions();
@@ -790,11 +820,13 @@ export class ExpensicaTransactionsView implements TransactionView {
     }
 
     createDateRangeFromState(type: DateRangeType, startDate?: Date, endDate?: Date): DateRange {
-        if (type === DateRangeType.CUSTOM && startDate && endDate) {
-            return this.getDateRange(DateRangeType.CUSTOM, startDate, endDate);
+        const range = this.getDateRange(type, startDate, endDate);
+        if (startDate && endDate) {
+            range.startDate = startDate;
+            range.endDate = new Date(endDate);
+            range.endDate.setHours(23, 59, 59, 999);
         }
-
-        return this.getDateRange(type);
+        return range;
     }
 
     async loadTransactionsData(resetPage = false) {
@@ -808,13 +840,6 @@ export class ExpensicaTransactionsView implements TransactionView {
     }
 
     applyFilters(resetPage = false) {
-        const validTransactionIds = new Set(this.transactions.map(transaction => transaction.id));
-        this.selectedTransactionIds.forEach(id => {
-            if (!validTransactionIds.has(id)) {
-                this.selectedTransactionIds.delete(id);
-            }
-        });
-
         this.selectedTypeFilters = this.selectedTypeFilters.filter(type =>
             Object.values(TransactionType).includes(type)
         );
@@ -833,11 +858,7 @@ export class ExpensicaTransactionsView implements TransactionView {
         );
 
         // Filter transactions based on the date range
-        this.filteredTransactions = this.transactions.filter(transaction => {
-            const transactionDate = parseLocalDate(transaction.date);
-            return transactionDate >= this.dateRange.startDate && 
-                   transactionDate <= this.dateRange.endDate;
-        });
+        this.filteredTransactions = this.transactions.filter(transaction => this.isInSelectedDateRange(transaction));
         
         // Apply search filter if there's a search query
         if (this.selectedCategoryIds.length > 0) {
@@ -853,18 +874,10 @@ export class ExpensicaTransactionsView implements TransactionView {
         }
 
         if (this.selectedAccountReferences.length > 0) {
-            this.filteredTransactions = this.filteredTransactions.filter(transaction => {
-                const accountReferences = new Set<string>();
-                accountReferences.add(this.plugin.normalizeTransactionAccountReference(transaction.account));
-                if (transaction.fromAccount) {
-                    accountReferences.add(this.plugin.normalizeTransactionAccountReference(transaction.fromAccount));
-                }
-                if (transaction.toAccount) {
-                    accountReferences.add(this.plugin.normalizeTransactionAccountReference(transaction.toAccount));
-                }
-
-                return this.selectedAccountReferences.some(reference => accountReferences.has(reference));
-            });
+            const selectedAccounts = new Set(this.selectedAccountReferences);
+            this.filteredTransactions = this.filteredTransactions.filter(transaction =>
+                getTransactionAccountReferences(this.plugin, transaction).some(reference => selectedAccounts.has(reference))
+            );
         }
 
         if (this.searchQuery) {
@@ -876,11 +889,8 @@ export class ExpensicaTransactionsView implements TransactionView {
                     : transaction.type === TransactionType.EXPENSE
                         ? 'expenses'
                         : 'internal';
-                const accountNames = [
-                    transaction.account ? this.plugin.findAccountByReference(transaction.account)?.name ?? '' : this.plugin.getDefaultAccount().name,
-                    transaction.fromAccount ? this.plugin.findAccountByReference(transaction.fromAccount)?.name ?? '' : '',
-                    transaction.toAccount ? this.plugin.findAccountByReference(transaction.toAccount)?.name ?? '' : ''
-                ];
+                const accountNames = getTransactionAccountReferences(this.plugin, transaction)
+                    .map(reference => this.plugin.findAccountByReference(reference)?.name ?? '');
                 const searchableValues = [
                     transaction.description,
                     transaction.category,
@@ -902,10 +912,16 @@ export class ExpensicaTransactionsView implements TransactionView {
         } else if (this.currentPage > this.totalPages) {
             this.currentPage = this.totalPages;
         }
+        this.pruneSelectionToVisiblePage();
     }
 
-    getFilteredTransactionTotals() {
-        return this.filteredTransactions.reduce(
+    private isInSelectedDateRange(transaction: Transaction): boolean {
+        const transactionDate = parseLocalDate(transaction.date);
+        return transactionDate >= this.dateRange.startDate && transactionDate <= this.dateRange.endDate;
+    }
+
+    private getTransactionTotals(transactions: Transaction[]) {
+        return transactions.reduce(
             (totals, transaction) => {
                 if (transaction.type === TransactionType.INCOME) {
                     totals.income += transaction.amount;
@@ -917,6 +933,33 @@ export class ExpensicaTransactionsView implements TransactionView {
             },
             { income: 0, expenses: 0 }
         );
+    }
+
+    getFilteredTransactionTotals() {
+        return this.getTransactionTotals(this.filteredTransactions);
+    }
+
+    getTransactionShares() {
+        const periodTotals = this.getTransactionTotals(this.transactions.filter(transaction => this.isInSelectedDateRange(transaction)));
+        const filteredTotals = this.getFilteredTransactionTotals();
+        const typeIsApplicable = (type: TransactionType, periodTotal: number) =>
+            this.selectedTypeFilters.length > 0
+                ? this.selectedTypeFilters.includes(type)
+                : periodTotal > 0;
+        const share = (filteredTotal: number, periodTotal: number): number | null => {
+            if (filteredTotal <= 0 || periodTotal <= 0) return null;
+            const percentage = filteredTotal / periodTotal * 100;
+            return percentage.toFixed(1) === '0.0' ? null : percentage;
+        };
+
+        return {
+            spending: typeIsApplicable(TransactionType.EXPENSE, periodTotals.expenses)
+                ? share(filteredTotals.expenses, periodTotals.expenses)
+                : null,
+            income: typeIsApplicable(TransactionType.INCOME, periodTotals.income)
+                ? share(filteredTotals.income, periodTotals.income)
+                : null
+        };
     }
 
     renderTransactionsList(container: HTMLElement) {
@@ -942,13 +985,7 @@ export class ExpensicaTransactionsView implements TransactionView {
         
         // Get current page transactions
         const pageTransactions = this.filteredTransactions.slice(startIdx, endIdx);
-        const runningBalances = getRunningBalanceByTransactionIdForAccount(
-            this.plugin,
-            this.plugin.normalizeTransactionAccountReference(undefined),
-            this.transactions
-        );
-        
-        this.renderTransactionsToContainer(transactionsContainer, pageTransactions, runningBalances);
+        this.renderTransactionsToContainer(transactionsContainer, pageTransactions);
         this.renderBulkSelectionFooter(transactionsSection);
     }
 
@@ -1149,6 +1186,13 @@ export class ExpensicaTransactionsView implements TransactionView {
         return this.filteredTransactions.slice(startIdx, endIdx);
     }
 
+    private pruneSelectionToVisiblePage() {
+        const visibleIds = new Set(this.getVisiblePageTransactions().map(transaction => transaction.id));
+        this.selectedTransactionIds.forEach(id => {
+            if (!visibleIds.has(id)) this.selectedTransactionIds.delete(id);
+        });
+    }
+
     private clearSelectedTransactions() {
         this.selectedTransactionIds.clear();
         this.syncVisibleTransactionSelectionState();
@@ -1265,6 +1309,7 @@ export class ExpensicaTransactionsView implements TransactionView {
         if (nextPage === this.currentPage) return;
 
         this.currentPage = nextPage;
+        this.pruneSelectionToVisiblePage();
         if (scrollToTop) {
             this.scrollTop = 0;
             this.app.workspace.requestSaveLayout();
@@ -1431,8 +1476,9 @@ export class ExpensicaTransactionsView implements TransactionView {
         const totals = this.getFilteredTransactionTotals();
         const titleContainer = container.querySelector('.expensica-transaction-total-chips') as HTMLElement | null;
         if (titleContainer) {
-            this.syncTransactionTotalChip(titleContainer, 'spent', totals.expenses);
-            this.syncTransactionTotalChip(titleContainer, 'income', totals.income);
+            const shares = this.getTransactionShares();
+            this.syncTransactionTotalChip(titleContainer, 'spent', totals.expenses, shares.spending);
+            this.syncTransactionTotalChip(titleContainer, 'income', totals.income, shares.income);
         }
 
         container.querySelector('.expensica-transactions-section')?.remove();

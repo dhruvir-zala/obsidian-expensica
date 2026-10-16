@@ -4,15 +4,21 @@ export class ConfirmationModal extends Modal {
     private title: string;
     private message: string;
     private onConfirm: (confirmed: boolean) => void;
+    private confirmLabel: string;
+    private confirmed = false;
+    private resolved = false;
 
-    constructor(app: App, title: string, message: string, onConfirm: (confirmed: boolean) => void) {
+    constructor(app: App, title: string, message: string, onConfirm: (confirmed: boolean) => void, confirmLabel = 'Delete') {
         super(app);
         this.title = title;
         this.message = message;
         this.onConfirm = onConfirm;
+        this.confirmLabel = confirmLabel;
     }
 
     onOpen() {
+        this.confirmed = false;
+        this.resolved = false;
         const { contentEl } = this;
         contentEl.addClass('expensica-confirmation-modal');
 
@@ -27,23 +33,22 @@ export class ConfirmationModal extends Modal {
         // Buttons
         const buttonContainer = contentEl.createDiv('expensica-modal-buttons');
         
+        const confirmBtn = buttonContainer.createEl('button', {
+            text: this.confirmLabel,
+            cls: 'expensica-standard-button expensica-btn expensica-btn-danger-solid'
+        });
+
         const cancelBtn = buttonContainer.createEl('button', {
             text: 'Cancel',
             cls: 'expensica-standard-button expensica-btn expensica-btn-secondary'
         });
-        
-        const confirmBtn = buttonContainer.createEl('button', {
-            text: 'Delete',
-            cls: 'expensica-standard-button expensica-btn expensica-btn-danger-solid'
-        });
 
         cancelBtn.addEventListener('click', () => {
-            this.onConfirm(false);
             this.close();
         });
 
         confirmBtn.addEventListener('click', () => {
-            this.onConfirm(true);
+            this.confirmed = true;
             this.close();
         });
     }
@@ -51,5 +56,9 @@ export class ConfirmationModal extends Modal {
     onClose() {
         const { contentEl } = this;
         contentEl.empty();
+        if (!this.resolved) {
+            this.resolved = true;
+            this.onConfirm(this.confirmed);
+        }
     }
 } 
