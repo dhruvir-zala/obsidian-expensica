@@ -3227,6 +3227,7 @@ export class ExpensicaDashboardView extends ItemView {
 
         // Net Balance card
         const netBalanceCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-overview-card-primary expensica-animate expensica-animate-delay-2');
+        this.linkSummaryCardToTransactions(netBalanceCard, 'View all transactions', {});
         const netBalanceCardTitle = netBalanceCard.createEl('h3', { cls: 'expensica-card-title' });
         netBalanceCardTitle.innerHTML = '<span class="emoji">⚖️</span> Net Balance';
         renderOverviewCurrencyValue(netBalanceCard, this.plugin.settings.defaultCurrency, netBalance, 'expensica-balance');
@@ -5942,13 +5943,18 @@ export class TransactionModal extends Modal {
     private discardConfirmation: ConfirmationModal | null = null;
     private dateSelector: DateSelectorModal | null = null;
     private timeSelector: TimeSelectorModal | null = null;
+    private hasUnsavedChanges = () => false;
 
-    constructor(app: App, plugin: ExpensicaPlugin, dashboardView: ExpensicaDashboardView, transaction: Transaction | null = null, defaultType: TransactionType = TransactionType.EXPENSE) {
+    constructor(app: App, plugin: ExpensicaPlugin, dashboardView: ExpensicaDashboardView, transaction: Transaction | null = null, defaultType: TransactionType = plugin.settings.lastTransactionSelection.type || TransactionType.EXPENSE) {
         super(app);
         this.plugin = plugin;
         this.dashboardView = dashboardView;
         this.transaction = transaction;
         this.defaultType = transaction?.type || defaultType;
+        if (!transaction && this.defaultType === TransactionType.INTERNAL
+            && (!plugin.settings.enableAccounts || plugin.getAccounts().length < 2)) {
+            this.defaultType = TransactionType.EXPENSE;
+        }
     }
 
     getTitle(): string {
@@ -6030,10 +6036,11 @@ export class TransactionModal extends Modal {
         });
 
         let selectedTransactionType = this.getTransactionType();
+        const lastSelection = this.plugin.settings.lastTransactionSelection;
         const availableAccounts = this.plugin.getAccounts();
         const defaultAccountReference = this.plugin.normalizeTransactionAccountReference(undefined);
         const lastSelectedAccount = this.plugin.settings.enableAccounts
-            ? availableAccounts.find(account => account.id === this.plugin.settings.lastSelectedAccountId)
+            ? availableAccounts.find(account => account.id === lastSelection.accountId)
             : undefined;
         const secondAccountReference = availableAccounts.find(account =>
             formatAccountReference(account.type, account.name) !== defaultAccountReference
@@ -6375,7 +6382,8 @@ export class TransactionModal extends Modal {
         } else if (this.transaction && this.plugin.getCategoryById(this.transaction.category)?.type === getCategoryTypeForTransactionType(selectedTransactionType)) {
             selectedCategoryId = this.transaction.category;
         } else {
-            selectedCategoryId = getDefaultTransactionCategory(selectedTransactionType, this.plugin.getCategories());
+            selectedCategoryId = (!this.transaction && lastSelection.category)
+                || getDefaultTransactionCategory(selectedTransactionType, this.plugin.getCategories());
         }
 
         syncCategoryOptions();
@@ -6726,6 +6734,13 @@ export class TransactionModal extends Modal {
         updateDateDisplay();
         updateTimeDisplay();
 
+        const getFormValues = () => JSON.stringify(Array.from(
+            form.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input, select, textarea'),
+            field => field.value
+        ));
+        const initialValues = getFormValues();
+        this.hasUnsavedChanges = () => getFormValues() !== initialValues;
+
         // Event listeners
         cancelBtn.addEventListener('click', () => {
             this.close();
@@ -6834,12 +6849,16 @@ export class TransactionModal extends Modal {
                 await this.dashboardView.addTransaction(transaction);
             }
 
-            if (this.plugin.settings.enableAccounts && transaction.type !== TransactionType.INTERNAL) {
-                const account = this.plugin.findAccountByReference(transaction.account);
-                if (account && this.plugin.settings.lastSelectedAccountId !== account.id) {
-                    this.plugin.settings.lastSelectedAccountId = account.id;
-                    await this.plugin.saveSettings(false);
-                }
+            const selection = {
+                type: transaction.type,
+                category: transaction.category,
+                accountId: this.plugin.settings.enableAccounts && transaction.type !== TransactionType.INTERNAL
+                    ? this.plugin.findAccountByReference(transaction.account)?.id ?? lastSelection.accountId
+                    : lastSelection.accountId
+            };
+            if (Object.entries(selection).some(([key, value]) => lastSelection[key as keyof typeof selection] !== value)) {
+                this.plugin.settings.lastTransactionSelection = selection;
+                await this.plugin.saveSettings(false);
             }
 
             super.close();
@@ -6847,7 +6866,7 @@ export class TransactionModal extends Modal {
     }
 
     close() {
-        if (this.transaction) {
+        if (this.transaction || !this.hasUnsavedChanges()) {
             super.close();
             return;
         }
@@ -6872,6 +6891,7 @@ export class TransactionModal extends Modal {
     }
 
     onClose() {
+        this.hasUnsavedChanges = () => false;
         const dateSelector = this.dateSelector;
         this.dateSelector = null;
         dateSelector?.close();
