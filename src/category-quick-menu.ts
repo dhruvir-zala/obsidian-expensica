@@ -130,6 +130,7 @@ class CategoryQuickMenu {
     }
 
     close() {
+        this.plugin.releaseSaveOperation(this);
         window.removeEventListener('resize', this.boundReposition, true);
         document.removeEventListener('scroll', this.boundReposition, true);
         document.removeEventListener('mousedown', this.boundHandleDocumentPointerDown, true);
@@ -149,6 +150,7 @@ class CategoryQuickMenu {
     };
 
     private handleDocumentPointerDown(event: MouseEvent) {
+        if (this.plugin.hasSaveFailure(this) && (event.target as HTMLElement)?.closest('.modal-container')) return;
         const target = event.target as Node | null;
         if (!target) {
             return;
@@ -162,6 +164,7 @@ class CategoryQuickMenu {
     }
 
     private handleDocumentKeydown(event: KeyboardEvent) {
+        if (this.plugin.hasSaveFailure(this) && (event.target as HTMLElement)?.closest('.modal-container')) return;
         if (!this.menuEl.isConnected) {
             return;
         }
@@ -350,10 +353,20 @@ class CategoryQuickMenu {
         activeOption?.scrollIntoView({ block: 'nearest' });
     }
 
-    private selectCategory(categoryId: string) {
+    private selecting = false;
+
+    private async selectCategory(categoryId: string) {
         if (this.closeOnSelect) {
-            this.close();
-            void this.onCategoryChange(categoryId);
+            if (this.selecting) return;
+            this.selecting = true;
+            await this.plugin.runSaveOperation(this, 'Change transaction category', async () => {
+                try {
+                    await this.onCategoryChange(categoryId);
+                    this.close();
+                } finally {
+                    this.selecting = false;
+                }
+            });
             return;
         }
 

@@ -1,34 +1,39 @@
-import { Transaction, TransactionType, Category, parseLocalDate } from './models';
+import { Transaction, TransactionType, Category, formatCurrency, formatDate, parseLocalDate, sortTransactionsByDateTimeDesc } from './models';
+import type { UserOptions } from 'jspdf-autotable';
+import type { jsPDF as PDFDocument } from 'jspdf';
 
 // Import jsPDF dynamically for Obsidian compatibility
-let jsPDF: any;
+let jsPDF: typeof PDFDocument | undefined;
 
 // We'll initialize jsPDF when the service is first used
 function getJsPDF() {
   if (!jsPDF) {
-    try {
-      // Try to load jsPDF from the bundled version
-      // @ts-ignore
-      jsPDF = window.jspdf?.jsPDF;
-      
-      if (!jsPDF) {
-        console.error('Failed to load jsPDF. PDF export functionality will not work.');
-      }
-    } catch (error) {
-      console.error('Error loading jsPDF:', error);
-    }
+    jsPDF = window.jspdf?.jsPDF;
+  }
+  if (!jsPDF) {
+    throw new Error('jsPDF is not available.');
   }
   return jsPDF;
 }
 
+const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
+  [TransactionType.EXPENSE]: 'Expense',
+  [TransactionType.INCOME]: 'Income',
+  [TransactionType.INTERNAL]: 'Transfer'
+};
+
+function escapeCSVField(value: string): string {
+  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+function getCategoryName(transaction: Transaction, categories: Category[]): string {
+  return categories.find(category => category.id === transaction.category)?.name
+    ?? (transaction.type === TransactionType.INTERNAL ? 'Internal' : 'Other Expenses');
+}
+
 // Define jsPDF type for TypeScript
-interface JPDF {
-  text(text: string, x: number, y: number): JPDF;
-  setFontSize(size: number): JPDF;
-  setTextColor(r: number, g: number, b: number): JPDF;
-  addPage(): JPDF;
-  output(type: string): any;
-  autoTable: (options: any) => void;
+interface JPDF extends PDFDocument {
+  autoTable: (options: UserOptions) => void;
   lastAutoTable: {
     finalY: number;
   };
@@ -64,12 +69,18 @@ export class ExportService {
       }
       
       // Filter by transaction type
-      if (transaction.type === TransactionType.EXPENSE && !options.includeExpenses) {
-        return false;
-      }
-      
-      if (transaction.type === TransactionType.INCOME && !options.includeIncome) {
-        return false;
+      switch (transaction.type) {
+        case TransactionType.EXPENSE:
+          if (!options.includeExpenses) return false;
+          break;
+        case TransactionType.INCOME:
+          if (!options.includeIncome) return false;
+          break;
+        case TransactionType.INTERNAL:
+          // Transfers remain independent of the income/expense toggles.
+          break;
+        default:
+          return false;
       }
       
       // Filter by categories
@@ -84,24 +95,21 @@ export class ExportService {
   /**
    * Generate CSV data from transactions
    */
-  public static generateCSV(transactions: Transaction[], categories: Category[]): string {
+  public static generateCSV(transactions: Transaction[], categories: Category[], sourceTransactions: readonly Transaction[] = transactions): string {
     // CSV Header with BOM (Byte Order Mark) for Excel compatibility
     let csv = '\ufeff'; // BOM
     csv += 'Date,Type,Category,Description,Amount,Notes\n';
     
     // Generate CSV rows
-    transactions.forEach(transaction => {
-      const category = categories.find(c => c.id === transaction.category);
-      const categoryName = category ? category.name : 'Other Expenses';
-      
-      // Format each field and handle potential commas in text fields
-      const date = transaction.date;
-      const type = transaction.type === TransactionType.EXPENSE ? 'Expense' : 'Income';
-      const description = `"${transaction.description.replace(/"/g, '""')}"`;
-      const amount = transaction.amount.toString();
-      const notes = transaction.notes ? `"${transaction.notes.replace(/"/g, '""')}"` : '';
-      
-      csv += `${date},${type},"${categoryName}",${description},${amount},${notes}\n`;
+    sortTransactionsByDateTimeDesc(transactions, sourceTransactions).forEach(transaction => {
+      csv += [
+        transaction.date,
+        TRANSACTION_TYPE_LABELS[transaction.type],
+        getCategoryName(transaction, categories),
+        transaction.description,
+        transaction.amount.toString(),
+        transaction.notes ?? ''
+      ].map(escapeCSVField).join(',') + '\n';
     });
     
     return csv;
@@ -117,16 +125,11 @@ export class ExportService {
   /**
    * Generate PDF data from transactions
    */
-  public static generatePDF(transactions: Transaction[], categories: Category[], currency: string = 'USD'): Uint8Array {
+  public static generatePDF(transactions: Transaction[], categories: Category[], currency = 'USD', sourceTransactions: readonly Transaction[] = transactions): Uint8Array {
     try {
       // Create a new PDF document
       const jsPdfConstructor = getJsPDF();
-      if (!jsPdfConstructor) {
-        console.error('jsPDF not available');
-        return new Uint8Array();
-      }
-      
-      const doc = new jsPdfConstructor();
+      const doc = new jsPdfConstructor() as JPDF;
       
       // Add header with enhanced branding
       doc.setFontSize(28);
@@ -140,14 +143,10 @@ export class ExportService {
       doc.setFontSize(16);
       doc.setTextColor(27, 94, 32); // #1B5E20
       doc.text('Your Personal Finance Dashboard', 20, 35);
-      
-      // Get locale based on currency
-      const locale = currency === 'INR' ? 'en-IN' : 'en-US';
-      
       // Group transactions by month
-      const groupedTransactions = transactions.reduce((groups, transaction) => {
+      const groupedTransactions = sortTransactionsByDateTimeDesc(transactions, sourceTransactions).reduce((groups, transaction) => {
         const date = parseLocalDate(transaction.date);
-        const monthKey = `${date.getFullYear()}-${date.getMonth() + 1}`;
+        const monthKey = formatDate(date).slice(0, 7);
         if (!groups[monthKey]) {
           groups[monthKey] = [];
         }
@@ -176,27 +175,16 @@ export class ExportService {
         
         // Prepare table data for this month
         const tableData = monthTransactions.map(transaction => {
-          const category = categories.find(c => c.id === transaction.category);
           return [
             parseLocalDate(transaction.date).toLocaleDateString('en-US', {
               month: 'short',
               day: 'numeric'
             }),
             transaction.description,
-            category ? category.name : 'Other Expenses',
-            transaction.type === TransactionType.EXPENSE ? 'Expense' : 'Income',
-            Math.abs(transaction.amount).toLocaleString(locale, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2
-            })
+            getCategoryName(transaction, categories),
+            TRANSACTION_TYPE_LABELS[transaction.type],
+            formatCurrency(Math.abs(transaction.amount), currency, false, { currencyDisplay: 'symbol' })
           ];
-        });
-        
-        // Sort transactions by date (newest first)
-        tableData.sort((a, b) => {
-          const dateA = new Date(monthDate.getFullYear(), monthDate.getMonth(), parseInt(a[0]));
-          const dateB = new Date(monthDate.getFullYear(), monthDate.getMonth(), parseInt(b[0]));
-          return dateB.getTime() - dateA.getTime();
         });
         
         // Add transactions table for this month
@@ -242,11 +230,14 @@ export class ExportService {
       
       // Convert ArrayBuffer to Uint8Array
       const arrayBuffer = doc.output('arraybuffer');
-      return new Uint8Array(arrayBuffer);
+      const pdf = new Uint8Array(arrayBuffer);
+      if (pdf.byteLength === 0) {
+        throw new Error('PDF generation produced an empty document.');
+      }
+      return pdf;
     } catch (error) {
       console.error('Error generating PDF:', error);
-      // Return empty buffer in case of error
-      return new Uint8Array();
+      throw error;
     }
   }
 }

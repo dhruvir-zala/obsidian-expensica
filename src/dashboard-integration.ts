@@ -56,7 +56,10 @@ export class PremiumVisualizations {
         });
         prevButton.onclick = () => {
             const newDate = new Date(this.currentDate);
-            newDate.setMonth(newDate.getMonth() - 1);
+            newDate.setMonth(newDate.getMonth() - 1, 1);
+            const lastDay = new Date(newDate);
+            lastDay.setMonth(lastDay.getMonth() + 1, 0);
+            newDate.setDate(Math.min(this.currentDate.getDate(), lastDay.getDate()));
             this.updateDate(newDate);
         };
         
@@ -69,7 +72,7 @@ export class PremiumVisualizations {
             if (this.onTodayClick) {
                 this.onTodayClick();
             } else {
-                this.updateDate(new Date());
+                this.updateDate(new Date(), true);
             }
         };
         
@@ -80,7 +83,10 @@ export class PremiumVisualizations {
         });
         nextButton.onclick = () => {
             const newDate = new Date(this.currentDate);
-            newDate.setMonth(newDate.getMonth() + 1);
+            newDate.setMonth(newDate.getMonth() + 1, 1);
+            const lastDay = new Date(newDate);
+            lastDay.setMonth(lastDay.getMonth() + 1, 0);
+            newDate.setDate(Math.min(this.currentDate.getDate(), lastDay.getDate()));
             this.updateDate(newDate);
         };
 
@@ -108,8 +114,17 @@ export class PremiumVisualizations {
         this.calendarHeatmap.render();
     }
 
-    public updateDate(newDate: Date) {
+    public updateDate(newDate: Date, selectDate = false) {
+        const sameMonth = this.currentDate.getFullYear() === newDate.getFullYear()
+            && this.currentDate.getMonth() === newDate.getMonth();
         this.currentDate = newDate;
+        if (selectDate) {
+            this.selectedDate = newDate;
+            if (sameMonth && this.calendarHeatmap) {
+                this.calendarHeatmap.selectDate(newDate);
+                return;
+            }
+        }
         
         // Get transactions for the new date
         const year = this.currentDate.getFullYear();
@@ -118,7 +133,7 @@ export class PremiumVisualizations {
         
         // Update the calendar heatmap
         if (this.calendarHeatmap) {
-            this.calendarHeatmap.updateMonth(this.currentDate, transactions);
+            this.calendarHeatmap.updateMonth(this.currentDate, transactions, selectDate ? newDate : undefined);
         } else {
             this.render(); // Re-render if the heatmap doesn't exist
         }

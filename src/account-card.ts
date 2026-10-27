@@ -1,10 +1,10 @@
-import { formatCurrency, type Account, type Transaction, type Currency, getAccountEmoji, getAccountTypeLabel } from './models';
+import { formatCurrency, type Account, type Transaction, getAccountEmoji, getAccountTypeLabel, getAccountColor } from './models';
 
 interface AccountCardOptions {
     account: Account;
     runningBalance: number;
     lastTransactionDateLabel: string;
-    currency: Currency;
+    currencyCode: string;
     color?: string;
     creditLimitLabel?: string;
     onClick?: (account: Account) => void;
@@ -12,10 +12,13 @@ interface AccountCardOptions {
 
 interface CreateAccountCardOptions {
     onClick: () => void;
+    label?: string;
+    description?: string;
+    icon?: string;
 }
 
 export function renderAccountCard(container: HTMLElement, options: AccountCardOptions): HTMLElement {
-    const { account, runningBalance, lastTransactionDateLabel, currency, color, creditLimitLabel, onClick } = options;
+    const { account, runningBalance, lastTransactionDateLabel, currencyCode, color, creditLimitLabel, onClick } = options;
     const card = container.createDiv('expensica-account-card');
     card.setAttribute('data-account-type', account.type);
 
@@ -45,7 +48,8 @@ export function renderAccountCard(container: HTMLElement, options: AccountCardOp
 
     const textGroup = identity.createDiv('expensica-account-card-text');
     const titleRow = textGroup.createDiv('expensica-account-card-title-row');
-    titleRow.createSpan({ text: account.name, cls: 'expensica-account-card-name' });
+    const name = titleRow.createSpan({ text: account.name, cls: 'expensica-account-card-name' });
+    name.style.color = color || getAccountColor(account);
     titleRow.createSpan({ text: getAccountTypeLabel(account.type), cls: 'expensica-account-card-type' });
 
     textGroup.createSpan({
@@ -56,7 +60,7 @@ export function renderAccountCard(container: HTMLElement, options: AccountCardOp
     const balanceWrap = header.createDiv('expensica-account-card-balance-wrap');
     const balanceEl = balanceWrap.createDiv('expensica-account-card-balance');
     balanceEl.addClass(runningBalance === 0 ? 'is-neutral' : runningBalance > 0 ? 'is-positive' : 'is-negative');
-    balanceEl.setText(formatCurrency(runningBalance, currency.code));
+    balanceEl.setText(formatCurrency(runningBalance, currencyCode));
     if (creditLimitLabel) {
         balanceWrap.createDiv({
             text: creditLimitLabel,
@@ -74,14 +78,14 @@ export function renderCreateAccountCard(container: HTMLElement, options: CreateA
 
     const header = card.createDiv('expensica-account-card-header');
     const identity = header.createDiv('expensica-account-card-identity');
-    identity.createDiv({ text: '+', cls: 'expensica-account-card-icon expensica-account-card-icon-create' });
+    identity.createDiv({ text: options.icon || '+', cls: 'expensica-account-card-icon expensica-account-card-icon-create' });
 
     const textGroup = identity.createDiv('expensica-account-card-text');
     const titleRow = textGroup.createDiv('expensica-account-card-title-row');
-    titleRow.createSpan({ text: 'Create New Account', cls: 'expensica-account-card-name' });
+    titleRow.createSpan({ text: options.label || 'Create New Account', cls: 'expensica-account-card-name' });
 
     textGroup.createSpan({
-        text: 'Add chequing, saving, credit, or other',
+        text: options.description || 'Add chequing, saving, credit, or other',
         cls: 'expensica-account-card-date'
     });
 

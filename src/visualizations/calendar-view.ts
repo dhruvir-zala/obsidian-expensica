@@ -1,4 +1,4 @@
-import { AccountType, Transaction, TransactionType, formatCurrency, ColorScheme, parseLocalDate, sortTransactionsByDateTimeDesc, getCurrencyByCode } from '../models';
+import { AccountType, Transaction, TransactionType, formatCurrency, ColorScheme, parseLocalDate, sortTransactionsByDateTimeDesc } from '../models';
 import ExpensicaPlugin from '../../main';
 import * as d3 from 'd3';
 import { renderTransactionCard } from '../transaction-card';
@@ -10,6 +10,7 @@ function getAccountTransactionAmount(plugin: ExpensicaPlugin, transaction: Trans
     if (transaction.type === TransactionType.INTERNAL) {
         const fromAccount = transaction.fromAccount ? plugin.normalizeTransactionAccountReference(transaction.fromAccount) : '';
         const toAccount = transaction.toAccount ? plugin.normalizeTransactionAccountReference(transaction.toAccount) : '';
+        if (fromAccount === toAccount) return 0;
         if (fromAccount === accountReference) {
             return isCredit ? transaction.amount : -transaction.amount;
         }
@@ -42,47 +43,20 @@ function getRunningBalanceByTransactionIdForAccount(
     transactions: Transaction[]
 ): Record<string, number> {
     let runningBalance = 0;
-    const normalizeBalanceValue = (value: number) => Math.abs(value) < 0.000001 ? 0 : value;
 
-    return sortTransactionsByDateTimeDesc(transactions)
+    return sortTransactionsByDateTimeDesc(transactions, plugin.getAllTransactions())
         .reverse()
         .reduce((balances, transaction) => {
-            runningBalance = normalizeBalanceValue(runningBalance + getAccountTransactionAmount(plugin, transaction, accountReference));
+            runningBalance += getAccountTransactionAmount(plugin, transaction, accountReference);
             balances[transaction.id] = runningBalance;
             return balances;
         }, {} as Record<string, number>);
 }
 
 function formatRunningBalanceLabel(plugin: ExpensicaPlugin, balance: number, accountReference?: string): string {
-    const currency = getCurrencyByCode(plugin.settings.defaultCurrency) || getCurrencyByCode('USD');
-    const code = currency?.code || 'USD';
-    const fallbackSymbol = currency?.symbol || '$';
-    let symbol = fallbackSymbol;
-
-    try {
-        symbol = new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: code,
-            currencyDisplay: 'narrowSymbol'
-        }).formatToParts(0).find(part => part.type === 'currency')?.value || fallbackSymbol;
-    } catch {
-        symbol = fallbackSymbol;
-    }
-
-    const normalizedSymbol = symbol.replace(/[A-Za-z]+/g, '').trim() || '$';
-    const absoluteAmount = Math.abs(balance);
-    const fractionDigits = new Intl.NumberFormat('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    }).format(absoluteAmount);
-    const sign = balance < 0 ? '-' : '';
-    const amount = `${sign}${normalizedSymbol}${fractionDigits}`;
-    if (!accountReference) {
-        return amount;
-    }
-
-    const account = plugin.getTransactionAccountDisplay(accountReference);
-    return `${account.name}: ${amount}`;
+    const amount = formatCurrency(balance, plugin.settings.defaultCurrency);
+    if (!accountReference) return amount;
+    return `${plugin.getTransactionAccountDisplay(accountReference).name}: ${amount}`;
 }
 
 interface DayData {
@@ -100,26 +74,26 @@ export class CalendarHeatmap {
     private plugin: ExpensicaPlugin;
     private currentDate: Date;
     private calendarData: DayData[] = [];
-    private svg: any;
-    private width: number = 0;
-    private height: number = 0;
-    private tooltipDiv: any;
+    private svg: d3.Selection<SVGSVGElement, unknown, null, undefined>;
+    private width = 0;
+    private height = 0;
+    private tooltipDiv: d3.Selection<HTMLDivElement, unknown, null, undefined>;
     private detailsContainer: HTMLElement;
     private calendarContainer: HTMLElement;
-    private cellSize: number = 48;
-    private cellGap: number = 6;
-    private maxAmount: number = 0;
+    private cellSize = 48;
+    private cellGap = 6;
+    private maxAmount = 0;
     private readonly defaultCellSize: number = 48;
     private readonly minimumCellScale: number = 0.75;
-    private weekNumberWidth: number = 32; // Reserve one day-column width for week numbers.
-    private calendarHorizontalPadding: number = 8;
-    private lastRenderedLayoutKey: string = '';
-    private lastMeasuredContainerSizeKey: string = '';
+    private weekNumberWidth = 32; // Reserve one day-column width for week numbers.
+    private calendarHorizontalPadding = 8;
+    private lastRenderedLayoutKey = '';
+    private lastMeasuredContainerSizeKey = '';
     private selectedDate: Date | null;
     private onSelectedDateChange?: (date: Date) => void;
     private onTransactionEdit?: (transaction: Transaction) => void;
     private allTransactions: Transaction[] = [];
-    private monthlyExpenseTotal: number = 0;
+    private monthlyExpenseTotal = 0;
     private runningBalanceCache = new Map<string, Record<string, number>>();
 
     constructor(
@@ -197,7 +171,7 @@ export class CalendarHeatmap {
             .style('opacity', 0);
     }
 
-    public render(animateCells: boolean = false) {
+    public render(animateCells = false) {
         this.prepareData();
         this.renderCalendar(animateCells);
     }
@@ -215,7 +189,7 @@ export class CalendarHeatmap {
 
         const monthlyTransactionsByDate = new Map<string, Transaction[]>();
         this.transactions.forEach((transaction) => {
-            const dateKey = transaction.date;
+            const dateKey = this.getDateKey(parseLocalDate(transaction.date));
             const dayTransactions = monthlyTransactionsByDate.get(dateKey);
             if (dayTransactions) {
                 dayTransactions.push(transaction);
@@ -229,16 +203,21 @@ export class CalendarHeatmap {
         });
 
         const defaultAccountReference = this.plugin.normalizeTransactionAccountReference(undefined);
+        const runningBalances = this.getRunningBalanceMap(defaultAccountReference);
         const balancesByDate = new Map<string, number>();
-        let runningBalance = 0;
-        sortTransactionsByDateTimeDesc(this.allTransactions)
+        const monthStart = new Date(year, month, 1);
+        let carriedBalance = 0;
+        sortTransactionsByDateTimeDesc(this.allTransactions, this.allTransactions)
             .reverse()
             .forEach((transaction) => {
-                runningBalance += getAccountTransactionAmount(this.plugin, transaction, defaultAccountReference);
-                balancesByDate.set(transaction.date, Math.abs(runningBalance) < 0.000001 ? 0 : runningBalance);
+                const date = parseLocalDate(transaction.date);
+                const balance = runningBalances[transaction.id];
+                balancesByDate.set(this.getDateKey(date), balance);
+                if (date < monthStart) {
+                    carriedBalance = balance;
+                }
             });
 
-        let carriedBalance = 0;
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(year, month, day);
             const dateKey = this.getDateKey(date);
@@ -309,7 +288,7 @@ export class CalendarHeatmap {
     }
     
     // Get the color scale based on the selected color scheme
-    private getColorScale(maxValue: number): any {
+    private getColorScale(maxValue: number): d3.ScaleSequential<string> {
         if (maxValue <= 0) {
             maxValue = 1; // Prevent division by zero
         }
@@ -360,7 +339,7 @@ export class CalendarHeatmap {
         return `rgba(${parsedColor.r}, ${parsedColor.g}, ${parsedColor.b}, ${alpha})`;
     }
 
-    private renderCalendar(animateCells: boolean = false) {
+    private renderCalendar(animateCells = false) {
         // Clear SVG
         this.svg.selectAll('*').remove();
         
@@ -413,7 +392,7 @@ export class CalendarHeatmap {
         const todayDate = today.getDate();
         
         // Track selected cell for reference
-        let selectedCell: any = null;
+        let selectedCell: d3.Selection<SVGRectElement, DayData, d3.BaseType, unknown> | null = null;
         
         // Add week numbers if enabled
         if (this.plugin.settings.showWeekNumbers) {
@@ -429,7 +408,6 @@ export class CalendarHeatmap {
                 
             // Add week numbers
             const weeksInMonth = this.getWeeksInMonth(year, month);
-            const firstDayDate = new Date(year, month, 1);
             
             for (let week = 0; week < weeksInMonth; week++) {
                 // Calculate the date for the first day of this week
@@ -450,7 +428,7 @@ export class CalendarHeatmap {
             }
         }
         
-        const dayCells = this.svg.selectAll('.day-cell')
+        const dayCells = this.svg.selectAll<SVGGElement, DayData>('.day-cell')
             .data(this.calendarData)
             .enter()
             .append('g')
@@ -494,9 +472,9 @@ export class CalendarHeatmap {
             })
             .classed('has-expenses', (d: DayData) => d.totalAmount > 0)
             .classed('is-today', (d: DayData) => isCurrentMonth && d.date.getDate() === todayDate)
-            .on('mouseover', (event: any, d: DayData) => {
+            .on('mouseover', (event: MouseEvent, d: DayData) => {
                 // Highlight the cell
-                const cell = d3.select(event.currentTarget);
+                const cell = d3.select<SVGRectElement, DayData>(event.currentTarget as SVGRectElement);
                 cell.transition()
                     .duration(100) // Faster transition for better responsiveness
                     .attr('stroke', 'var(--interactive-accent)')
@@ -507,13 +485,6 @@ export class CalendarHeatmap {
                 this.tooltipDiv.transition()
                     .duration(100)
                     .style('opacity', .9);
-                
-                const formatCurrencyValue = (value: number) => {
-                    return new Intl.NumberFormat('en-US', {
-                        style: 'currency',
-                        currency: this.plugin.settings.defaultCurrency
-                    }).format(value);
-                };
                 
                 // Count only expense transactions
                 const expenseTransactions = d.transactions.filter(t => t.type === TransactionType.EXPENSE);
@@ -545,21 +516,21 @@ export class CalendarHeatmap {
                 // Enhanced tooltip with more context
                 this.tooltipDiv.html(`
                     <div class="tooltip-title">${d.formattedDate}</div>
-                    <div class="tooltip-value">${formatCurrencyValue(d.totalAmount)}</div>
+                    <div class="tooltip-value">${formatCurrency(d.totalAmount, this.plugin.settings.defaultCurrency, true)}</div>
                     <div class="tooltip-hint">${expenseTransactions.length} expense(s) · ${percentage}% of monthly spend</div>
                     ${comparisonText}
                 `)
                     .style('left', (event.pageX + 10) + 'px')
                     .style('top', (event.pageY - 28) + 'px');
             })
-            .on('mouseout', (event: any, d: DayData) => {
+            .on('mouseout', (event: MouseEvent, d: DayData) => {
                 // Don't reset if this is the selected cell
                 if (selectedCell && selectedCell.node() === event.currentTarget) {
                     return;
                 }
                 
                 // Reset the cell with Notion styling
-                d3.select(event.currentTarget)
+                d3.select<SVGRectElement, DayData>(event.currentTarget as SVGRectElement)
                     .transition()
                     .duration(100) // Faster transition for better responsiveness
                     .attr('stroke', (d: DayData) => {
@@ -586,7 +557,7 @@ export class CalendarHeatmap {
                     .duration(100)
                     .style('opacity', 0);
             })
-            .on('click', (event: any, d: DayData) => {
+            .on('click', (event: MouseEvent, d: DayData) => {
                 // Remove previous selection
                 if (selectedCell) {
                     selectedCell
@@ -603,7 +574,7 @@ export class CalendarHeatmap {
                 }
                 
                 // Highlight the selected cell with a Notion-like subtle highlight
-                selectedCell = d3.select(event.currentTarget);
+                selectedCell = d3.select<SVGRectElement, DayData>(event.currentTarget as SVGRectElement);
                 selectedCell
                     .attr('stroke', 'var(--interactive-accent)')
                     .attr('stroke-width', 2.5); // Increased thickness for better visibility
@@ -642,13 +613,7 @@ export class CalendarHeatmap {
             .attr('pointer-events', 'none')
             .attr('fill', (d: DayData) => this.getTextColor(d.totalAmount, colorScale))
             .text((d: DayData) => {
-                const currency = this.plugin.settings.defaultCurrency;
-                return new Intl.NumberFormat('en-US', {
-                    style: 'currency',
-                    currency: currency,
-                    notation: 'compact',
-                    maximumFractionDigits: 0
-                }).format(d.totalAmount);
+                return formatCurrency(d.totalAmount, this.plugin.settings.defaultCurrency, true);
             });
         
         // Add tiny indicator for days with income
@@ -679,14 +644,15 @@ export class CalendarHeatmap {
                 .style('opacity', 1);
         }
         
-        const selectedData = this.selectedDate
-            ? this.calendarData.find(d => this.isSameDate(d.date, this.selectedDate!))
+        const selectedDate = this.selectedDate;
+        const selectedData = selectedDate
+            ? this.calendarData.find(d => this.isSameDate(d.date, selectedDate))
             : null;
 
         if (selectedData) {
             this.showDayDetails(selectedData);
-            const selectedDateCell = this.svg.selectAll('.day-cell rect')
-                .filter((d: any) => this.isSameDate(d.date, selectedData.date));
+            const selectedDateCell = this.svg.selectAll<SVGRectElement, DayData>('.day-cell rect')
+                .filter((d: DayData) => this.isSameDate(d.date, selectedData.date));
             selectedDateCell.attr('stroke', 'var(--interactive-accent)')
                 .attr('stroke-width', 2.5);
             selectedCell = selectedDateCell;
@@ -695,8 +661,8 @@ export class CalendarHeatmap {
             if (todayData) {
                 this.showDayDetails(todayData);
                 // Also visually select today's cell
-                const todayCell = this.svg.selectAll('.day-cell rect')
-                    .filter((d: any) => d.date.getDate() === todayDate);
+                const todayCell = this.svg.selectAll<SVGRectElement, DayData>('.day-cell rect')
+                    .filter((d: DayData) => d.date.getDate() === todayDate);
                 todayCell.attr('stroke', 'var(--interactive-accent)')
                     .attr('stroke-width', 2);
                 selectedCell = todayCell;
@@ -707,8 +673,8 @@ export class CalendarHeatmap {
             if (firstDayWithExpenses) {
                 this.showDayDetails(firstDayWithExpenses);
                 // Also visually select this cell
-                const firstExpenseCell = this.svg.selectAll('.day-cell rect')
-                    .filter((d: any) => d.date.getDate() === firstDayWithExpenses.date.getDate());
+                const firstExpenseCell = this.svg.selectAll<SVGRectElement, DayData>('.day-cell rect')
+                    .filter((d: DayData) => d.date.getDate() === firstDayWithExpenses.date.getDate());
                 firstExpenseCell.attr('stroke', 'var(--interactive-accent)')
                     .attr('stroke-width', 2);
                 selectedCell = firstExpenseCell;
@@ -725,7 +691,7 @@ export class CalendarHeatmap {
             && left.getDate() === right.getDate();
     }
 
-    private getTextColor(amount: number, colorScale: any): string {
+    private getTextColor(amount: number, colorScale: d3.ScaleSequential<string>): string {
         if (amount === 0) return 'var(--text-muted)';
         
         // Transparent/low-opacity heatmap cells visually sit on the Obsidian background.
@@ -739,7 +705,7 @@ export class CalendarHeatmap {
         return luminance > 160 ? 'var(--text-normal)' : 'var(--text-on-accent)';
     }
 
-    private renderColorLegend(colorScale: any, weekNumbersOffset: number, calendarHeight: number) {
+    private renderColorLegend(colorScale: d3.ScaleSequential<string>, weekNumbersOffset: number, calendarHeight: number) {
         // Create a centered legend at the bottom with improved Notion-inspired styling
         const legendWidth = 220; // Wider legend for better visibility
         const legendHeight = 16; // Taller bar for better visibility
@@ -867,7 +833,7 @@ export class CalendarHeatmap {
         // Left side with label and icon
         const labelContainer = totalEl.createDiv('expensica-calendar-details-label');
         // Add currency icon (similar to Notion's approach with icons)
-        const iconSpan = labelContainer.createSpan({
+        labelContainer.createSpan({
             cls: 'expensica-calendar-details-icon',
             text: '💰'
         });
@@ -962,8 +928,8 @@ export class CalendarHeatmap {
                         });
                     }
                     
-                    const existingCategory = categories.get(categoryName)!;
-                    existingCategory.amount += t.amount;
+                    const existingCategory = categories.get(categoryName);
+                    if (existingCategory) existingCategory.amount += t.amount;
                 });
                 
                 if (categories.size > 1) {
@@ -973,7 +939,7 @@ export class CalendarHeatmap {
                     const titleContainer = breakdownEl.createDiv('expensica-breakdown-title-container');
                     
                     // Add icon
-                    const iconSpan = titleContainer.createSpan({
+                    titleContainer.createSpan({
                         cls: 'expensica-breakdown-icon',
                         text: '📊'
                     });
@@ -1022,8 +988,8 @@ export class CalendarHeatmap {
         
         const transactionList = this.detailsContainer.createDiv('expensica-calendar-transaction-list');
         
-        // Sort transactions by creation time (newest first), with legacy ID/JSON-order fallbacks.
-        const sortedTransactions = sortTransactionsByDateTimeDesc(expenseTransactions);
+        // Use the same chronology and canonical source ties as the other transaction views.
+        const sortedTransactions = sortTransactionsByDateTimeDesc(expenseTransactions, this.allTransactions);
         const runningBalances = this.getRunningBalanceMap(defaultAccountReference);
         const internalBalanceMaps = new Map<string, Record<string, number>>();
         const ensureBalanceMap = (accountReference: string): Record<string, number> => {
@@ -1114,8 +1080,16 @@ export class CalendarHeatmap {
         }
     }
     
-    public updateMonth(newDate: Date, transactions: Transaction[]) {
+    public selectDate(date: Date) {
+        if (this.selectedDate && this.isSameDate(this.selectedDate, date)) return;
+        this.svg.selectAll<SVGRectElement, DayData>('.day-cell rect')
+            .filter((day: DayData) => this.isSameDate(day.date, date))
+            .dispatch('click');
+    }
+
+    public updateMonth(newDate: Date, transactions: Transaction[], selectedDate?: Date) {
         this.currentDate = newDate;
+        if (selectedDate) this.selectedDate = selectedDate;
         this.transactions = transactions;
         this.maxAmount = 0;
         this.setupContainers();

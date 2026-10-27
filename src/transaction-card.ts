@@ -1,8 +1,7 @@
-import { Menu } from 'obsidian';
 import {
     CategoryType,
     getAccountColor,
-    getCurrencyByCode,
+    formatCurrency,
     getTransactionDisplayTime,
     INTERNAL_CATEGORY_ID,
     parseAccountReference,
@@ -152,7 +151,7 @@ export function renderTransactionCard(container: HTMLElement, options: Transacti
     }
 
     const amountEl = transactionEl.createDiv('expensica-transaction-amount');
-    const formattedAmount = formatTransactionCardCurrency(transaction.amount, plugin.settings.defaultCurrency);
+    const formattedAmount = formatCurrency(transaction.amount, plugin.settings.defaultCurrency);
     const amountClass = transaction.type === TransactionType.INCOME
         ? 'expensica-income'
         : transaction.type === TransactionType.EXPENSE
@@ -176,53 +175,6 @@ export function renderTransactionCard(container: HTMLElement, options: Transacti
     }
 
     return transactionEl;
-}
-
-function formatTransactionCardCurrency(amount: number, currencyCode: string): string {
-    const currency = getCurrencyByCode(currencyCode) || getCurrencyByCode('USD');
-    const code = currency?.code || 'USD';
-    const symbol = getTransactionCardCurrencySymbol(code, currency?.symbol || '$');
-    const sign = amount < 0 ? '-' : '';
-    const absoluteAmount = Math.abs(amount);
-
-    let fractionDigits = 2;
-    try {
-        fractionDigits = new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: code
-        }).resolvedOptions().maximumFractionDigits;
-    } catch {
-        fractionDigits = 2;
-    }
-
-    const formattedNumber = new Intl.NumberFormat('en-US', {
-        minimumFractionDigits: fractionDigits,
-        maximumFractionDigits: fractionDigits
-    }).format(absoluteAmount);
-
-    return `${sign}${symbol}${formattedNumber}`;
-}
-
-function getTransactionCardCurrencySymbol(currencyCode: string, fallbackSymbol: string): string {
-    try {
-        const currencyPart = new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: currencyCode,
-            currencyDisplay: 'narrowSymbol'
-        }).formatToParts(0).find(part => part.type === 'currency')?.value;
-
-        if (currencyPart) {
-            return stripCurrencyAbbreviation(currencyPart);
-        }
-    } catch {
-        // Fall back to the configured symbol below.
-    }
-
-    return stripCurrencyAbbreviation(fallbackSymbol);
-}
-
-function stripCurrencyAbbreviation(symbol: string): string {
-    return symbol.replace(/[A-Za-z]+/g, '').trim();
 }
 
 function renderTransactionAccountEndpoint(container: HTMLElement, name: string, color?: string): void {
