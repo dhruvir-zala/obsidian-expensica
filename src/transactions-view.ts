@@ -9,10 +9,8 @@ import {
     formatAccountReference,
     getAccountColor,
     getAccountEmoji,
-    getAccountTypeLabel,
     parseLocalDate,
-    sortTransactionsByDateTimeDesc,
-    getCurrencyByCode
+    sortTransactionsByDateTimeDesc
 } from './models';
 import ExpensicaPlugin from '../main';
 import type { SharedDateRangeState } from '../main';
@@ -34,13 +32,12 @@ function getTransactionAccountReferences(plugin: ExpensicaPlugin, transaction: T
         .map(reference => plugin.normalizeTransactionAccountReference(reference));
 }
 
-function getAccountTransactionAmount(plugin: ExpensicaPlugin, transaction: Transaction, accountReference: string): number {
-    const account = plugin.findAccountByReference(accountReference);
-    const isCredit = account?.type === AccountType.CREDIT;
-
+function getAccountTransactionAmount(plugin: ExpensicaPlugin, transaction: Transaction, accountReference: string,
+    isCredit = plugin.findAccountByReference(accountReference)?.type === AccountType.CREDIT): number {
     if (transaction.type === TransactionType.INTERNAL) {
         const fromAccount = transaction.fromAccount ? plugin.normalizeTransactionAccountReference(transaction.fromAccount) : '';
         const toAccount = transaction.toAccount ? plugin.normalizeTransactionAccountReference(transaction.toAccount) : '';
+        if (fromAccount === toAccount) return 0;
         if (fromAccount === accountReference) {
             return isCredit ? transaction.amount : -transaction.amount;
         }
@@ -70,58 +67,36 @@ function getAccountTransactionAmount(plugin: ExpensicaPlugin, transaction: Trans
 function getRunningBalanceByTransactionIdForAccount(
     plugin: ExpensicaPlugin,
     accountReference: string,
-    transactions: Transaction[]
+    transactions: Transaction[],
+    chronologicalTransactions: readonly Transaction[] = sortTransactionsByDateTimeDesc(transactions, plugin.getAllTransactions()).reverse()
 ): Record<string, number> {
     let runningBalance = 0;
-    const normalizeBalanceValue = (value: number) => Math.abs(value) < 0.000001 ? 0 : value;
+    const isCredit = plugin.findAccountByReference(accountReference)?.type === AccountType.CREDIT;
 
-    return sortTransactionsByDateTimeDesc(transactions)
-        .reverse()
+    return chronologicalTransactions
         .reduce((balances, transaction) => {
-            runningBalance = normalizeBalanceValue(runningBalance + getAccountTransactionAmount(plugin, transaction, accountReference));
+            runningBalance += getAccountTransactionAmount(plugin, transaction, accountReference, isCredit);
             balances[transaction.id] = runningBalance;
             return balances;
         }, {} as Record<string, number>);
 }
 
 function formatRunningBalanceLabel(plugin: ExpensicaPlugin, balance: number, accountReference?: string): string {
-    const currency = getCurrencyByCode(plugin.settings.defaultCurrency) || getCurrencyByCode('USD');
-    const code = currency?.code || 'USD';
-    const fallbackSymbol = currency?.symbol || '$';
-    let symbol = fallbackSymbol;
-
-    try {
-        symbol = new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: code,
-            currencyDisplay: 'narrowSymbol'
-        }).formatToParts(0).find(part => part.type === 'currency')?.value || fallbackSymbol;
-    } catch {
-        symbol = fallbackSymbol;
-    }
-
-    const normalizedSymbol = symbol.replace(/[A-Za-z]+/g, '').trim() || '$';
-    const absoluteAmount = Math.abs(balance);
-    const fractionDigits = new Intl.NumberFormat('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    }).format(absoluteAmount);
-    const sign = balance < 0 ? '-' : '';
-    const amount = `${sign}${normalizedSymbol}${fractionDigits}`;
-    if (!accountReference) {
-        return amount;
-    }
-
-    const account = plugin.getTransactionAccountDisplay(accountReference);
-    return `${account.name}: ${amount}`;
+    const amount = formatCurrency(balance, plugin.settings.defaultCurrency);
+    if (!accountReference) return amount;
+    return `${plugin.getTransactionAccountDisplay(accountReference).name}: ${amount}`;
 }
 
 class BulkRenameTransactionsModal extends Modal {
     private readonly onSubmit: (name: string) => Promise<void> | void;
 
-    constructor(app: App, onSubmit: (name: string) => Promise<void> | void) {
+    constructor(app: App, onSubmit: (name: string) => Promise<void> | void, private readonly plugin: ExpensicaPlugin) {
         super(app);
         this.onSubmit = onSubmit;
+    }
+
+    open() {
+        if (this.plugin.canEditData(["transactions"])) super.open();
     }
 
     onOpen() {
@@ -165,20 +140,27 @@ class BulkRenameTransactionsModal extends Modal {
             this.close();
         });
 
-        form.addEventListener('submit', async (event) => {
+        form.addEventListener('submit', (event) => {
             event.preventDefault();
-            const nextName = input.value.trim();
-            if (!nextName) {
-                showExpensicaNotice('Transaction name is required.');
-                input.focus();
-                return;
-            }
+            return this.plugin.runSaveOperation(this, 'Rename transactions', async () => {
+                if (!form.reportValidity()) return false;
+                const nextName = input.value.trim();
+                if (!nextName) {
+                    showExpensicaNotice('Transaction name is required.');
+                    input.focus();
+                    return false;
+                }
 
-            await this.onSubmit(nextName);
-            this.close();
+                await this.onSubmit(nextName);
+                this.close();
+            });
         });
 
         window.setTimeout(() => input.focus(), 0);
+    }
+    onClose() {
+        this.plugin.releaseSaveOperation(this);
+        this.contentEl.empty();
     }
 }
 
@@ -200,17 +182,17 @@ export class ExpensicaTransactionsView implements TransactionView {
     plugin: ExpensicaPlugin;
     transactions: Transaction[] = [];
     filteredTransactions: Transaction[] = [];
-    searchQuery: string = '';
+    searchQuery = '';
     selectedTypeFilters: TransactionType[] = [];
     selectedAccountReferences: string[] = [];
     selectedCategoryIds: string[] = [];
-    inputFocused: boolean = false;
+    inputFocused = false;
     
     // Pagination
-    currentPage: number = 1;
-    pageSize: number = 20;
-    totalPages: number = 1;
-    private scrollTop: number = 0;
+    currentPage = 1;
+    pageSize = 20;
+    totalPages = 1;
+    private scrollTop = 0;
     private hasRenderedView = false;
     private embeddedContentEl: HTMLElement | null = null;
     private selectedTransactionIds = new Set<string>();
@@ -219,7 +201,7 @@ export class ExpensicaTransactionsView implements TransactionView {
     dateRange: DateRange;
     customStartDate: Date | null = null;
     customEndDate: Date | null = null;
-    dateRangeUpdatedAt: number = 0;
+    dateRangeUpdatedAt = 0;
 
     constructor(app: App, plugin: ExpensicaPlugin) {
         this.app = app;
@@ -228,17 +210,35 @@ export class ExpensicaTransactionsView implements TransactionView {
     }
 
     renderDashboardTab(container: HTMLElement, preserveFocus = false) {
+        const restoreFocus = preserveFocus && this.inputFocused;
+        this.deactivate();
+        this.inputFocused = restoreFocus;
         const sharedDateRangeState = this.plugin.getSharedDateRangeState();
         if (sharedDateRangeState) {
             this.applySharedDateRangeStateValues(sharedDateRangeState);
         }
 
         this.embeddedContentEl = container;
-        this.transactions = sortTransactionsByDateTimeDesc(this.plugin.getAllTransactions());
+        const allTransactions = this.plugin.getAllTransactions();
+        this.transactions = sortTransactionsByDateTimeDesc(allTransactions, allTransactions);
         this.applyFilters(false);
         container.addClass('expensica-dashboard-transactions-tab');
         this.renderTransactionStatsHeader(container);
         this.renderTransactionsBody(container, preserveFocus);
+    }
+
+    deactivate() {
+        if (this._debounceTimeout != null) clearTimeout(this._debounceTimeout);
+        if (this._focusTimeout != null) clearTimeout(this._focusTimeout);
+        if (this._scrollRestoreFrame != null) cancelAnimationFrame(this._scrollRestoreFrame);
+        this._debounceTimeout = null;
+        this._focusTimeout = null;
+        this._scrollRestoreFrame = null;
+        if (this.embeddedContentEl && this.embeddedContentEl.isConnected !== false) {
+            this.scrollTop = this.embeddedContentEl.scrollTop;
+        }
+        this.embeddedContentEl = null;
+        this.inputFocused = false;
     }
 
     private getActiveContentEl(): HTMLElement {
@@ -295,9 +295,13 @@ export class ExpensicaTransactionsView implements TransactionView {
         
         // Restore focus if needed
         if (preserveFocus && this.inputFocused) {
-            setTimeout(() => {
+            const timeout = setTimeout(() => {
+                if (this._focusTimeout !== timeout) return;
+                this._focusTimeout = null;
+                if (this.embeddedContentEl !== container || container.isConnected === false) return;
                 searchInput.focus();
             }, 0);
+            this._focusTimeout = timeout;
         }
 
         // Pagination (near the filters for mobile reachability)
@@ -704,21 +708,7 @@ export class ExpensicaTransactionsView implements TransactionView {
     }
 
     private formatTransactionStatCurrency(amount: number): string {
-        const currencyCode = this.plugin.settings.defaultCurrency;
-        const configuredSymbol = getCurrencyByCode(currencyCode)?.symbol || '$';
-        const displaySymbol = configuredSymbol.includes('$') ? '$' : configuredSymbol;
-
-        try {
-            return new Intl.NumberFormat('en-US', {
-                style: 'currency',
-                currency: currencyCode,
-                currencyDisplay: 'symbol'
-            }).formatToParts(amount)
-                .map(part => part.type === 'currency' ? displaySymbol : part.value)
-                .join('');
-        } catch (error) {
-            return formatCurrency(amount, currencyCode).replace(/[A-Z]{1,3}(?=\$)/g, '');
-        }
+        return formatCurrency(amount, this.plugin.settings.defaultCurrency);
     }
 
     private renderTransactionStatsHeader(container: HTMLElement) {
@@ -760,16 +750,24 @@ export class ExpensicaTransactionsView implements TransactionView {
     }
 
     rememberScrollPosition() {
-        this.scrollTop = this.getActiveContentEl().scrollTop;
+        if (this.embeddedContentEl) this.scrollTop = this.embeddedContentEl.scrollTop;
     }
 
     restoreScrollPosition() {
-        requestAnimationFrame(() => {
-            this.getActiveContentEl().scrollTop = this.scrollTop;
+        const container = this.embeddedContentEl;
+        if (!container) return;
+        if (this._scrollRestoreFrame != null) cancelAnimationFrame(this._scrollRestoreFrame);
+        const frame = requestAnimationFrame(() => {
+            if (this._scrollRestoreFrame !== frame) return;
+            this._scrollRestoreFrame = null;
+            if (this.embeddedContentEl !== container || container.isConnected === false) return;
+            container.scrollTop = this.scrollTop;
         });
+        this._scrollRestoreFrame = frame;
     }
 
     persistTransactionsState() {
+        if (!this.embeddedContentEl) return;
         this.rememberScrollPosition();
         this.app.workspace.requestSaveLayout();
     }
@@ -798,7 +796,7 @@ export class ExpensicaTransactionsView implements TransactionView {
     }
 
     applyNavigationFilter(filter: TransactionNavigationFilter) {
-        if (this._debounceTimeout) {
+        if (this._debounceTimeout != null) {
             clearTimeout(this._debounceTimeout);
             this._debounceTimeout = null;
         }
@@ -831,10 +829,10 @@ export class ExpensicaTransactionsView implements TransactionView {
 
     async loadTransactionsData(resetPage = false) {
         // Load all transactions
-        this.transactions = this.plugin.getAllTransactions();
+        const allTransactions = this.plugin.getAllTransactions();
         
         // Sort transactions by date and time (latest first)
-        this.transactions = sortTransactionsByDateTimeDesc(this.transactions);
+        this.transactions = sortTransactionsByDateTimeDesc(allTransactions, allTransactions);
         
         this.applyFilters(resetPage);
     }
@@ -1159,7 +1157,7 @@ export class ExpensicaTransactionsView implements TransactionView {
         renameButton.addEventListener('click', () => {
             new BulkRenameTransactionsModal(this.app, async (name) => {
                 await this.bulkRenameSelectedTransactions(name);
-            }).open();
+            }, this.plugin).open();
         });
 
         const deleteButton = actionsGroup.createEl('button', {
@@ -1213,12 +1211,7 @@ export class ExpensicaTransactionsView implements TransactionView {
             return;
         }
 
-        await Promise.all(selectedTransactions.map(transaction =>
-            this.plugin.updateTransaction({
-                ...transaction,
-                category: categoryId
-            }, this)
-        ));
+        await this.plugin.updateTransactions(selectedTransactions.map(transaction => transaction.id), { category: categoryId }, this);
 
         await this.loadTransactionsData(false);
         this.selectedTransactionIds.clear();
@@ -1233,12 +1226,7 @@ export class ExpensicaTransactionsView implements TransactionView {
             return;
         }
 
-        await Promise.all(selectedTransactions.map(transaction =>
-            this.plugin.updateTransaction({
-                ...transaction,
-                description: name
-            }, this)
-        ));
+        await this.plugin.updateTransactions(selectedTransactions.map(transaction => transaction.id), { description: name }, this);
 
         await this.loadTransactionsData(false);
         this.persistTransactionsState();
@@ -1261,15 +1249,13 @@ export class ExpensicaTransactionsView implements TransactionView {
                     return;
                 }
 
-                await Promise.all(selectedTransactions.map(transaction =>
-                    this.plugin.deleteTransaction(transaction.id, this)
-                ));
+                await this.plugin.deleteTransactions(selectedTransactions.map(transaction => transaction.id), this);
                 this.selectedTransactionIds.clear();
                 await this.loadTransactionsData(false);
                 this.persistTransactionsState();
                 this.refreshTransactionsListOnly();
                 showExpensicaNotice('Transactions deleted successfully');
-            }
+            }, 'Delete', this.plugin
         ).open();
     }
 
@@ -1461,7 +1447,8 @@ export class ExpensicaTransactionsView implements TransactionView {
     }
 
     refreshTransactionsListOnly(preserveScroll = true) {
-        const container = this.getActiveContentEl();
+        const container = this.embeddedContentEl;
+        if (!container) return;
         if (preserveScroll) {
             this.rememberScrollPosition();
         }
@@ -1518,8 +1505,8 @@ export class ExpensicaTransactionsView implements TransactionView {
             `Are you sure you want to delete this ${transaction.type.toLowerCase()} transaction? This action cannot be undone.`,
             async (confirmed) => {
                 if (confirmed) {
-                    onConfirmDelete?.();
                     await this.plugin.deleteTransaction(id, this);
+                    onConfirmDelete?.();
                     // Refresh transactions without resetting the user's current filter/page context.
                     await this.loadTransactionsData(false);
                     this.persistTransactionsState();
@@ -1527,7 +1514,7 @@ export class ExpensicaTransactionsView implements TransactionView {
                     showExpensicaNotice('Transaction deleted successfully');
                     onDeleted?.();
                 }
-            }
+            }, 'Delete', this.plugin
         ).open();
     }
 
@@ -1545,21 +1532,23 @@ export class ExpensicaTransactionsView implements TransactionView {
                 label = 'Today';
                 break;
                 
-            case DateRangeType.THIS_WEEK:
+            case DateRangeType.THIS_WEEK: {
                 // Get the first day of the week (Sunday)
                 const dayOfWeek = now.getDay();
                 start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
                 end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (6 - dayOfWeek), 23, 59, 59, 999);
                 label = 'This Week';
                 break;
+            }
 
-            case DateRangeType.LAST_WEEK:
+            case DateRangeType.LAST_WEEK: {
                 // Get the previous week (Sunday through Saturday)
                 const currentDayOfWeek = now.getDay();
                 start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - currentDayOfWeek - 7);
                 end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - currentDayOfWeek - 1, 23, 59, 59, 999);
                 label = 'Last Week';
                 break;
+            }
                 
             case DateRangeType.THIS_MONTH:
                 start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -1652,41 +1641,40 @@ export class ExpensicaTransactionsView implements TransactionView {
 
     // New method to update search results without re-rendering the entire view
     updateSearchResults() {
+        const container = this.embeddedContentEl;
+        if (!container) return;
         // Store current focus state
         const wasFocused = this.inputFocused;
         
         // Use a more efficient debounce approach
-        if (this._debounceTimeout) {
+        if (this._debounceTimeout != null) {
             clearTimeout(this._debounceTimeout);
         }
         
-        this._debounceTimeout = setTimeout(() => {
+        const timeout = setTimeout(() => {
+            // A cancelled render can share its container with a later render.
+            if (this._debounceTimeout !== timeout) return;
+            this._debounceTimeout = null;
+            if (this.embeddedContentEl !== container || container.isConnected === false) return;
             this.loadTransactionsData(true);
             this.persistTransactionsState();
             this.refreshTransactionsListOnly();
 
             // Restore focus to search input if it was previously focused
             if (wasFocused) {
-                const searchInput = this.getActiveContentEl().querySelector('#expensica-search-input') as HTMLInputElement;
+                const searchInput = container.querySelector('#expensica-search-input') as HTMLInputElement;
                 if (searchInput) {
                     searchInput.focus();
                 }
             }
-
-            this._debounceTimeout = null;
         }, 300);
+        this._debounceTimeout = timeout;
     }
     
     renderTransactionsToContainer(
         container: HTMLElement,
         transactions: Transaction[],
-        runningBalances: Record<string, number> = getRunningBalanceByTransactionIdForAccount(
-            this.plugin,
-            this.selectedAccountReferences.length === 1
-                ? this.selectedAccountReferences[0]
-                : this.plugin.normalizeTransactionAccountReference(undefined),
-            this.transactions
-        )
+        runningBalances?: Record<string, number>
     ) {
         let currentMonthKey = '';
         let currentDayKey = '';
@@ -1695,15 +1683,17 @@ export class ExpensicaTransactionsView implements TransactionView {
             ? this.selectedAccountReferences[0]
             : defaultAccountReference;
         const internalBalanceMaps = new Map<string, Record<string, number>>();
+        let chronologicalTransactions: Transaction[] | undefined;
         const ensureBalanceMap = (accountReference: string): Record<string, number> => {
             const existing = internalBalanceMaps.get(accountReference);
             if (existing) {
                 return existing;
             }
 
-            const balances = accountReference === selectedAccountReference
+            const balances = accountReference === selectedAccountReference && runningBalances !== undefined
                 ? runningBalances
-                : getRunningBalanceByTransactionIdForAccount(this.plugin, accountReference, this.transactions);
+                : getRunningBalanceByTransactionIdForAccount(this.plugin, accountReference, this.transactions,
+                    chronologicalTransactions ??= sortTransactionsByDateTimeDesc(this.transactions, this.plugin.getAllTransactions()).reverse());
             internalBalanceMaps.set(accountReference, balances);
             return balances;
         };
@@ -1760,4 +1750,6 @@ export class ExpensicaTransactionsView implements TransactionView {
     }
     
     private _debounceTimeout: NodeJS.Timeout | null = null;
+    private _focusTimeout: NodeJS.Timeout | null = null;
+    private _scrollRestoreFrame: number | null = null;
 } 

@@ -1,14 +1,16 @@
 import { App, Modal } from 'obsidian';
+import type ExpensicaPlugin from '../main';
 
 export class ConfirmationModal extends Modal {
     private title: string;
     private message: string;
-    private onConfirm: (confirmed: boolean) => void;
+    private onConfirm: (confirmed: boolean) => void | Promise<void>;
     private confirmLabel: string;
     private confirmed = false;
     private resolved = false;
+    private submitting = false;
 
-    constructor(app: App, title: string, message: string, onConfirm: (confirmed: boolean) => void, confirmLabel = 'Delete') {
+    constructor(app: App, title: string, message: string, onConfirm: (confirmed: boolean) => void | Promise<void>, confirmLabel = 'Delete', private readonly plugin?: ExpensicaPlugin) {
         super(app);
         this.title = title;
         this.message = message;
@@ -47,13 +49,37 @@ export class ConfirmationModal extends Modal {
             this.close();
         });
 
-        confirmBtn.addEventListener('click', () => {
-            this.confirmed = true;
-            this.close();
-        });
+        const submit = async () => {
+            if (this.submitting) return;
+            this.submitting = true;
+            confirmBtn.disabled = true;
+            cancelBtn.disabled = true;
+            try {
+                await this.onConfirm(true);
+                this.confirmed = true;
+                this.resolved = true;
+            } catch (error) {
+                // Persistence reports the error; leave this confirmation available for retry.
+                console.error('Expensica: Confirmation did not complete', error);
+                if (this.plugin) throw error;
+            } finally {
+                this.submitting = false;
+                confirmBtn.disabled = false;
+                cancelBtn.disabled = false;
+            }
+            if (this.resolved) this.close();
+        };
+        confirmBtn.addEventListener('click', () => this.plugin
+            ? this.plugin.runSaveOperation(this, this.title.replace(/\?$/, ''), submit)
+            : submit());
+    }
+
+    close() {
+        if (!this.submitting) super.close();
     }
 
     onClose() {
+        this.plugin?.releaseSaveOperation(this);
         const { contentEl } = this;
         contentEl.empty();
         if (!this.resolved) {

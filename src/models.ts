@@ -182,8 +182,7 @@ const ACCOUNT_TYPE_EMOJIS: Record<AccountType, string> = {
 let hasWarnedAboutIdFallback = false;
   
 // Helper function to generate a unique ID
-export function generateId(): string {
-  const now = new Date();
+export function generateId(now: Date = new Date()): string {
   const datePart = formatDate(now).replace(/-/g, '');
   const timePart = [
     String(now.getHours()).padStart(2, '0'),
@@ -363,8 +362,9 @@ function fallbackRandomIdPart(): string {
   }
 
   export function getTransactionTime(transaction: Transaction): string | null {
-    if (getTimeInSeconds(transaction.time) !== null) {
-      return transaction.time!;
+    const explicitTime = transaction.time;
+    if (explicitTime !== undefined && getTimeInSeconds(explicitTime) !== null) {
+      return explicitTime;
     }
 
     const idTimeMatch = transaction.id.match(/^\d{8}-(\d{2})(\d{2})(\d{2})-/);
@@ -388,6 +388,13 @@ function fallbackRandomIdPart(): string {
     return transaction.type === TransactionType.INTERNAL;
   }
 
+  export function isSelfTransfer(transaction: Transaction): boolean {
+    return isInternalTransaction(transaction)
+      && typeof transaction.fromAccount === 'string' && !!transaction.fromAccount.trim()
+      && typeof transaction.toAccount === 'string' && !!transaction.toAccount.trim()
+      && parseAccountReference(transaction.fromAccount).reference === parseAccountReference(transaction.toAccount).reference;
+  }
+
   export function getDefaultTransactionCategory(type: TransactionType, categories: Category[]): string {
     if (type === TransactionType.INTERNAL) {
       return INTERNAL_CATEGORY_ID;
@@ -399,35 +406,42 @@ function fallbackRandomIdPart(): string {
       || '';
   }
 
-  export function sortTransactionsByDateTimeDesc<T extends Transaction>(transactions: T[]): T[] {
+  // sourceTransactions is the canonical ledger, including every row being sorted.
+  export function sortTransactionsByDateTimeDesc<T extends Transaction>(
+    transactions: readonly T[],
+    sourceTransactions: readonly Transaction[]
+  ): T[] {
+    const sourceOrder = new Map(sourceTransactions.map((transaction, index) => [transaction.id, index]));
     return transactions
-      .map((transaction, index) => ({ transaction, index }))
+      .map(transaction => ({
+        transaction,
+        index: sourceOrder.get(transaction.id) ?? NaN,
+        date: parseLocalDate(transaction.date).getTime(),
+        time: getTimeInSeconds(getTransactionTime(transaction) || undefined) ?? -1
+      }))
       .sort((a, b) => {
-        const dateDiff = parseLocalDate(b.transaction.date).getTime() - parseLocalDate(a.transaction.date).getTime();
+        const dateDiff = b.date - a.date;
         if (dateDiff !== 0) {
           return dateDiff;
         }
 
-        const aTime = getTimeInSeconds(getTransactionTime(a.transaction) || undefined);
-        const bTime = getTimeInSeconds(getTransactionTime(b.transaction) || undefined);
-
-        if (aTime !== null && bTime !== null && aTime !== bTime) {
-          return bTime - aTime;
+        if (a.time !== b.time) {
+          return b.time - a.time;
         }
 
-        if (aTime !== null && bTime !== null) {
-          return a.index - b.index;
-        }
-
-        return b.index - a.index;
+        // Equal times retain source order; untimed legacy rows show latest insertion first.
+        return a.time === -1 ? b.index - a.index : a.index - b.index;
       })
       .map(({ transaction }) => transaction);
   }
 
-  export function getRunningBalanceByTransactionId(transactions: Transaction[]): Record<string, number> {
+  export function getRunningBalanceByTransactionId(
+    transactions: readonly Transaction[],
+    sourceTransactions: readonly Transaction[]
+  ): Record<string, number> {
     let runningBalance = 0;
 
-    return sortTransactionsByDateTimeDesc(transactions)
+    return sortTransactionsByDateTimeDesc(transactions, sourceTransactions)
       .reverse()
       .reduce((balances, transaction) => {
         if (transaction.type === TransactionType.INCOME) {
@@ -653,27 +667,28 @@ function fallbackRandomIdPart(): string {
     return COMMON_CURRENCIES.find(c => c.code === code);
   }
   
-  // Updated format currency with symbol
-  export function formatCurrency(amount: number, currencyCode: string = 'USD'): string {
-    // If it's not a valid currency code, default to USD
-    if (!COMMON_CURRENCIES.some(c => c.code === currencyCode)) {
-      currencyCode = 'USD';
+  // Currency identifiers and ISO precision belong at the display boundary.
+  export function formatCurrency(amount: number, currencyCode = 'USD', compact = false,
+    options: { currencyDisplay?: 'symbol' | 'narrowSymbol'; currencyOnly?: boolean } = {}): string {
+    const currency = getCurrencyByCode(currencyCode);
+    if (!currency) {
+      return options.currencyOnly ? '¤' : `${amount} (invalid currency)`;
     }
-    
-    try {
-      return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: currencyCode,
-        currencyDisplay: 'symbol'
-      }).format(amount);
-    } catch (error) {
-      // Fallback in case of invalid currency code
-      console.error(`Invalid currency code: ${currencyCode}`, error);
-      return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD'
-      }).format(amount);
-    }
+    const currencyDisplay = options.currencyDisplay || 'narrowSymbol';
+    const displayAmount = compact && Math.abs(amount) < 1000
+      ? Math.sign(amount) * Math.round(Math.abs(amount)) : amount;
+    const formatter = new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currencyCode,
+      currencyDisplay,
+      ...(compact ? { notation: 'compact' as const, minimumFractionDigits: 0, maximumFractionDigits: 1 } : {})
+    });
+    return formatter.formatToParts(options.currencyOnly || Math.abs(displayAmount) < 0.000001 ? 0 : displayAmount)
+      .filter(part => !options.currencyOnly || part.type === 'currency')
+      // Some locales return the ISO code even for narrowSymbol; use the registered symbol then.
+      .map(part => part.type === 'currency' && currencyDisplay === 'narrowSymbol' && part.value === currency.code
+        ? currency.symbol : part.value)
+      .join('');
   }
   
   // Helper function to get month name from date
@@ -789,6 +804,7 @@ function fallbackRandomIdPart(): string {
     amount: number;
     period: BudgetPeriod;
     rollover: boolean;
+    rolloverStartDate?: string;
     lastUpdated: string;
   }
   
@@ -802,32 +818,58 @@ function fallbackRandomIdPart(): string {
     lastUpdated: new Date().toISOString()
   };
   
+  // No start is inferred from lastUpdated: legacy budgets have no creation/edit history.
+  export function getBudgetRolloverStartDate(budget: Budget): Date | null {
+    const value = budget.rolloverStartDate;
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+    const date = parseLocalDate(value);
+    if (!Number.isFinite(date.getTime()) || date.getFullYear() < 1 || formatDate(date) !== value) return null;
+    return getBudgetPeriodDates(budget.period, date).startDate;
+  }
+
   // Helper function to calculate budget status
   export function calculateBudgetStatus(
     budget: Budget, 
-    transactions: Transaction[], 
-    currentDate: Date = new Date()
-  ): { spent: number; remaining: number; percentage: number } {
+    transactions: readonly Transaction[],
+    currentDate: Date
+  ): { spent: number; remaining: number; percentage: number; available: number; rolloverAmount: number } {
     
     // Get start and end date for the budget period
     const { startDate, endDate } = getBudgetPeriodDates(budget.period, currentDate);
     
-    // Filter transactions for this category in the current period
-    const periodTransactions = transactions.filter(t => 
-      t.category === budget.categoryId && 
-      t.type === TransactionType.EXPENSE &&
-      parseLocalDate(t.date) >= startDate &&
-      parseLocalDate(t.date) <= endDate
-    );
-    
-    // Calculate how much was spent
-    const spent = periodTransactions.reduce((total, t) => total + t.amount, 0);
+    const rolloverStart = budget.rollover ? getBudgetRolloverStartDate(budget) : null;
+    const priorSpending = new Map<number, number>();
+    let spent = 0;
+    transactions.forEach(transaction => {
+      if (transaction.category !== budget.categoryId || transaction.type !== TransactionType.EXPENSE) return;
+      const date = parseLocalDate(transaction.date);
+      if (date >= startDate && date <= endDate) {
+        spent += transaction.amount;
+      } else if (rolloverStart && date >= rolloverStart && date < startDate) {
+        const key = getBudgetPeriodDates(budget.period, date).startDate.getTime();
+        priorSpending.set(key, (priorSpending.get(key) || 0) + transaction.amount);
+      }
+    });
+
+    let rolloverAmount = 0;
+    if (rolloverStart) {
+      let periodStart = rolloverStart;
+      while (periodStart < startDate) {
+        // Overspending consumes unused funds but never carries debt into the next period.
+        rolloverAmount = Math.max(0, budget.amount + rolloverAmount - (priorSpending.get(periodStart.getTime()) || 0));
+        const { endDate } = getBudgetPeriodDates(budget.period, periodStart);
+        periodStart = new Date(endDate);
+        periodStart.setDate(periodStart.getDate() + 1);
+        periodStart.setHours(0, 0, 0, 0);
+      }
+    }
     
     // Calculate remaining budget and percentage
-    const remaining = Math.max(0, budget.amount - spent);
-    const percentage = budget.amount > 0 ? Math.min(100, (spent / budget.amount) * 100) : 0;
+    const available = budget.amount + rolloverAmount;
+    const remaining = Math.max(0, available - spent);
+    const percentage = available > 0 ? Math.min(100, (spent / available) * 100) : 0;
     
-    return { spent, remaining, percentage };
+    return { spent, remaining, percentage, available, rolloverAmount };
   }
   
   // Get the date range for a budget period
@@ -841,11 +883,12 @@ function fallbackRandomIdPart(): string {
         startDate = new Date(now.getFullYear(), now.getMonth(), 1);
         endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
         break;
-      case BudgetPeriod.QUARTERLY:
+      case BudgetPeriod.QUARTERLY: {
         const quarter = Math.floor(now.getMonth() / 3);
         startDate = new Date(now.getFullYear(), quarter * 3, 1);
         endDate = new Date(now.getFullYear(), (quarter + 1) * 3, 0);
         break;
+            }
       case BudgetPeriod.YEARLY:
         startDate = new Date(now.getFullYear(), 0, 1);
         endDate = new Date(now.getFullYear(), 11, 31);
@@ -855,6 +898,9 @@ function fallbackRandomIdPart(): string {
         endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     }
     
+    startDate.setFullYear(now.getFullYear());
+    endDate.setFullYear(now.getFullYear());
+    endDate.setHours(23, 59, 59, 999);
     return { startDate, endDate };
   }
   

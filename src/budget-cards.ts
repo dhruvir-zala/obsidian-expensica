@@ -7,6 +7,8 @@ interface BudgetCardOptions {
     categoryColor?: string;
     currencyCode: string;
     spent: number;
+    available?: number;
+    rolloverAmount?: number;
     remaining: number;
     percentage: number;
     periodLabel: string;
@@ -23,6 +25,8 @@ export function renderBudgetCard(container: HTMLElement, options: BudgetCardOpti
         categoryColor,
         currencyCode,
         spent,
+        available = budget.amount,
+        rolloverAmount = 0,
         remaining,
         percentage,
         periodLabel,
@@ -81,37 +85,29 @@ export function renderBudgetCard(container: HTMLElement, options: BudgetCardOpti
 
     const amountEl = budgetEl.createDiv('expensica-transaction-amount expensica-budget-card-amount');
     amountEl.createEl('span', {
-        text: formatCompactCurrency(budget.amount, currencyCode),
+        text: formatCurrency(available, currencyCode),
         cls: 'expensica-budget-card-value'
     });
 
     const balanceEl = amountEl.createDiv('expensica-transaction-balance expensica-budget-card-balance');
     balanceEl.createEl('span', {
-        text: `Spent ${formatCompactCurrency(spent, currencyCode)}`,
+        text: `Spent ${formatCurrency(spent, currencyCode)}`,
         cls: 'expensica-transaction-balance-label'
     });
     balanceEl.createEl('span', {
-        text: `Remaining ${formatCompactCurrency(remaining, currencyCode)}`,
+        text: `Remaining ${formatCurrency(remaining, currencyCode)}`,
         cls: 'expensica-transaction-balance-label'
     });
+    if (rolloverAmount > 0) {
+        balanceEl.createEl('span', {
+            text: `Includes ${formatCurrency(rolloverAmount, currencyCode)} rollover`,
+            cls: 'expensica-transaction-balance-label'
+        });
+    }
 
     return budgetEl;
 }
 
 function formatBudgetPeriodLabel(periodLabel: string): string {
     return periodLabel.charAt(0).toUpperCase() + periodLabel.slice(1).toLowerCase();
-}
-
-function formatCompactCurrency(amount: number, currencyCode: string): string {
-    try {
-        return new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: currencyCode,
-            currencyDisplay: 'narrowSymbol',
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        }).format(amount);
-    } catch {
-        return formatCurrency(amount, currencyCode).replace(/^[A-Z]{2,3}\s?/, '');
-    }
 }

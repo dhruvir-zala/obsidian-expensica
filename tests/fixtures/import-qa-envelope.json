@@ -1,0 +1,26 @@
+{
+  "transactions": [
+    {
+      "id": "20261021-202211-022e34fc",
+      "date": "2026-09-21",
+      "time": "20:21:00",
+      "type": "expense",
+      "amount": 5,
+      "description": "EXPENSE 1 TEST",
+      "category": "other_expense",
+      "account": "other-default",
+      "notes": ""
+    },
+    {
+      "id": "20261022-210022-a80834fd",
+      "date": "2026-10-23",
+      "type": "expense",
+      "amount": 124,
+      "description": "FOODS",
+      "category": "",
+      "account": "other-default",
+      "notes": ""
+    }
+  ],
+  "lastUpdated": "2026-10-23T03:38:37.340Z"
+}

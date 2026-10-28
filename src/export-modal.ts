@@ -1,7 +1,7 @@
 import { App, Modal, Setting } from 'obsidian';
 import { showExpensicaNotice } from './notice';
 import { ExportOptions, ExportService } from './export-service';
-import { Category, CategoryType, formatDate } from './models';
+import { CategoryType, formatDate } from './models';
 import ExpensicaPlugin from '../main';
 
 export class ExportModal extends Modal {
@@ -220,8 +220,9 @@ export class ExportModal extends Modal {
     
     try {
       // Generate the export data
+      const sourceTransactions = this.plugin.getAllTransactions();
       const filteredTransactions = ExportService.filterTransactions(
-        this.plugin.getAllTransactions(),
+        sourceTransactions,
         this.exportOptions
       );
       
@@ -230,7 +231,7 @@ export class ExportModal extends Modal {
       let mimeType: string;
       
       if (this.exportOptions.format === 'csv') {
-        exportData = ExportService.generateCSV(filteredTransactions, this.plugin.settings.categories);
+        exportData = ExportService.generateCSV(filteredTransactions, this.plugin.settings.categories, sourceTransactions);
         mimeType = 'text/csv';
       } else if (this.exportOptions.format === 'json') {
         exportData = ExportService.generateJSON(filteredTransactions);
@@ -239,8 +240,12 @@ export class ExportModal extends Modal {
         exportData = ExportService.generatePDF(
           filteredTransactions, 
           this.plugin.settings.categories,
-          this.plugin.settings.defaultCurrency
+          this.plugin.settings.defaultCurrency,
+          sourceTransactions
         );
+        if (exportData.byteLength === 0) {
+          throw new Error('PDF generation produced an empty document.');
+        }
         mimeType = 'application/pdf';
       }
       

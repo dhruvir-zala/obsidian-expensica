@@ -33,6 +33,8 @@ const context = await esbuild.context({
 		"@lezer/lr",
 		...builtins],
 	format: "cjs",
+	// Keep lazy desktop imports on Obsidian's CommonJS host loader.
+	supported: { "dynamic-import": false },
 	target: "es2018",
 	logLevel: "info",
 	sourcemap: prod ? false : "inline",

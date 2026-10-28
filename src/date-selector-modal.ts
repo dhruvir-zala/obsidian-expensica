@@ -237,8 +237,8 @@ export class DateSelectorModal extends Modal {
     }
 
     private setMonthFocus() {
-        const selected = parseDateInput(this.selectedDate)!;
-        this.focusedDate = selected.getFullYear() === this.viewYear && selected.getMonth() === this.viewMonth
+        const selected = parseDateInput(this.selectedDate);
+        this.focusedDate = selected && selected.getFullYear() === this.viewYear && selected.getMonth() === this.viewMonth
             ? this.selectedDate : formatDate(calendarDate(this.viewYear, this.viewMonth, 1));
     }
 
@@ -321,7 +321,8 @@ export class DateSelectorModal extends Modal {
 
     private handleDayKey(event: KeyboardEvent, value: string) {
         if (event.altKey || event.ctrlKey || event.metaKey) return;
-        const date = parseDateInput(value)!;
+        const date = parseDateInput(value);
+        if (!date) return;
         const steps: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7, Home: -date.getDay(), End: 6 - date.getDay() };
         let next: Date;
         if (event.key in steps) {
