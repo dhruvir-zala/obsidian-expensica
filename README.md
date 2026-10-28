@@ -20,10 +20,6 @@ You can also assign hotkeys to Expensica commands in Obsidian's Hotkeys settings
 - Export transactions as JSON, CSV, or PDF. Import transactions from JSON.
 - Create a daily finance review as a Markdown note in your vault.
 
-![Adding a transaction in Expensica](assets/Adding%20a%20transaction%20in%20Expensica.gif)
-
-![Spending heatmap calendar in Expensica](assets/Spending%20heatmap%20calendar%20in%20Expensica.gif)
-
 ## Your data
 
 Expensica stores its files in `expensica-data` in your vault:
@@ -51,5 +47,4 @@ MIT. See [LICENSE](LICENSE).
 Expensica is made by [Dhruvir Zala](https://dhruvirzala.com/).
 
 - [LinkedIn](https://www.linkedin.com/in/dhruvir-zala/)
-- [Twitter](https://twitter.com/DhruvirZala)
 - [Buy me a coffee](https://ko-fi.com/dhruvirzala)
