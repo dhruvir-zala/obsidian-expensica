@@ -1,4 +1,5 @@
 import esbuild from "esbuild";
+import { readFile } from "node:fs/promises";
 import process from "process";
 import { builtinModules } from "node:module";
 
@@ -32,6 +33,26 @@ const context = await esbuild.context({
 		"@lezer/highlight",
 		"@lezer/lr",
 		...builtinModules],
+	plugins: [{
+		name: "disable-jspdf-external-pdfobject-loader",
+		setup(build) {
+			build.onLoad({ filter: /[\\/]node_modules[\\/]jspdf[\\/]dist[\\/]jspdf\.es(?:\.min)?\.js$/ }, async (args) => {
+				const source = await readFile(args.path, "utf8");
+				const loaderCase = /case\s*"pdfobjectnewwindow":[\s\S]*?(?=case\s*"pdfjsnewwindow":)/;
+				const matches = source.match(/case\s*"pdfobjectnewwindow":/g) || [];
+				if (matches.length !== 1 || !loaderCase.test(source)) {
+					throw new Error("Could not safely disable jsPDF's external PDFObject loader.");
+				}
+				return {
+					contents: source.replace(
+						loaderCase,
+						'case "pdfobjectnewwindow": throw new Error("Opening PDFObject in a new window is disabled.");'
+					),
+					loader: "js"
+				};
+			});
+		}
+	}],
 	format: "cjs",
 	// Keep lazy desktop imports on Obsidian's CommonJS host loader.
 	supported: { "dynamic-import": false },

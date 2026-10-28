@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1 - 2026-10-28
+
+### Fixed
+
+- Remove jsPDF's unused PDFObject CDN loader from the bundled plugin, preventing runtime script injection while preserving PDF exports.
+
 ## 1.1.0 - 2026-10-28
 
 Expensica 1.1.0 adds richer account-aware tracking and makes everyday financial data more reliable.
