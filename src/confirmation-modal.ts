@@ -1,4 +1,5 @@
 import { App, Modal } from 'obsidian';
+import { voidAsync } from './modal-utils';
 import type ExpensicaPlugin from '../main';
 
 export class ConfirmationModal extends Modal {
@@ -70,11 +71,11 @@ export class ConfirmationModal extends Modal {
             }
             if (this.resolved) this.close();
         };
-        confirmBtn.addEventListener('click', () => {
-            return (this.plugin
+        confirmBtn.addEventListener('click', voidAsync(() =>
+            this.plugin
                 ? this.plugin.runSaveOperation(this, this.title.replace(/\?$/, ''), submit)
-                : submit());
-        });
+                : submit()
+        ));
     }
 
     close() {

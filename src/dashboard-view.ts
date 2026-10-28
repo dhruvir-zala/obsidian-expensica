@@ -20,7 +20,7 @@ import type { SharedDateRangeState } from '../main';
 import type { TransactionNavigationFilter } from './transactions-view';
 import { PremiumVisualizations } from './dashboard-integration';
 import { ConfirmationModal } from './confirmation-modal';
-import { preventBackdropDismissal } from './modal-utils';
+import { preventBackdropDismissal, voidAsync } from './modal-utils';
 import { DateSelectorModal, formatDateForDisplay } from './date-selector-modal';
 import { TimeSelectorModal, formatTimeForDisplay } from './time-selector-modal';
 import { showExpensicaNotice } from './notice';
@@ -432,9 +432,9 @@ class BulkRenameTransactionsModal extends Modal {
             this.close();
         });
 
-        form.addEventListener('submit', (event) => {
+        form.addEventListener('submit', voidAsync(async (event) => {
             event.preventDefault();
-            return this.plugin.runSaveOperation(this, 'Rename transactions', async () => {
+            await this.plugin.runSaveOperation(this, 'Rename transactions', async () => {
                 if (!form.reportValidity()) return false;
                 const nextName = input.value.trim();
                 if (!nextName) {
@@ -446,7 +446,7 @@ class BulkRenameTransactionsModal extends Modal {
                 await this.onSubmit(nextName);
                 this.close();
             });
-        });
+        }));
 
         window.setTimeout(() => input.focus(), 0);
     }
@@ -3732,7 +3732,7 @@ export class ExpensicaDashboardView extends ItemView {
         }
 
         const canvas = canvasContainer.createEl('canvas', { attr: { id: 'cumulative-expenses-chart' } });
-        setTimeout(() => {
+        window.setTimeout(() => {
             if (canvas.isConnected === false) return;
             this.createCumulativeExpensesChart(canvas, legendContainer);
         }, 50);
@@ -6724,16 +6724,16 @@ export class TransactionModal extends Modal {
             this.close();
         });
 
-        deleteBtn?.addEventListener('click', () => {
+        deleteBtn?.addEventListener('click', voidAsync(async () => {
             if (!this.transaction) return;
             const closeEditor = () => this.close();
-            return this.dashboardView.deleteTransaction(this.transaction.id, closeEditor, closeEditor);
-        });
+            await this.dashboardView.deleteTransaction(this.transaction.id, closeEditor, closeEditor);
+        }));
 
         let saving = false;
-        form.addEventListener('submit', (e) => {
+        form.addEventListener('submit', voidAsync(async (e) => {
             e.preventDefault();
-            return this.plugin.runSaveOperation(this, this.transaction ? 'Edit transaction' : 'Add transaction', async () => {
+            await this.plugin.runSaveOperation(this, this.transaction ? 'Edit transaction' : 'Add transaction', async () => {
                 if (!form.reportValidity()) return false;
                 if (saving) return false;
                 saving = true;
@@ -6869,7 +6869,7 @@ export class TransactionModal extends Modal {
                     saveBtn.disabled = false;
                 }
             });
-        });
+        }));
     }
 
     close() {
@@ -7051,9 +7051,9 @@ export class AccountModal extends Modal {
 
         cancelBtn.addEventListener('click', () => this.close());
 
-        form.addEventListener('submit', (event) => {
+        form.addEventListener('submit', voidAsync(async (event) => {
             event.preventDefault();
-            return this.plugin.runSaveOperation(this, 'Add account', async () => {
+            await this.plugin.runSaveOperation(this, 'Add account', async () => {
                 if (!form.reportValidity()) return false;
 
                 if (saveAccountButton.disabled) return false;
@@ -7089,7 +7089,7 @@ export class AccountModal extends Modal {
                     saveAccountButton.disabled = false;
                 }
             });
-        });
+        }));
     }
 
     onClose() {
@@ -7524,22 +7524,22 @@ export class AccountEditorModal extends Modal {
                     || (this.account.creditLimit || 0) !== (nextAccount.creditLimit || 0)
                 )
             ) {
-                new AccountUpdateWarningModal(this.app, (confirmed) => {
+                new AccountUpdateWarningModal(this.app, voidAsync(async (confirmed) => {
                     if (!confirmed) {
                         return;
                     }
 
-                    return this.plugin.runSaveOperation(this, 'Edit account', () => submitAccount(event, true));
-                }).open();
+                    await this.plugin.runSaveOperation(this, 'Edit account', () => submitAccount(event, true));
+                })).open();
                 return false;
             }
 
             await this.persistAccount(nextAccount);
         };
-        form.addEventListener('submit', (event) => {
+        form.addEventListener('submit', voidAsync(async (event) => {
             event.preventDefault();
-            return this.plugin.runSaveOperation(this, this.account ? 'Edit account' : 'Add account', () => submitAccount(event));
-        });
+            await this.plugin.runSaveOperation(this, this.account ? 'Edit account' : 'Add account', () => submitAccount(event));
+        }));
     }
 
     onClose() {
@@ -7904,20 +7904,20 @@ class BudgetModal extends Modal {
             this.close();
         });
 
-        deleteBtn?.addEventListener('click', () => {
+        deleteBtn?.addEventListener('click', voidAsync(async () => {
             if (!this.budget) {
                 return;
             }
 
-            return this.dashboard.deleteBudget(this.budget.id, () => {
+            await this.dashboard.deleteBudget(this.budget.id, () => {
                 this.close();
             });
-        });
+        }));
 
         let saving = false;
-        form.addEventListener('submit', (e) => {
+        form.addEventListener('submit', voidAsync(async (e) => {
             e.preventDefault();
-            return this.plugin.runSaveOperation(this, this.budget ? 'Edit budget' : 'Add budget', async () => {
+            await this.plugin.runSaveOperation(this, this.budget ? 'Edit budget' : 'Add budget', async () => {
                 if (!form.reportValidity()) return false;
                 if (this.isRollover && this.needsRolloverStart() && !this.rolloverStartInput?.value) {
                     this.rolloverStartButton?.click();
@@ -7934,7 +7934,7 @@ class BudgetModal extends Modal {
                     saveBtn.disabled = false;
                 }
             });
-        });
+        }));
     }
 
     onClose() {

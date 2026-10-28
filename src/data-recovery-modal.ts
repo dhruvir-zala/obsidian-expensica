@@ -1,5 +1,5 @@
 import { App, Modal } from 'obsidian';
-import { preventBackdropDismissal } from './modal-utils';
+import { preventBackdropDismissal, voidAsync } from './modal-utils';
 import type { MissingAccountReference } from './transaction-import';
 
 export class DataRecoveryModal extends Modal {
@@ -74,7 +74,11 @@ export class DataRecoveryModal extends Modal {
         }
         if (reconciliation) {
             const { missingAccounts } = reconciliation;
-            const affectedCount = new Set(missingAccounts.flatMap((account: MissingAccountReference): number[] => account.locations.map((location: { index: number }): number => location.index))).size;
+            const affectedTransactions = new Set<number>();
+            for (const account of missingAccounts) {
+                for (const location of account.locations) affectedTransactions.add(location.index);
+            }
+            const affectedCount = affectedTransactions.size;
             contentEl.createEl('h2', {
                 text: 'Missing accounts',
                 cls: 'expensica-recovery-modal-warning'
@@ -113,7 +117,7 @@ export class DataRecoveryModal extends Modal {
             });
         const retryButton = buttons.createEl('button', { text: 'Retry', cls: reconciliation ? '' : 'mod-cta' });
         retryButton.disabled = this.retrying;
-        retryButton.addEventListener('click', () => this.handleRetry(retryButton, backButton));
+        retryButton.addEventListener('click', voidAsync(() => this.handleRetry(retryButton, backButton)));
         const backButton = buttons.createEl('button', { text: reconciliation ? 'Not now' : this.getSaveFailure && !importFailure ? 'Back to Editor' : 'Close' });
         backButton.disabled = !!this.getSaveFailure && this.retrying;
         backButton.addEventListener('click', () => this.close());

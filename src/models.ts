@@ -683,7 +683,13 @@ function fallbackRandomIdPart(): string {
       currencyDisplay,
       ...(compact ? { notation: 'compact' as const, minimumFractionDigits: 0, maximumFractionDigits: 1 } : {})
     });
-    const parts: Intl.NumberFormatPart[] = formatter.formatToParts(options.currencyOnly || Math.abs(displayAmount) < 0.000001 ? 0 : displayAmount)
+    const rawFormatToParts: unknown = Reflect.get(formatter, 'formatToParts');
+    if (typeof rawFormatToParts !== 'function') throw new Error('Intl.NumberFormat.formatToParts is unavailable.');
+    const formatToParts = rawFormatToParts as (this: Intl.NumberFormat, value: number) => Intl.NumberFormatPart[];
+    const parts: Intl.NumberFormatPart[] = formatToParts.call(
+      formatter,
+      options.currencyOnly || Math.abs(displayAmount) < 0.000001 ? 0 : displayAmount
+    )
       .filter((part: Intl.NumberFormatPart) => !options.currencyOnly || part.type === 'currency');
     return parts
       // Some locales return the ISO code even for narrowSymbol; use the registered symbol then.

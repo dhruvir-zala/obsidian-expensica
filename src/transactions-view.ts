@@ -23,6 +23,7 @@ import {
 } from './dashboard-view';
 import { ConfirmationModal } from './confirmation-modal';
 import { showExpensicaNotice } from './notice';
+import { voidAsync } from './modal-utils';
 import { renderTransactionCard, showTransactionBulkCategoryMenu } from './transaction-card';
 import { renderCategoryChip } from './category-chip';
 import { showCategoryQuickMenu } from './category-quick-menu';
@@ -189,9 +190,9 @@ class BulkRenameTransactionsModal extends Modal {
             this.close();
         });
 
-        form.addEventListener('submit', (event) => {
+        form.addEventListener('submit', voidAsync(async (event) => {
             event.preventDefault();
-            return this.plugin.runSaveOperation(this, 'Rename transactions', async () => {
+            await this.plugin.runSaveOperation(this, 'Rename transactions', async () => {
                 if (!form.reportValidity()) return false;
                 const nextName = input.value.trim();
                 if (!nextName) {
@@ -203,7 +204,7 @@ class BulkRenameTransactionsModal extends Modal {
                 await this.onSubmit(nextName);
                 this.close();
             });
-        });
+        }));
 
         window.setTimeout(() => input.focus(), 0);
     }

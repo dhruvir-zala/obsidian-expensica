@@ -1,7 +1,5 @@
 import { App, FileSystemAdapter, Modal, Platform, Plugin, PluginSettingTab, Setting } from 'obsidian';
 import type { SettingDefinitionItem, TextComponent } from 'obsidian';
-import * as fs from 'fs';
-import * as path from 'path';
 
 import { AccountEditorModal, ExpensicaDashboardView, EXPENSICA_VIEW_TYPE, TransactionModal, DateRangeType, DashboardTab } from './src/dashboard-view';
 import { ExpensicaTransactionsView } from './src/transactions-view';
@@ -68,9 +66,26 @@ interface NativeFileDialog {
     }): Promise<{ canceled: boolean; filePaths: string[] }>;
 }
 
-interface ElectronRemote {
-    dialog?: NativeFileDialog;
-    remote?: { dialog?: NativeFileDialog };
+function isNativeFileDialog(value: unknown): value is NativeFileDialog {
+    if (typeof value !== 'object' || value === null) return false;
+    const candidate = value as Record<string, unknown>;
+    return typeof candidate.showOpenDialog === 'function';
+}
+
+function getNativeFileDialog(module: unknown): NativeFileDialog | undefined {
+    if (typeof module !== 'object' || module === null) return undefined;
+    const exported = module as Record<string, unknown>;
+    if (isNativeFileDialog(exported.dialog)) return exported.dialog;
+    if (typeof exported.remote === 'object' && exported.remote !== null) {
+        const remote = exported.remote as Record<string, unknown>;
+        if (isNativeFileDialog(remote.dialog)) return remote.dialog;
+    }
+    return undefined;
+}
+
+async function importOptionalModule(moduleName: string): Promise<unknown> {
+    const imported: unknown = await import(moduleName);
+    return imported;
 }
 
 // Import visualizations for bundling
@@ -101,7 +116,18 @@ function createChevronIcon(parent: HTMLElement, size: number): void {
 }
 
 function createWarningIcon(parent: HTMLElement): void {
-    parent.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4m0 4h.01"></path></svg>';
+    const svg = parent.createSvg('svg', {
+        attr: {
+            viewBox: '0 0 24 24',
+            fill: 'none',
+            stroke: 'currentColor',
+            'stroke-width': '2',
+            'stroke-linecap': 'round',
+            'stroke-linejoin': 'round'
+        }
+    });
+    svg.createSvg('circle', { attr: { cx: '12', cy: '12', r: '10' } });
+    svg.createSvg('path', { attr: { d: 'M12 8v4m0 4h.01' } });
 }
 
 // Define the global window interface to include jspdf
@@ -930,32 +956,36 @@ export default class ExpensicaPlugin extends Plugin {
         if (this.dataRecoveryRetry) return this.dataRecoveryRetry;
         this.retryingDataRecovery = true;
         this.refreshDataRecoveryWarnings();
-        this.dataRecoveryRetry = this.enqueuePersistence(async () => {
-            const previousData = JSON.stringify([this.transactionsData.transactions, this.transactionsData.accounts, this.budgetData.budgets]);
-            if (this.pendingAccountRollback !== null) {
-                try {
-                    await this.app.vault.adapter.write(this.accountsFilePath, this.pendingAccountRollback);
-                    this.pendingAccountRollback = null;
-                } catch (error) {
-                    this.protectDataset('accounts', error);
-                    this.protectDataset('transactions', error);
-                }
+        this.dataRecoveryRetry = (async () => {
+            try {
+                return await this.enqueuePersistence(async () => {
+                    const previousData = JSON.stringify([this.transactionsData.transactions, this.transactionsData.accounts, this.budgetData.budgets]);
+                    if (this.pendingAccountRollback !== null) {
+                        try {
+                            await this.app.vault.adapter.write(this.accountsFilePath, this.pendingAccountRollback);
+                            this.pendingAccountRollback = null;
+                        } catch (error: unknown) {
+                            this.protectDataset('accounts', error);
+                            this.protectDataset('transactions', error);
+                        }
+                    }
+                    // Always check all files, including those that were healthy at the last attempt.
+                    // Accounts come first so transaction migration cannot invent fallback associations.
+                    await this.readAccountsData();
+                    await this.readTransactionsData();
+                    await this.readBudgetData();
+                    const recoveredData = JSON.stringify([this.transactionsData.transactions, this.transactionsData.accounts, this.budgetData.budgets]);
+                    if (recoveredData !== previousData) await this.refreshExpensicaViews();
+                    if (this.protectedDatasets.size === 0) this.dataRecoveryModal?.close();
+                    return this.protectedDatasets.size === 0;
+                });
+            } finally {
+                this.retryingDataRecovery = false;
+                this.dataRecoveryRetry = null;
+                this.refreshDataRecoveryWarnings();
+                this.dataRecoveryModal?.refresh();
             }
-            // Always check all files, including those that were healthy at the last attempt.
-            // Accounts come first so transaction migration cannot invent fallback associations.
-            await this.readAccountsData();
-            await this.readTransactionsData();
-            await this.readBudgetData();
-            const recoveredData = JSON.stringify([this.transactionsData.transactions, this.transactionsData.accounts, this.budgetData.budgets]);
-            if (recoveredData !== previousData) await this.refreshExpensicaViews();
-            if (this.protectedDatasets.size === 0) this.dataRecoveryModal?.close();
-            return this.protectedDatasets.size === 0;
-        }).finally(() => {
-            this.retryingDataRecovery = false;
-            this.dataRecoveryRetry = null;
-            this.refreshDataRecoveryWarnings();
-            this.dataRecoveryModal?.refresh();
-        });
+        })();
         return this.dataRecoveryRetry;
     }
 
@@ -975,7 +1005,7 @@ export default class ExpensicaPlugin extends Plugin {
                 this.datasetPath(dataset));
             const retry = actions.createEl('button', { text: missingAccounts ? 'More' : 'Retry', cls: 'expensica-standard-button' });
             retry.disabled = !missingAccounts && this.retryingDataRecovery;
-            retry.addEventListener('click', async () => {
+            retry.addEventListener('click', voidAsync(async () => {
                 if (missingAccounts) {
                     this.openDataRecovery();
                     return;
@@ -987,7 +1017,7 @@ export default class ExpensicaPlugin extends Plugin {
                     this.refreshDataRecoveryWarnings();
                 }
                 if (this.protectedDatasets.has(dataset)) this.openDataRecovery();
-            });
+            }));
         }
         const visibleFailures = new Map<string, { owner: object; failure: SaveFailure }>();
         for (const [owner, failure] of this.saveFailures) {
@@ -1002,13 +1032,13 @@ export default class ExpensicaPlugin extends Plugin {
                 ' could not be accessed. Check file permissions and if the vault has free space.', failure.path);
             const retry = actions.createEl('button', { text: 'Retry', cls: 'expensica-standard-button' });
             retry.disabled = this.savingOwners.has(owner) || this.retryingSaveOwners.has(owner);
-            retry.addEventListener('click', async () => {
+            retry.addEventListener('click', voidAsync(async () => {
                 if (this.retryingSaveOwners.has(owner) || this.savingOwners.has(owner)) return;
                 if (!await this.retrySaveRecovery(owner) && this.saveFailures.has(owner)) {
                     if (Array.from(this.protectedDatasets).some(dataset => this.datasetPath(dataset) === failure.path)) this.openDataRecovery();
                     else this.openSaveRecovery(owner);
                 }
-            });
+            }));
         }
     }
 
@@ -1528,7 +1558,7 @@ export default class ExpensicaPlugin extends Plugin {
                     await this.refreshExpensicaViews();
 
                     if (this.settingTab) {
-                        this.settingTab.display();
+                        this.settingTab.refreshSettings();
                     }
 
                     resolve(true);
@@ -2592,6 +2622,14 @@ class ExpensicaSettingTab extends PluginSettingTab {
     }
 
     display(): void {
+        this.renderSettings();
+    }
+
+    refreshSettings(): void {
+        this.renderSettings();
+    }
+
+    private renderSettings(): void {
         const { containerEl } = this;
         this.clearCleanupCallbacks();
 
@@ -2865,7 +2903,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
                     new FolderSuggestionModal(this.app, this.plugin, async (folder) => {
                         this.plugin.settings.dailyReviewFolder = folder;
                         await this.saveSettings();
-                        (folderText as TextComponent | null)?.setValue(folder);
+                        folderText?.setValue(folder);
                     }).open();
                 }));
     }
@@ -3295,7 +3333,7 @@ class AccountResolutionStepModal extends Modal {
         confirm.disabled = this.summary
             ? this.owner.validation.missingAccounts.some(group => !accounts.has(this.owner.choices.get(group.reference) || ''))
             : !this.selectedId;
-        confirm.addEventListener('click', async () => {
+        confirm.addEventListener('click', voidAsync(async () => {
             if (this.owner.saving || confirm.disabled) return;
             if (this.summary) { await this.owner.confirm(); return; }
             const selectedId = this.selectedId;
@@ -3314,7 +3352,7 @@ class AccountResolutionStepModal extends Modal {
             }
             this.pickerOpen = false;
             this.render();
-        });
+        }));
     }
 
     private editDraft(previous?: Account) {
@@ -3424,10 +3462,13 @@ class ImportModal extends Modal {
         });
         this.importButton.disabled = true;
         closeButton.addEventListener('click', () => this.close());
-        this.chooseButton.addEventListener('click', () => this.browse());
-        this.importButton.addEventListener('click', () => {
-            if (this.retryWithPicker && this.importButton.textContent === 'Retry') return this.browse();
-            return this.plugin.runSaveOperation(this, 'Import transactions', async () => {
+        this.chooseButton.addEventListener('click', voidAsync(() => this.browse()));
+        this.importButton.addEventListener('click', voidAsync(async () => {
+            if (this.retryWithPicker && this.importButton.textContent === 'Retry') {
+                await this.browse();
+                return;
+            }
+            await this.plugin.runSaveOperation(this, 'Import transactions', async () => {
                 if (!this.source || this.importButton.disabled) return false;
                 const source = this.source;
                 this.importButton.disabled = true;
@@ -3454,10 +3495,10 @@ class ImportModal extends Modal {
                         this.actionEl.hidden = false;
                         if (error.canReconcileAccounts) {
                             this.actionEl.createEl('button', { text: 'Resolve accounts', cls: 'mod-cta' })
-                                .addEventListener('click', async () => {
+                                .addEventListener('click', voidAsync(async () => {
                                     try { await this.plugin.openAccountReconciliation(source, () => { if (!this.dismissed) this.close(); }); }
                                     catch { this.messageEl.textContent = 'Could not open account reconciliation. Check the file, then Retry.'; }
-                                });
+                                }));
                         }
                         this.chooseButton.hidden = true;
                         this.importButton.textContent = 'Retry';
@@ -3469,7 +3510,7 @@ class ImportModal extends Modal {
                     this.chooseButton.disabled = false;
                 }
             });
-        });
+        }));
         this.browse();
     }
 
@@ -3492,20 +3533,20 @@ class ImportModal extends Modal {
         this.chooseButton.disabled = true;
         try {
             this.fileInput.value = '';
-            if (typeof Platform !== 'undefined' && Platform.isDesktopApp
-                && typeof FileSystemAdapter !== 'undefined' && this.app.vault.adapter instanceof FileSystemAdapter) {
+            if (Platform.isDesktopApp && this.app.vault.adapter instanceof FileSystemAdapter) {
                 let dialog: NativeFileDialog | undefined;
                 try {
-                    dialog = (require('@electron/remote') as ElectronRemote).dialog;
+                    dialog = getNativeFileDialog(await importOptionalModule('@electron/remote'));
                 } catch {
                     try {
-                        dialog = (require('electron') as ElectronRemote).remote?.dialog;
+                        dialog = getNativeFileDialog(await importOptionalModule('electron'));
                     } catch {
                         dialog = undefined;
                     }
                 }
 
                 if (dialog) {
+                    const path = await import('path');
                     const result = await dialog.showOpenDialog({
                         defaultPath: path.join(this.app.vault.adapter.getBasePath(), this.plugin.dataFolderPath),
                         filters: [{ name: 'JSON files', extensions: ['json'] }],
@@ -3515,7 +3556,11 @@ class ImportModal extends Modal {
                     const filePath = result.filePaths[0];
                     this.selectSource({
                         name: path.basename(filePath),
-                        text: async () => fs.promises.readFile(filePath, 'utf8')
+                        text: async () => {
+                            if (!Platform.isDesktopApp) throw new Error('Native file access is only available on desktop.');
+                            const fs = await import('fs');
+                            return fs.promises.readFile(filePath, 'utf8');
+                        }
                     });
                     return;
                 }

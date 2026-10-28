@@ -29,7 +29,7 @@ const RangeType = {
 const { ExpensicaTransactionsView } = load('transactions-view.ts', {
     './models': models, obsidian: { Modal: class {} }, '../main': {}, './dashboard-view': { DateRangeType: RangeType },
     './confirmation-modal': {}, './notice': {}, './transaction-card': {},
-    './category-chip': {}, './category-quick-menu': {}
+    './category-chip': {}, './category-quick-menu': {}, './modal-utils': load('modal-utils.ts')
 });
 const accounts = [
     { type: AccountType.CHEQUING, name: 'Debit' },
