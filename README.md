@@ -52,4 +52,4 @@ Expensica is made by [Dhruvir Zala](https://dhruvirzala.com/).
 
 - [LinkedIn](https://www.linkedin.com/in/dhruvir-zala/)
 - [Twitter](https://twitter.com/DhruvirZala)
-- [Buy me a coffee](https://ko-fi.com/X8X71DLZHF)
+- [Buy me a coffee](https://ko-fi.com/dhruvirzala)
