@@ -13,5 +13,6 @@ export function preventBackdropDismissal(modal: Modal): void {
 
 // Adapts an async handler for APIs that expect a void callback; the handler owns its error handling.
 export function voidAsync<A extends unknown[]>(handler: (...args: A) => Promise<unknown>): (...args: A) => void {
-    return (...args: A): void => { void handler(...args); };
+    // The promise is still returned at runtime so callers invoking the listener directly can await it.
+    return (...args: A): void => handler(...args) as unknown as void;
 }

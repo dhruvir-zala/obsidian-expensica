@@ -119,7 +119,10 @@ const { ExpensicaDashboardView, TransactionModal, DateRangeType, BudgetModal, Ac
         constructor(form) { this.fields = form.querySelectorAll('input, select, textarea'); }
         get(name) { return this.fields.find(field => field.attrs.name === name)?.value || ''; }
     },
-    window: { requestAnimationFrame: fn => { animationFrames.push(fn); return animationFrames.length; } }
+    window: {
+        requestAnimationFrame: fn => { animationFrames.push(fn); return animationFrames.length; },
+        setTimeout: callback => { chartTimers.push(callback); return chartTimers.length; }
+    }
 }, '\nexport { BudgetModal, AccountModal };');
 
 function plugin(accounts = [{ ...models.DEFAULT_ACCOUNT }], enableAccounts = true) {
@@ -1702,7 +1705,7 @@ test('error cards persist across dialogs and rerenders, order load protection be
     h.p.renderDataRecoveryWarning(h.container);
     const cards = h.container.querySelectorAll('.expensica-recovery-card');
     assert.deepEqual(cards.map(card => card.getAttribute('data-recovery-kind')), ['load', 'save']);
-    assert.match(cards[0].querySelector('.expensica-recovery-card-icon').innerHTML, /<svg/);
+    assert.equal(cards[0].querySelector('.expensica-recovery-card-icon').querySelector('svg')?.tag, 'svg');
     assert.doesNotMatch(modalText(h.container), /Unexpected token|Permission denied|SyntaxError/);
     assert.ok(!cards.flatMap(card => card.querySelectorAll('button')).some(button => /dismiss|close|hide/i.test(button.textContent)));
     h.files.set(h.p.budgetFilePath, JSON.stringify({ budgets: [], lastUpdated: 'initial' }));

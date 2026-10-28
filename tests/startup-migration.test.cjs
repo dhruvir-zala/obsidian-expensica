@@ -73,7 +73,7 @@ function harness(files = new Map(), date = '2026-10-22T18:34:56.789Z') {
     p.saveData = async data => p.app.vault.adapter.write('settings.json', JSON.stringify(data));
     p.addRibbonIcon = () => ({ addClass() {} });
     p.addCommand = p.registerView = () => {};
-    p.addSettingTab = tab => { tab.display = () => {}; };
+    p.addSettingTab = tab => { tab.display = tab.refreshSettings = () => {}; };
     p.registerEvent = () => {};
     p.registerDomEvent = (_target, name, callback) => { if (name === 'focus') focusHandlers.push(callback); };
     p.importTransactionsFromJSON = () => { throw Error('Startup must never reimport transactions'); };
