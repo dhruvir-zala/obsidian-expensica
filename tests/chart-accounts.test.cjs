@@ -93,6 +93,18 @@ test('chart calculations reuse account metadata and full chart creation reads th
     assert.equal(JSON.stringify({ source, accounts }), original);
 });
 
+test('destroyed income charts are cleared when the next render has no date bounds', () => {
+    const h = harness(current, [], []);
+    let destroyed = 0;
+    h.view.incomeExpenseChart = { destroy() { destroyed++; } };
+    h.view.getIncomeExpenseChartDayBounds = () => null;
+
+    h.view.createIncomeExpenseChart({});
+
+    assert.equal(destroyed, 1);
+    assert.equal(h.view.incomeExpenseChart, null);
+});
+
 test('day/week/month/year buckets retain exact signs, transfers, opening balances, grouping, and local times', () => {
     const { accounts } = fixture(0, 3);
     accounts[2].type = 'credit';

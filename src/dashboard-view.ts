@@ -580,23 +580,20 @@ export class ExpensicaDashboardView extends ItemView {
         this.setupThemeObserver();
     }
 
+    private destroyCharts() {
+        this.cancelDoughnutLabelAnimation();
+        this.expensesChart?.destroy();
+        this.incomeExpenseChart?.destroy();
+        this.cumulativeExpensesChart?.destroy();
+        this.expensesChart = null;
+        this.incomeExpenseChart = null;
+        this.cumulativeExpensesChart = null;
+    }
+
     async onClose() {
         this.plugin.deactivateDashboardTransactionsTab?.(this);
         this.clearSelectorListeners();
-        // Cleanup charts
-        if (this.expensesChart) {
-            this.cancelDoughnutLabelAnimation();
-            this.expensesChart.destroy();
-            this.expensesChart = null;
-        }
-        if (this.incomeExpenseChart) {
-            this.incomeExpenseChart.destroy();
-            this.incomeExpenseChart = null;
-        }
-        if (this.cumulativeExpensesChart) {
-            this.cumulativeExpensesChart.destroy();
-            this.cumulativeExpensesChart = null;
-        }
+        this.destroyCharts();
 
         // Premium visualizations will be garbage collected
         this.premiumVisualizations = null;
@@ -2063,6 +2060,7 @@ export class ExpensicaDashboardView extends ItemView {
         this.consumeChartAnimationRequest();
         this.rememberScrollPosition();
         this.clearSelectorListeners();
+        this.destroyCharts();
         this.plugin.deactivateDashboardTransactionsTab?.(this);
         container.empty();
         container.removeClass('expensica-container');
@@ -2161,6 +2159,7 @@ export class ExpensicaDashboardView extends ItemView {
     private clearTabContent(container: HTMLElement) {
         this.plugin.deactivateDashboardTransactionsTab?.(this);
         this.clearSelectorListeners(false);
+        this.destroyCharts();
         const children = Array.from(container.children);
         const tabsIndex = children.findIndex(child => child.classList.contains('expensica-tabs'));
         const firstContentIndex = tabsIndex >= 0 ? tabsIndex + 1 : 0;
@@ -2650,6 +2649,7 @@ export class ExpensicaDashboardView extends ItemView {
             this.prepareChartCanvasSize(canvas);
 
             window.setTimeout(() => {
+                if (canvas.isConnected === false) return;
                 this.createCategoryExpensesChart(canvas, null, categoryData);
             }, 50);
 
@@ -3270,6 +3270,7 @@ export class ExpensicaDashboardView extends ItemView {
 
         // Create chart based on selected period
         window.setTimeout(() => {
+            if (canvas.isConnected === false) return;
             this.updateCategoryChartLayout(container, chartLayout);
             this.createCategoryExpensesChart(canvas, legendContainer);
         }, 50);
@@ -3737,12 +3738,16 @@ export class ExpensicaDashboardView extends ItemView {
         }
 
         const canvas = canvasContainer.createEl('canvas', { attr: { id: 'cumulative-expenses-chart' } });
-        window.setTimeout(() => this.createCumulativeExpensesChart(canvas, legendContainer), 50);
+        window.setTimeout(() => {
+            if (canvas.isConnected === false) return;
+            this.createCumulativeExpensesChart(canvas, legendContainer);
+        }, 50);
     }
 
     createCumulativeExpensesChart(canvas: HTMLCanvasElement, legendContainer: HTMLElement | null = null) {
         if (this.cumulativeExpensesChart) {
             this.cumulativeExpensesChart.destroy();
+            this.cumulativeExpensesChart = null;
         }
 
         const currentRange = {
@@ -4043,6 +4048,7 @@ export class ExpensicaDashboardView extends ItemView {
         if (this.expensesChart) {
             this.cancelDoughnutLabelAnimation();
             this.expensesChart.destroy();
+            this.expensesChart = null;
         }
 
         const categoryData = categoryEntries ?? this.getCurrentCategoryChartData();
@@ -4250,6 +4256,7 @@ export class ExpensicaDashboardView extends ItemView {
         // Cleanup previous chart
         if (this.expensesChart) {
             this.expensesChart.destroy();
+            this.expensesChart = null;
         }
 
         const { start, end } = this.getDateRangeDayBounds();
@@ -4424,6 +4431,7 @@ export class ExpensicaDashboardView extends ItemView {
         // Cleanup previous chart
         if (this.expensesChart) {
             this.expensesChart.destroy();
+            this.expensesChart = null;
         }
 
         const { start, end } = this.getDateRangeDayBounds();
@@ -4595,6 +4603,7 @@ export class ExpensicaDashboardView extends ItemView {
 
         // Create chart
         window.setTimeout(() => {
+            if (canvas.isConnected === false) return;
             this.createIncomeExpenseChart(canvas, legendContainer);
         }, 50);
     }
@@ -4603,6 +4612,7 @@ export class ExpensicaDashboardView extends ItemView {
         // Cleanup previous chart
         if (this.incomeExpenseChart) {
             this.incomeExpenseChart.destroy();
+            this.incomeExpenseChart = null;
         }
 
         if (!this.getIncomeExpenseChartDayBounds()) {

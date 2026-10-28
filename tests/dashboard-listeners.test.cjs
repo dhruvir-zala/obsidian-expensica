@@ -260,6 +260,33 @@ test('listeners are removed while old controls are still attached, before DOM re
     await view.onClose();
 });
 
+test('dashboard renders and tab switches destroy charts before removing their canvases', () => {
+    const h = setup();
+    const view = h.view();
+    const destroyed = [];
+    for (const field of ['expensesChart', 'incomeExpenseChart', 'cumulativeExpensesChart']) {
+        view[field] = { destroy() { destroyed.push(field); } };
+    }
+
+    view.renderDashboard();
+    assert.deepEqual(destroyed, ['expensesChart', 'incomeExpenseChart', 'cumulativeExpensesChart']);
+    assert.equal(view.expensesChart, null);
+    assert.equal(view.incomeExpenseChart, null);
+    assert.equal(view.cumulativeExpensesChart, null);
+
+    for (const field of ['expensesChart', 'incomeExpenseChart', 'cumulativeExpensesChart']) {
+        view[field] = { destroy() { destroyed.push(field); } };
+    }
+    view.switchDashboardTab(h.DashboardTab.BUDGET);
+    assert.deepEqual(destroyed, [
+        'expensesChart', 'incomeExpenseChart', 'cumulativeExpensesChart',
+        'expensesChart', 'incomeExpenseChart', 'cumulativeExpensesChart'
+    ]);
+    assert.equal(view.expensesChart, null);
+    assert.equal(view.incomeExpenseChart, null);
+    assert.equal(view.cumulativeExpensesChart, null);
+});
+
 test('multiple dashboards dismiss independently and closing one leaves the other listeners intact', async () => {
     const h = setup();
     const first = h.view(), second = h.view();
