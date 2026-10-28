@@ -9598,3 +9598,8 @@ body:not(.is-mobile) .expensica-dashboard > .expensica-overview-summary.expensic
   flex: 0 0 var(--size-4-8, 32px);
   align-self: center;
 }
+
+.expensica-chart-radius-probe {
+  display: none;
+  border-radius: var(--expensica-chart-bar-radius);
+}

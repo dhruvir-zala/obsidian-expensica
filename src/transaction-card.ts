@@ -98,12 +98,12 @@ export function renderTransactionCard(container: HTMLElement, options: Transacti
     }
 
     const detailsEl = transactionEl.createDiv('expensica-transaction-details');
-    detailsEl.createEl('div', { text: transaction.description, cls: 'expensica-transaction-title' });
+    detailsEl.createDiv({ text: transaction.description, cls: 'expensica-transaction-title' });
     const metaEl = detailsEl.createDiv('expensica-transaction-meta');
 
     const transactionTime = formatTimeForDisplay(getTransactionDisplayTime(transaction) || '', plugin.settings.timeFormat);
     if (transactionTime) {
-        const timeEl = metaEl.createEl('span', { cls: 'expensica-transaction-date' });
+        const timeEl = metaEl.createSpan({ cls: 'expensica-transaction-date' });
         appendSvgIcon(timeEl, { size: 12, strokeWidth: '2' }, CLOCK_SHAPES);
         timeEl.appendText(` ${transactionTime}`);
     }
@@ -114,14 +114,14 @@ export function renderTransactionCard(container: HTMLElement, options: Transacti
         const accounts = plugin.getAccounts();
         const fromAccountRecord = plugin.findAccountByReference(transaction.fromAccount);
         const toAccountRecord = plugin.findAccountByReference(transaction.toAccount);
-        const accountEl = metaEl.createEl('span', { cls: 'expensica-transaction-account' });
+        const accountEl = metaEl.createSpan({ cls: 'expensica-transaction-account' });
         renderTransactionAccountEndpoint(accountEl, fromAccount.name, fromAccountRecord ? getAccountColor(fromAccountRecord, accounts) : undefined);
         const separatorEl = accountEl.createSpan({ cls: 'expensica-transaction-account-separator' });
         appendSvgIcon(separatorEl, { size: 12, strokeWidth: '2.25', ariaHidden: true }, CHEVRON_SHAPES);
         renderTransactionAccountEndpoint(accountEl, toAccount.name, toAccountRecord ? getAccountColor(toAccountRecord, accounts) : undefined);
     } else if (plugin.settings.enableAccounts) {
         const accountDisplay = plugin.getTransactionAccountDisplay(transaction.account);
-        const accountEl = metaEl.createEl('span', { cls: 'expensica-transaction-account' });
+        const accountEl = metaEl.createSpan({ cls: 'expensica-transaction-account' });
         appendSvgIcon(accountEl, { size: 12, strokeWidth: '2' }, CARD_SHAPES);
         accountEl.appendText(` ${accountDisplay.name}`);
         accountEl.style.color = getAccountColor(accountDisplay, plugin.getAccounts());
@@ -173,17 +173,17 @@ export function renderTransactionCard(container: HTMLElement, options: Transacti
             ? 'expensica-expense'
             : '';
     const amountPrefix = transaction.type === TransactionType.INCOME ? '+' : transaction.type === TransactionType.EXPENSE ? '-' : '';
-    amountEl.createEl('span', {
+    amountEl.createSpan({
         text: `${amountPrefix}${formattedAmount}`,
         cls: amountClass
     });
     const balanceEl = amountEl.createDiv('expensica-transaction-balance');
-    balanceEl.createEl('span', {
+    balanceEl.createSpan({
         text: runningBalanceLabel,
         cls: 'expensica-transaction-balance-label'
     });
     if (secondaryRunningBalanceLabel) {
-        balanceEl.createEl('span', {
+        balanceEl.createSpan({
             text: secondaryRunningBalanceLabel,
             cls: 'expensica-transaction-balance-label'
         });

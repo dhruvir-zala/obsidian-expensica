@@ -215,7 +215,7 @@ export function parseAccountReference(account?: string | null): { type: AccountT
   }
 
   const [rawType, ...nameParts] = account.split('-');
-  const normalizedType = rawType?.toLowerCase();
+  const normalizedType = rawType?.toLowerCase() as AccountType | undefined;
   const type = normalizedType === AccountType.CREDIT
     ? AccountType.CREDIT
     : normalizedType === AccountType.SAVING
@@ -677,16 +677,17 @@ function fallbackRandomIdPart(): string {
     const currencyDisplay = options.currencyDisplay || 'narrowSymbol';
     const displayAmount = compact && Math.abs(amount) < 1000
       ? Math.sign(amount) * Math.round(Math.abs(amount)) : amount;
-    const formatter = new Intl.NumberFormat('en-US', {
+    const formatter: Intl.NumberFormat = new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: currencyCode,
       currencyDisplay,
       ...(compact ? { notation: 'compact' as const, minimumFractionDigits: 0, maximumFractionDigits: 1 } : {})
     });
-    return formatter.formatToParts(options.currencyOnly || Math.abs(displayAmount) < 0.000001 ? 0 : displayAmount)
-      .filter(part => !options.currencyOnly || part.type === 'currency')
+    const parts: Intl.NumberFormatPart[] = formatter.formatToParts(options.currencyOnly || Math.abs(displayAmount) < 0.000001 ? 0 : displayAmount)
+      .filter((part: Intl.NumberFormatPart) => !options.currencyOnly || part.type === 'currency');
+    return parts
       // Some locales return the ISO code even for narrowSymbol; use the registered symbol then.
-      .map(part => part.type === 'currency' && currencyDisplay === 'narrowSymbol' && part.value === currency.code
+      .map((part: Intl.NumberFormatPart): string => part.type === 'currency' && currencyDisplay === 'narrowSymbol' && part.value === currency.code
         ? currency.symbol : part.value)
       .join('');
   }

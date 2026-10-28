@@ -33,10 +33,9 @@ type SvgIconShape = {
 };
 
 function appendSvgIcon(container: HTMLElement, size: number, shapes: SvgIconShape[], strokeWidth = '2'): void {
-    const createSvg = container.createSvg;
-    if (typeof createSvg !== 'function') return;
+    if (typeof container.createSvg !== 'function') return;
 
-    const svg = createSvg.call(container, 'svg', {
+    const svg = container.createSvg('svg', {
         attr: {
             width: size,
             height: size,
@@ -192,7 +191,7 @@ class BulkRenameTransactionsModal extends Modal {
 
         form.addEventListener('submit', (event) => {
             event.preventDefault();
-            return this.plugin.runSaveOperation(this, 'Rename transactions', async () => {
+            void this.plugin.runSaveOperation(this, 'Rename transactions', async () => {
                 if (!form.reportValidity()) return false;
                 const nextName = input.value.trim();
                 if (!nextName) {
@@ -772,7 +771,7 @@ export class ExpensicaTransactionsView implements TransactionView {
         const totals = this.getFilteredTransactionTotals();
         const shares = this.getTransactionShares();
         const statChipsContainer = container.createDiv('expensica-transaction-total-chips expensica-transactions-tab-chips');
-        statChipsContainer.createEl('span', {
+        statChipsContainer.createSpan({
             text: this.filteredTransactions.length > 0 ? `${this.filteredTransactions.length} total` : '',
             cls: `expensica-transaction-count expensica-transaction-count-chip ${this.filteredTransactions.length === 0 ? 'is-hidden' : ''}`.trim()
         });
@@ -790,7 +789,7 @@ export class ExpensicaTransactionsView implements TransactionView {
             ? 'expensica-transaction-total-spent'
             : 'expensica-transaction-total-income';
 
-        return container.createEl('span', {
+        return container.createSpan({
             text: `${label} ${this.formatTransactionStatCurrency(amount)}${percentage === null ? '' : ` (${percentage.toFixed(1)}%)`}`,
             cls: `expensica-transaction-count expensica-transaction-total-chip ${className}`
         });
@@ -844,7 +843,7 @@ export class ExpensicaTransactionsView implements TransactionView {
         }
 
         this.applySharedDateRangeStateValues(state);
-        await this.loadTransactionsData(true);
+        this.loadTransactionsData(true);
         this.persistTransactionsState();
 
         if (this.embeddedContentEl) {
@@ -1023,7 +1022,7 @@ export class ExpensicaTransactionsView implements TransactionView {
         if (this.filteredTransactions.length === 0) {
             // No transactions found
             const emptyState = transactionsSection.createDiv('expensica-empty-state');
-            emptyState.createEl('div', { text: '📋', cls: 'expensica-empty-state-icon' });
+            emptyState.createDiv({ text: '📋', cls: 'expensica-empty-state-icon' });
             emptyState.createEl('p', {
                 text: 'No transactions found matching your filters.',
                 cls: 'expensica-empty-state-message'
@@ -1287,7 +1286,7 @@ export class ExpensicaTransactionsView implements TransactionView {
 
         await this.plugin.updateTransactions(selectedTransactions.map(transaction => transaction.id), { category: categoryId }, this);
 
-        await this.loadTransactionsData(false);
+        this.loadTransactionsData(false);
         this.selectedTransactionIds.clear();
         this.persistTransactionsState();
         this.refreshTransactionsListOnly();
@@ -1302,7 +1301,7 @@ export class ExpensicaTransactionsView implements TransactionView {
 
         await this.plugin.updateTransactions(selectedTransactions.map(transaction => transaction.id), { description: name }, this);
 
-        await this.loadTransactionsData(false);
+        this.loadTransactionsData(false);
         this.persistTransactionsState();
         this.refreshTransactionsListOnly();
         showExpensicaNotice('Transactions renamed successfully');
@@ -1325,7 +1324,7 @@ export class ExpensicaTransactionsView implements TransactionView {
 
                 await this.plugin.deleteTransactions(selectedTransactions.map(transaction => transaction.id), this);
                 this.selectedTransactionIds.clear();
-                await this.loadTransactionsData(false);
+                this.loadTransactionsData(false);
                 this.persistTransactionsState();
                 this.refreshTransactionsListOnly();
                 showExpensicaNotice('Transactions deleted successfully');
@@ -1518,7 +1517,7 @@ export class ExpensicaTransactionsView implements TransactionView {
 
         // Items per page selector container
         const itemsPerPageContainer = paginationSection.createDiv('expensica-items-per-page');
-        itemsPerPageContainer.createEl('span', { text: 'Per Page:' });
+        itemsPerPageContainer.createSpan({ text: 'Per Page:' });
         this.renderPageSizeSelector(itemsPerPageContainer);
     }
 
@@ -1557,7 +1556,7 @@ export class ExpensicaTransactionsView implements TransactionView {
         await this.plugin.addTransaction(transaction, this);
         
         // Refresh transactions without resetting the user's current filter/page context.
-        await this.loadTransactionsData(false);
+        this.loadTransactionsData(false);
         this.persistTransactionsState();
         this.refreshTransactionsListOnly();
     }
@@ -1566,7 +1565,7 @@ export class ExpensicaTransactionsView implements TransactionView {
         await this.plugin.updateTransaction(transaction, this);
         
         // Refresh transactions without resetting the user's current filter/page context.
-        await this.loadTransactionsData(false);
+        this.loadTransactionsData(false);
         this.persistTransactionsState();
         this.refreshTransactionsListOnly();
     }
@@ -1584,7 +1583,7 @@ export class ExpensicaTransactionsView implements TransactionView {
                     await this.plugin.deleteTransaction(id, this);
                     onConfirmDelete?.();
                     // Refresh transactions without resetting the user's current filter/page context.
-                    await this.loadTransactionsData(false);
+                    this.loadTransactionsData(false);
                     this.persistTransactionsState();
                     this.refreshTransactionsListOnly();
                     showExpensicaNotice('Transaction deleted successfully');

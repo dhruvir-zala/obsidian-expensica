@@ -280,7 +280,7 @@ export class ExportModal extends Modal {
     
     // Clean up by removing the link and revoking the URL
     downloadLink.remove();
-    activeWindow.setTimeout(() => {
+    window.setTimeout(() => {
       window.URL.revokeObjectURL(url);
     }, 100);
   }

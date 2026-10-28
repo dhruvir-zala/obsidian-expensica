@@ -67,7 +67,7 @@ class CategoryQuickMenu {
         this.closeOnSelect = options?.closeOnSelect ?? true;
         this.autoFocusSearch = options?.autoFocusSearch ?? true;
         this.preferredSide = options?.preferredSide ?? 'bottom';
-        this.hostEl = (target.closest('.modal-content') as HTMLElement | null) || document.body;
+        this.hostEl = (target.closest('.modal-content') ) || document.body;
         this.boundHandleDocumentPointerDown = this.handleDocumentPointerDown.bind(this);
         this.boundHandleDocumentKeydown = this.handleDocumentKeydown.bind(this);
         this.selectedCategoryIds = new Set(options?.selectedCategoryIds ?? (selectedCategoryId ? [selectedCategoryId] : []));
@@ -121,7 +121,7 @@ class CategoryQuickMenu {
         this.position();
 
         if (this.autoFocusSearch) {
-            activeWindow.requestAnimationFrame(() => {
+            window.requestAnimationFrame(() => {
                 this.searchInputEl.focus();
                 this.searchInputEl.select();
             });
@@ -497,7 +497,7 @@ class NewCategoryModal extends Modal {
             void this.submitForm(nameInput, () => selectedEmoji, () => selectedColor);
         });
 
-        activeWindow.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
             nameInput.focus();
         });
     }

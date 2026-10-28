@@ -393,7 +393,6 @@ export class CalendarHeatmap {
         
         // Track selected cell for reference
         let selectedCell: d3.Selection<SVGRectElement, DayData, d3.BaseType, unknown> | null = null;
-        const calendar = this;
         
         // Add week numbers if enabled
         if (this.plugin.settings.showWeekNumbers) {
@@ -473,9 +472,10 @@ export class CalendarHeatmap {
             })
             .classed('has-expenses', (d: DayData) => d.totalAmount > 0)
             .classed('is-today', (d: DayData) => isCurrentMonth && d.date.getDate() === todayDate)
-            .on('mouseover', function (this: SVGRectElement, event: MouseEvent, d: DayData) {
+            .on('mouseover', (event: MouseEvent, d: DayData) => {
+                const cellNode = event.currentTarget as SVGRectElement;
                 // Highlight the cell
-                const cell = d3.select<SVGRectElement, DayData>(this);
+                const cell = d3.select<SVGRectElement, DayData>(cellNode);
                 cell.transition()
                     .duration(100) // Faster transition for better responsiveness
                     .attr('stroke', 'var(--interactive-accent)')
@@ -483,7 +483,7 @@ export class CalendarHeatmap {
                     .attr('opacity', 1);
                 
                 // Show tooltip
-                calendar.tooltipDiv.transition()
+                this.tooltipDiv.transition()
                     .duration(100)
                     .style('opacity', .9);
                 
@@ -491,7 +491,7 @@ export class CalendarHeatmap {
                 const expenseTransactions = d.transactions.filter(t => t.type === TransactionType.EXPENSE);
                 
                 // Calculate percentage of monthly expenses for this day
-                const monthlyTotal = calendar.transactions
+                const monthlyTotal = this.transactions
                     .filter(t => t.type === TransactionType.EXPENSE)
                     .reduce((sum, t) => sum + t.amount, 0);
                 
@@ -520,34 +520,35 @@ export class CalendarHeatmap {
                     }
                 }
 
-                calendar.tooltipDiv.selectAll('*').remove();
-                calendar.tooltipDiv.append('div')
+                this.tooltipDiv.selectAll('*').remove();
+                this.tooltipDiv.append('div')
                     .attr('class', 'tooltip-title')
                     .text(d.formattedDate);
-                calendar.tooltipDiv.append('div')
+                this.tooltipDiv.append('div')
                     .attr('class', 'tooltip-value')
-                    .text(formatCurrency(d.totalAmount, calendar.plugin.settings.defaultCurrency, true));
-                calendar.tooltipDiv.append('div')
+                    .text(formatCurrency(d.totalAmount, this.plugin.settings.defaultCurrency, true));
+                this.tooltipDiv.append('div')
                     .attr('class', 'tooltip-hint')
                     .text(`${expenseTransactions.length} expense(s) · ${percentage}% of monthly spend`);
                 if (comparisonText) {
-                    calendar.tooltipDiv.append('div')
+                    this.tooltipDiv.append('div')
                         .attr('class', comparisonText.className)
                         .text(comparisonText.text);
                 }
 
-                calendar.tooltipDiv
+                this.tooltipDiv
                     .style('left', (event.pageX + 10) + 'px')
                     .style('top', (event.pageY - 28) + 'px');
             })
-            .on('mouseout', function (this: SVGRectElement, event: MouseEvent, d: DayData) {
+            .on('mouseout', (event: MouseEvent, d: DayData) => {
+                const cellNode = event.currentTarget as SVGRectElement;
                 // Don't reset if this is the selected cell
-                if (selectedCell && selectedCell.node() === this) {
+                if (selectedCell && selectedCell.node() === cellNode) {
                     return;
                 }
                 
                 // Reset the cell with Notion styling
-                d3.select<SVGRectElement, DayData>(this)
+                d3.select<SVGRectElement, DayData>(cellNode)
                     .transition()
                     .duration(100) // Faster transition for better responsiveness
                     .attr('stroke', (d: DayData) => {
@@ -570,11 +571,12 @@ export class CalendarHeatmap {
                     });
                 
                 // Hide tooltip with subtle fade
-                calendar.tooltipDiv.transition()
+                this.tooltipDiv.transition()
                     .duration(100)
                     .style('opacity', 0);
             })
-            .on('click', function (this: SVGRectElement, event: MouseEvent, d: DayData) {
+            .on('click', (event: MouseEvent, d: DayData) => {
+                const cellNode = event.currentTarget as SVGRectElement;
                 // Remove previous selection
                 if (selectedCell) {
                     selectedCell
@@ -591,15 +593,15 @@ export class CalendarHeatmap {
                 }
                 
                 // Highlight the selected cell with a Notion-like subtle highlight
-                selectedCell = d3.select<SVGRectElement, DayData>(this);
+                selectedCell = d3.select<SVGRectElement, DayData>(cellNode);
                 selectedCell
                     .attr('stroke', 'var(--interactive-accent)')
                     .attr('stroke-width', 2.5); // Increased thickness for better visibility
-                calendar.selectedDate = d.date;
-                calendar.onSelectedDateChange?.(d.date);
+                this.selectedDate = d.date;
+                this.onSelectedDateChange?.(d.date);
                 
                 // Show transaction details with a nice transition
-                calendar.showDayDetails(d);
+                this.showDayDetails(d);
             });
         
         // Add day number with Notion-inspired styling
@@ -831,7 +833,7 @@ export class CalendarHeatmap {
         // If no expense transactions, show message without the spending summary.
         if (expenseTransactions.length === 0) {
             const emptyStateEl = this.detailsContainer.createDiv('expensica-calendar-empty-state');
-            emptyStateEl.createEl('div', { text: '✨', cls: 'expensica-calendar-empty-icon' });
+            emptyStateEl.createDiv({ text: '✨', cls: 'expensica-calendar-empty-icon' });
             emptyStateEl.createEl('p', {
                 text: 'No expenses recorded for this day.',
                 cls: 'expensica-calendar-empty-message'

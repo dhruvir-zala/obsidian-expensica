@@ -62,7 +62,7 @@ export function renderBudgetCard(container: HTMLElement, options: BudgetCardOpti
 
     const detailsEl = budgetEl.createDiv('expensica-transaction-details expensica-budget-card-details');
     const headerEl = detailsEl.createDiv('expensica-budget-card-header');
-    headerEl.createEl('div', { text: categoryName, cls: 'expensica-transaction-title expensica-budget-card-title' });
+    headerEl.createDiv({ text: categoryName, cls: 'expensica-transaction-title expensica-budget-card-title' });
 
     const progressBar = headerEl.createDiv('expensica-budget-card-progress');
     const budgetBar = progressBar.createDiv('notion-budget-bar');
@@ -84,22 +84,22 @@ export function renderBudgetCard(container: HTMLElement, options: BudgetCardOpti
     });
 
     const amountEl = budgetEl.createDiv('expensica-transaction-amount expensica-budget-card-amount');
-    amountEl.createEl('span', {
+    amountEl.createSpan({
         text: formatCurrency(available, currencyCode),
         cls: 'expensica-budget-card-value'
     });
 
     const balanceEl = amountEl.createDiv('expensica-transaction-balance expensica-budget-card-balance');
-    balanceEl.createEl('span', {
+    balanceEl.createSpan({
         text: `Spent ${formatCurrency(spent, currencyCode)}`,
         cls: 'expensica-transaction-balance-label'
     });
-    balanceEl.createEl('span', {
+    balanceEl.createSpan({
         text: `Remaining ${formatCurrency(remaining, currencyCode)}`,
         cls: 'expensica-transaction-balance-label'
     });
     if (rolloverAmount > 0) {
-        balanceEl.createEl('span', {
+        balanceEl.createSpan({
             text: `Includes ${formatCurrency(rolloverAmount, currencyCode)} rollover`,
             cls: 'expensica-transaction-balance-label'
         });
