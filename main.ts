@@ -81,7 +81,7 @@ interface ExpensicaSettings {
     showChartGrid: boolean;
     showTransactionCategoryLabels: boolean;
     enableAccounts: boolean;
-    lastSelectedAccountId: string | null;
+    lastTransactionSelection: Partial<Pick<Transaction, 'type' | 'category'>> & { accountId?: string };
     enableBudgeting: boolean;
     enableDailyFinanceReview: boolean;
     enableDailyFinanceReviewForAnyDate: boolean;
@@ -132,7 +132,7 @@ const DEFAULT_SETTINGS: ExpensicaSettings = {
     showChartGrid: false,
     showTransactionCategoryLabels: true,
     enableAccounts: true,
-    lastSelectedAccountId: null,
+    lastTransactionSelection: {},
     enableBudgeting: true,
     enableDailyFinanceReview: true,
     enableDailyFinanceReviewForAnyDate: true,
@@ -550,8 +550,12 @@ export default class ExpensicaPlugin extends Plugin {
     }
 
     async loadSettings() {
-        const loadedData = await this.loadData();
+        const { lastSelectedAccountId, ...loadedData } = await this.loadData() || {};
         this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData);
+        this.settings.lastTransactionSelection = {
+            ...(lastSelectedAccountId ? { accountId: lastSelectedAccountId } : {}),
+            ...loadedData.lastTransactionSelection
+        };
         this.normalizeCategorySettings();
     }
 
