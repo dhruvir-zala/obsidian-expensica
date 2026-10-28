@@ -1,4 +1,5 @@
 import { App, Modal, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import type { SettingDefinitionItem, TextComponent } from 'obsidian';
 
 import { AccountEditorModal, ExpensicaDashboardView, EXPENSICA_VIEW_TYPE, TransactionModal, DateRangeType, DashboardTab } from './src/dashboard-view';
 import { ExpensicaTransactionsView } from './src/transactions-view';
@@ -63,7 +64,6 @@ import './src/visualizations/calendar-view';
 
 // Import jsPDF for global availability
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
 
 function formatTransactionDescriptionForBanking(description: string): string {
     return description.trim().replace(/\s+/g, ' ').toUpperCase();
@@ -2508,6 +2508,18 @@ export default class ExpensicaPlugin extends Plugin {
 }
 
 // Settings tab
+type ToggleSettingKey = 'showWeekNumbers' | 'showChartAxes' | 'showChartGrid' | 'showTransactionCategoryLabels'
+    | 'enableAccounts' | 'enableBudgeting' | 'enableDailyFinanceReview' | 'enableDailyFinanceReviewForAnyDate';
+const TOGGLE_SETTING_KEYS: ReadonlySet<string> = new Set<ToggleSettingKey>([
+    'showWeekNumbers', 'showChartAxes', 'showChartGrid', 'showTransactionCategoryLabels',
+    'enableAccounts', 'enableBudgeting', 'enableDailyFinanceReview', 'enableDailyFinanceReviewForAnyDate'
+]);
+const DASHBOARD_REFRESH_SETTINGS: ReadonlySet<ToggleSettingKey> = new Set<ToggleSettingKey>([
+    'showChartAxes', 'showChartGrid', 'showTransactionCategoryLabels', 'enableAccounts', 'enableBudgeting'
+]);
+function isToggleSettingKey(key: string): key is ToggleSettingKey {
+    return TOGGLE_SETTING_KEYS.has(key);
+}
 class ExpensicaSettingTab extends PluginSettingTab {
     plugin: ExpensicaPlugin;
     updateCustomColorVisibility: () => void;
@@ -2582,8 +2594,107 @@ class ExpensicaSettingTab extends PluginSettingTab {
         containerEl.empty();
         containerEl.addClass('expensica-settings-container');
 
-        // Add links card at the top
-        const linksCard = containerEl.createDiv('expensica-links-card');
+        // Obsidian 1.13+ renders getSettingDefinitions() itself; this keeps older versions working.
+        const renderItems = (items: SettingDefinitionItem[], parent: HTMLElement): void => {
+            for (const item of items) {
+                if ('items' in item && item.items && (item.type === 'group' || item.type === 'list')) {
+                    const groupEl = parent.createDiv('expensica-settings-section');
+                    if (item.heading) new Setting(groupEl).setName(item.heading).setHeading();
+                    renderItems(item.items, groupEl);
+                } else if ('render' in item && typeof item.render === 'function') {
+                    const setting = new Setting(parent).setName(item.name);
+                    if (typeof item.desc === 'string') setting.setDesc(item.desc);
+                    item.render(setting, undefined as never);
+                } else if ('control' in item && item.control?.type === 'toggle') {
+                    const { key } = item.control;
+                    const setting = new Setting(parent).setName(item.name);
+                    if (typeof item.desc === 'string') setting.setDesc(item.desc);
+                    setting.addToggle(toggle => toggle
+                        .setValue(this.getControlValue(key) === true)
+                        .onChange(voidAsync(async (value: boolean) => {
+                            await this.setControlValue(key, value);
+                        })));
+                }
+            }
+        };
+        renderItems(this.getSettingDefinitions(), containerEl);
+    }
+
+    getSettingDefinitions(): SettingDefinitionItem[] {
+        const toggle = (key: ToggleSettingKey, name: string, desc: string): SettingDefinitionItem => ({
+            name,
+            desc,
+            control: { type: 'toggle', key }
+        });
+        return [
+            { name: 'Support & Resources', searchable: false, render: (setting: Setting) => this.renderLinksSetting(setting) },
+            {
+                name: 'Default Currency',
+                desc: 'Select the currency to use for all transactions.',
+                render: (setting: Setting) => this.renderCurrencySetting(setting)
+            },
+            {
+                name: 'Time Format',
+                desc: 'Choose 12-hour or 24-hour time for transactions and chart hour labels.',
+                render: (setting: Setting) => this.renderTimeFormatSetting(setting)
+            },
+            {
+                name: 'Calendar Color Scheme',
+                desc: 'Select the color scheme for the calendar visualization.',
+                render: (setting: Setting) => this.renderCalendarColorSetting(setting)
+            },
+            toggle('showWeekNumbers', 'Show Week Numbers', 'Display week numbers in the calendar visualization.'),
+            toggle('showChartAxes', 'Show Chart Axes', 'Display chart axis lines and values in dashboard charts.'),
+            toggle('showChartGrid', 'Show Chart Grid', 'Display chart grid lines in dashboard charts.'),
+            toggle('showTransactionCategoryLabels', 'Show Transaction Category Labels', 'Display colored category labels on transaction cards.'),
+            toggle('enableAccounts', 'Enable Accounts', 'Enable or disable account features.'),
+            toggle('enableBudgeting', 'Enable Budgeting', 'Enable or disable the budgeting features.'),
+            toggle('enableDailyFinanceReview', 'Enable Daily Finance Review (For Today)', 'Enable or disable the ability to create daily finance reviews for today.'),
+            toggle('enableDailyFinanceReviewForAnyDate', 'Enable Daily Finance Review for Any Date', 'Enable or disable the ability to create/update daily finance reviews for any date.'),
+            {
+                name: 'Daily Finance Review Folder',
+                desc: 'Select a folder where all daily finance review notes will be stored.',
+                render: (setting: Setting) => this.renderReviewFolderSetting(setting)
+            },
+            {
+                type: 'group',
+                heading: 'Data Management',
+                items: [
+                    {
+                        name: 'Export data',
+                        desc: 'Export your transactions with advanced filtering options',
+                        render: (setting: Setting) => this.renderExportSetting(setting)
+                    },
+                    {
+                        name: 'Import data',
+                        desc: 'Import transactions from a JSON file',
+                        render: (setting: Setting) => this.renderImportSetting(setting)
+                    }
+                ]
+            }
+        ];
+    }
+
+    getControlValue(key: string): unknown {
+        return (this.plugin.settings as unknown as Record<string, unknown>)[key];
+    }
+
+    async setControlValue(key: string, value: unknown): Promise<void> {
+        if (!isToggleSettingKey(key) || typeof value !== 'boolean') return;
+        this.plugin.settings[key] = value;
+        await this.saveSettings();
+        if (DASHBOARD_REFRESH_SETTINGS.has(key)) {
+            this.plugin.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE).forEach((leaf) => {
+                if (leaf.view instanceof ExpensicaDashboardView) {
+                    leaf.view.renderDashboard();
+                }
+            });
+        }
+    }
+
+    private renderLinksSetting(setting: Setting): void {
+        setting.setHeading();
+        const linksCard = setting.settingEl.createDiv('expensica-links-card');
         new Setting(linksCard).setName('Support & Resources').setHeading();
 
         // Buy Me a Coffee section
@@ -2629,14 +2740,10 @@ class ExpensicaSettingTab extends PluginSettingTab {
             attr: { target: '_blank' },
             cls: 'external-link-display-block'
         });
+    }
 
-        // Add a separator
-        containerEl.createEl('hr', { cls: 'expensica-settings-separator' });
-
-        // Currency setting
-        new Setting(containerEl)
-            .setName('Default Currency')
-            .setDesc('Select the currency to use for all transactions.')
+    private renderCurrencySetting(setting: Setting): void {
+        setting
             .then((setting) => {
                 const container = setting.controlEl.createDiv('currency-dropdown-container');
                 this.renderCurrencyDropdown(
@@ -2649,9 +2756,10 @@ class ExpensicaSettingTab extends PluginSettingTab {
                 );
             });
 
-        new Setting(containerEl)
-            .setName('Time Format')
-            .setDesc('Choose 12-hour or 24-hour time for transactions and chart hour labels.')
+    }
+
+    private renderTimeFormatSetting(setting: Setting): void {
+        setting
             .then((setting) => {
                 const container = setting.controlEl.createDiv('currency-dropdown-container');
                 this.renderTimeFormatDropdown(
@@ -2670,10 +2778,10 @@ class ExpensicaSettingTab extends PluginSettingTab {
                 );
             });
 
-        // Calendar color scheme
-        new Setting(containerEl)
-            .setName('Calendar Color Scheme')
-            .setDesc('Select the color scheme for the calendar visualization.')
+    }
+
+    private renderCalendarColorSetting(setting: Setting): void {
+        setting
             .then((setting) => {
                 const container = setting.controlEl.createDiv('color-dropdown-container');
                 
@@ -2754,7 +2862,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
             });
             
         // Custom color container (visible only when Custom is selected)
-        const customColorContainer = containerEl.createDiv('custom-color-container');
+        const customColorContainer = setting.controlEl.createDiv('custom-color-container');
         
         if (this.plugin.settings.calendarColorScheme === ColorScheme.CUSTOM) {
             customColorContainer.classList.add('custom-color-container-flex');
@@ -2783,161 +2891,43 @@ class ExpensicaSettingTab extends PluginSettingTab {
             }
         };
 
-        // Show week numbers in calendar
-        new Setting(containerEl)
-            .setName('Show Week Numbers')
-            .setDesc('Display week numbers in the calendar visualization.')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.showWeekNumbers)
-                .onChange(async (value) => {
-                    this.plugin.settings.showWeekNumbers = value;
-                    await this.saveSettings();
-                }));
+    }
 
-        new Setting(containerEl)
-            .setName('Show Chart Axes')
-            .setDesc('Display chart axis lines and values in dashboard charts.')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.showChartAxes)
-                .onChange(async (value) => {
-                    this.plugin.settings.showChartAxes = value;
-                    await this.saveSettings();
-
-                    this.plugin.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE).forEach((leaf) => {
-                        if (leaf.view instanceof ExpensicaDashboardView) {
-                            leaf.view.renderDashboard();
-                        }
+    private renderReviewFolderSetting(setting: Setting): void {
+        let folderText: TextComponent | null = null;
+        setting
+            .addText(text => {
+                folderText = text;
+                text
+                    .setPlaceholder('Example: Daily Finance Reviews')
+                    .setValue(this.plugin.settings.dailyReviewFolder)
+                    .onChange(async (value) => {
+                        this.plugin.settings.dailyReviewFolder = value;
+                        await this.saveSettings();
                     });
-                }));
-
-        new Setting(containerEl)
-            .setName('Show Chart Grid')
-            .setDesc('Display chart grid lines in dashboard charts.')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.showChartGrid)
-                .onChange(async (value) => {
-                    this.plugin.settings.showChartGrid = value;
-                    await this.saveSettings();
-
-                    this.plugin.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE).forEach((leaf) => {
-                        if (leaf.view instanceof ExpensicaDashboardView) {
-                            leaf.view.renderDashboard();
-                        }
-                    });
-                }));
-
-        new Setting(containerEl)
-            .setName('Show Transaction Category Labels')
-            .setDesc('Display colored category labels on transaction cards.')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.showTransactionCategoryLabels)
-                .onChange(async (value) => {
-                    this.plugin.settings.showTransactionCategoryLabels = value;
-                    await this.saveSettings();
-
-                    this.plugin.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE).forEach((leaf) => {
-                        if (leaf.view instanceof ExpensicaDashboardView) {
-                            leaf.view.renderDashboard();
-                        }
-                    });
-
-                }));
-
-        new Setting(containerEl)
-            .setName('Enable Accounts')
-            .setDesc('Enable or disable account features.')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.enableAccounts)
-                .onChange(async (value) => {
-                    this.plugin.settings.enableAccounts = value;
-                    await this.saveSettings();
-
-                    this.plugin.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE).forEach((leaf) => {
-                        if (leaf.view instanceof ExpensicaDashboardView) {
-                            leaf.view.renderDashboard();
-                        }
-                    });
-                }));
-
-        // Enable budgeting feature
-        new Setting(containerEl)
-            .setName('Enable Budgeting')
-            .setDesc('Enable or disable the budgeting features.')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.enableBudgeting)
-                .onChange(async (value) => {
-                    this.plugin.settings.enableBudgeting = value;
-                    await this.saveSettings();
-                    
-                    // Refresh dashboard if it's open
-                    const leaves = this.plugin.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE);
-                    const dashboardView = leaves[0]?.view;
-                    if (dashboardView instanceof ExpensicaDashboardView) {
-                        dashboardView.renderDashboard();
-                    }
-                }));
-
-        // Enable daily finance review feature
-        new Setting(containerEl)
-            .setName('Enable Daily Finance Review (For Today)')
-            .setDesc('Enable or disable the ability to create daily finance reviews for today.')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.enableDailyFinanceReview)
-                .onChange(async (value) => {
-                    this.plugin.settings.enableDailyFinanceReview = value;
-                    await this.saveSettings();
-                }));
-
-        // Enable daily finance review for any date feature
-        new Setting(containerEl)
-            .setName('Enable Daily Finance Review for Any Date')
-            .setDesc('Enable or disable the ability to create/update daily finance reviews for any date.')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.enableDailyFinanceReviewForAnyDate)
-                .onChange(async (value) => {
-                    this.plugin.settings.enableDailyFinanceReviewForAnyDate = value;
-                    await this.saveSettings();
-                }));
-
-        // Daily review folder setting
-        new Setting(containerEl)
-            .setName('Daily Finance Review Folder')
-            .setDesc('Select a folder where all daily finance review notes will be stored.')
-            .addText(text => text
-                .setPlaceholder('Example: Daily Finance Reviews')
-                .setValue(this.plugin.settings.dailyReviewFolder)
-                .onChange(async (value) => {
-                    this.plugin.settings.dailyReviewFolder = value;
-                    await this.saveSettings();
-                }))
+            })
             .addButton(button => button
                 .setButtonText('Browse')
                 .onClick(async () => {
                     new FolderSuggestionModal(this.app, this.plugin, async (folder) => {
                         this.plugin.settings.dailyReviewFolder = folder;
                         await this.saveSettings();
-                        this.display(); // Refresh the settings display
+                        (folderText as TextComponent | null)?.setValue(folder);
                     }).open();
                 }));
+    }
 
-        // Data management section
-        const dataSectionEl = containerEl.createDiv('expensica-settings-section');
-        new Setting(dataSectionEl).setName('Data Management').setHeading();
-
-        // Export data with advanced options
-        new Setting(dataSectionEl)
-            .setName('Export data')
-            .setDesc('Export your transactions with advanced filtering options')
+    private renderExportSetting(setting: Setting): void {
+        setting
             .addButton(button => button
                 .setButtonText('Export Transactions')
                 .onClick(() => {
                     this.plugin.openExportModal();
                 }));
+    }
 
-        // Import data
-        new Setting(dataSectionEl)
-            .setName('Import data')
-            .setDesc('Import transactions from a JSON file')
+    private renderImportSetting(setting: Setting): void {
+        setting
             .addButton(button => button
                 .setButtonText('Import')
                 .onClick(() => {

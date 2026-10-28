@@ -425,11 +425,11 @@ class NewCategoryModal extends Modal {
         });
 
         const nameRow = nameGroup.createDiv('expensica-category-name-row');
-        const draftCategory = {
+        const draftCategory: Category = {
             id: '__new_category__',
             name: '',
             type: this.categoryType
-        } as Category;
+        };
         let selectedEmoji = getRandomEmoji(this.categoryType);
         let selectedColor = normalizeColorInputValue(getRandomColor());
 
@@ -558,6 +558,7 @@ class CategoryColorPaletteModal extends Modal {
     onOpen() {
         const { contentEl } = this;
         contentEl.empty();
+        this.modalEl.addClass('expensica-category-color-palette-dialog');
         contentEl.addClass('expensica-category-color-palette-modal');
 
         const grid = contentEl.createDiv('expensica-category-color-palette-grid');

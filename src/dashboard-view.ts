@@ -7119,6 +7119,7 @@ class AccountDeleteBlockedModal extends Modal {
 
     onOpen() {
         const { contentEl } = this;
+        this.modalEl.addClass('expensica-confirmation-dialog');
         contentEl.addClass('expensica-confirmation-modal');
         contentEl.createEl('h2', { text: 'Account cannot be deleted', cls: 'expensica-modal-title' });
         contentEl.createEl('p', { text: this.message, cls: 'expensica-modal-message' });
@@ -7144,6 +7145,7 @@ class AccountUpdateWarningModal extends Modal {
 
     onOpen() {
         const { contentEl } = this;
+        this.modalEl.addClass('expensica-confirmation-dialog');
         contentEl.addClass('expensica-confirmation-modal');
         contentEl.createEl('h2', { text: 'Update Account?', cls: 'expensica-modal-title' });
         contentEl.createEl('p', {
@@ -7765,6 +7767,7 @@ class CategoryColorPaletteModal extends Modal {
     onOpen() {
         const { contentEl } = this;
         contentEl.empty();
+        this.modalEl.addClass('expensica-category-color-palette-dialog');
         contentEl.addClass('expensica-category-color-palette-modal');
 
         const grid = contentEl.createDiv('expensica-category-color-palette-grid');

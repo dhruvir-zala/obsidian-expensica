@@ -1,5 +1,5 @@
 import { Transaction, TransactionType, Category, formatCurrency, formatDate, parseLocalDate, sortTransactionsByDateTimeDesc } from './models';
-import type { UserOptions } from 'jspdf-autotable';
+import { autoTable } from 'jspdf-autotable';
 import type { jsPDF as PDFDocument } from 'jspdf';
 
 // Import jsPDF dynamically for Obsidian compatibility
@@ -33,7 +33,6 @@ function getCategoryName(transaction: Transaction, categories: Category[]): stri
 
 // Define jsPDF type for TypeScript
 interface JPDF extends PDFDocument {
-  autoTable: (options: UserOptions) => void;
   lastAutoTable: {
     finalY: number;
   };
@@ -188,7 +187,7 @@ export class ExportService {
         });
         
         // Add transactions table for this month
-        doc.autoTable({
+        autoTable(doc, {
           startY: yOffset,
           head: [['Date', 'Description', 'Category', 'Type', 'Amount']],
           body: tableData,

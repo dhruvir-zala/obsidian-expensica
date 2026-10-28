@@ -74,7 +74,7 @@ export class DataRecoveryModal extends Modal {
         }
         if (reconciliation) {
             const { missingAccounts } = reconciliation;
-            const affectedCount = new Set(missingAccounts.flatMap((account: MissingAccountReference) => account.locations.map(location => location.index))).size;
+            const affectedCount = new Set(missingAccounts.flatMap((account: MissingAccountReference): number[] => account.locations.map((location: { index: number }): number => location.index))).size;
             contentEl.createEl('h2', {
                 text: 'Missing accounts',
                 cls: 'expensica-recovery-modal-warning'

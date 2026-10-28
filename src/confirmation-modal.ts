@@ -22,6 +22,7 @@ export class ConfirmationModal extends Modal {
         this.confirmed = false;
         this.resolved = false;
         const { contentEl } = this;
+        this.modalEl.addClass('expensica-confirmation-dialog');
         contentEl.addClass('expensica-confirmation-modal');
 
         // Title

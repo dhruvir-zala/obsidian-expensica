@@ -29,8 +29,11 @@ const options = fields => ({ format: 'csv', filename: 'report', dateFrom: null, 
     includeExpenses: true, includeIncome: true, categories: null, ...fields });
 const plain = value => JSON.parse(JSON.stringify(value));
 
-function service(window = {}) {
-    return load('src/export-service.ts', { './models': models }, { window }).ExportService;
+function service(window = {}, autoTable = (doc, options) => doc.autoTable(options)) {
+    return load('src/export-service.ts', {
+        './models': models,
+        'jspdf-autotable': { autoTable }
+    }, { window }).ExportService;
 }
 
 function pdfFixture(failure, output = new Uint8Array([37, 80, 68, 70]).buffer) {
@@ -209,6 +212,7 @@ function modalFixture(ExportService, source = ledger()) {
     }, { document: { getElementById: () => ({ checked: true }) } });
     const plugin = { getAllTransactions: () => source, settings: { categories, defaultCurrency: 'USD' } };
     const modal = new ExportModal({}, plugin);
+    modal.contentEl = { querySelector: () => null };
     modal.exportOptions = options();
     modal.downloadFile = (...args) => downloads.push(args);
     modal.close = () => { closes++; };
@@ -281,8 +285,8 @@ test('PDF groups accepted ISO dates by stored local day across year boundaries',
 
 test('PDF generates a real nonempty document with bundled jsPDF and autotable', () => {
     const { jsPDF } = require('jspdf');
-    require('jspdf-autotable');
-    const ExportService = service({ jspdf: { jsPDF } });
+    const { autoTable } = require('jspdf-autotable');
+    const ExportService = service({ jspdf: { jsPDF } }, autoTable);
     for (const rows of [[], ledger()]) {
         const result = ExportService.generatePDF(rows, categories);
         assert.ok(result.byteLength > 0);

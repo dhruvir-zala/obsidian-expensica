@@ -4,5 +4,7 @@ export function showExpensicaNotice(message: string, timeout?: number): Notice {
     const fragment = createFragment();
     fragment.createSpan({ text: message, cls: 'expensica-notice-content' });
 
-    return new Notice(fragment, timeout);
+    const notice = new Notice(fragment, timeout);
+    notice.noticeEl.addClass('expensica-notice');
+    return notice;
 }

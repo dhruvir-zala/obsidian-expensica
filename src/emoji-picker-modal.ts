@@ -16,6 +16,7 @@ export class EmojiPickerModal extends Modal {
     onOpen() {
         const { contentEl } = this;
 
+        this.modalEl.addClass('expensica-emoji-picker-dialog');
         contentEl.addClass('expensica-modal');
         contentEl.addClass('expensica-emoji-picker-modal');
 

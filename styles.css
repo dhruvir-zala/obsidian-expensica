@@ -284,7 +284,7 @@
   --expensica-doughnut-chart-aspect-ratio: 400 / 310;
 }
 
-.notice:has(.expensica-notice-content) {
+.notice.expensica-notice {
   background-color: var(--background-primary);
   color: var(--text-normal);
   border: 1px solid var(--background-modifier-border);
@@ -1011,7 +1011,9 @@ button.expensica-category-chip {
 }
 
 .expensica-chart-legend-column {
-  display: contents;
+  display: flex;
+  flex-direction: column;
+  gap: var(--expensica-gap-sm);
   min-width: 0;
 }
 
@@ -1020,11 +1022,8 @@ button.expensica-category-chip {
 }
 
 .expensica-chart-legend-item {
-
   height: auto;
   min-height: 0;
-  max-width: 130px;
-  padding: 2px 4px;
   line-height: 1.1;
   display: inline-flex;
   align-items: center;
@@ -1061,7 +1060,7 @@ button.expensica-category-chip {
 }
 
 .expensica-chart-legend-item.is-hidden .expensica-chart-legend-swatch {
-  background-color: var(--text-muted) !important;
+  background-color: var(--text-muted);
   opacity: 0.6;
 }
 
@@ -1094,8 +1093,7 @@ button.expensica-category-chip {
   grid-template-columns: repeat(var(--expensica-category-chip-columns, 3), minmax(0, 130px));
   justify-content: center;
   justify-items: stretch;
-  column-gap: var(--expensica-gap-md);
-  row-gap: var(--expensica-gap-sm);
+  gap: var(--expensica-gap-sm) var(--expensica-gap-md);
   margin-top: var(--expensica-gap-md);
   width: 100%;
   max-width: 100%;
@@ -1111,7 +1109,7 @@ button.expensica-category-chip {
   grid-template-columns: repeat(3, minmax(0, 130px));
   justify-content: center;
   justify-items: stretch;
-  column-gap: var(--expensica-gap-md);
+  gap: 0 var(--expensica-gap-md);
   margin-top: var(--expensica-gap-md);
   max-width: 100%;
   width: 100%;
@@ -1156,7 +1154,7 @@ button.expensica-category-chip {
 }
 
 .expensica-income-expense-legend .expensica-category-chip.is-hidden .expensica-category-chip-swatch {
-  background-color: var(--text-muted) !important;
+  background-color: var(--text-muted);
   opacity: 0.6;
 }
 
@@ -1165,8 +1163,7 @@ button.expensica-category-chip {
   grid-template-columns: repeat(var(--expensica-cumulative-legend-columns, 1), minmax(0, 130px));
   justify-content: center;
   justify-items: stretch;
-  column-gap: var(--expensica-gap-md);
-  row-gap: var(--expensica-gap-sm);
+  gap: var(--expensica-gap-sm) var(--expensica-gap-md);
   margin-top: var(--expensica-gap-md);
   max-width: 100%;
   width: 100%;
@@ -1216,18 +1213,18 @@ button.expensica-chart-range-button {
   width: auto;
   padding: 6px 10px;
   min-width: 0;
-  border: none !important;
+  border: none;
   border-radius: 10px;
-  background: transparent !important;
-  background-color: transparent !important;
-  color: var(--text-faint) !important;
+  background: transparent;
+  background-color: transparent;
+  color: var(--text-faint);
   font-size: 14px;
   font-weight: 400;
   line-height: 1.2;
   cursor: pointer;
-  box-shadow: none !important;
+  box-shadow: none;
   text-shadow: none;
-  outline: none !important;
+  outline: none;
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
@@ -1235,17 +1232,17 @@ button.expensica-chart-range-button:hover,
 button.expensica-chart-range-button:focus,
 button.expensica-chart-range-button:focus-visible,
 button.expensica-chart-range-button:active {
-  background: var(--background-modifier-hover) !important;
-  background-color: var(--background-modifier-hover) !important;
-  color: var(--text-normal) !important;
-  outline: none !important;
+  background: var(--background-modifier-hover);
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+  outline: none;
 }
 
 button.expensica-chart-range-button.is-active {
-  background: var(--background-modifier-hover) !important;
-  background-color: var(--background-modifier-hover) !important;
-  color: var(--text-normal) !important;
-  outline: none !important;
+  background: var(--background-modifier-hover);
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+  outline: none;
 }
 
 .expensica-donut-category-legend .expensica-category-chip {
@@ -1274,7 +1271,7 @@ button.expensica-chart-range-button.is-active {
 }
 
 .expensica-donut-category-legend .expensica-category-chip.is-hidden .expensica-category-chip-swatch {
-  background-color: var(--text-muted) !important;
+  background-color: var(--text-muted);
   opacity: 0.6;
 }
 
@@ -1457,7 +1454,7 @@ button.expensica-chart-range-button.is-active {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr) max-content;
   align-items: center;
-  column-gap: var(--expensica-gap-sm);
+  gap: var(--expensica-gap-sm);
   row-gap: var(--expensica-gap-sm);
   width: 100%;
 }
@@ -1754,8 +1751,11 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
 }
 
 .expensica-category-quick-menu button.expensica-category-quick-menu-item {
-  all: unset;
   box-sizing: border-box;
+  appearance: none;
+  margin: 0;
+  font-family: inherit;
+  line-height: inherit;
   display: grid;
   grid-template-columns: 24px minmax(0, 1fr);
   align-items: center;
@@ -1765,25 +1765,25 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
   padding: var(--expensica-gap-md);
   border: 0;
   border-radius: 0;
-  background: var(--background-primary) !important;
-  background-color: var(--background-primary) !important;
-  background-image: none !important;
+  background: var(--background-primary);
+  background-color: var(--background-primary);
+  background-image: none;
   color: var(--text-normal);
   text-align: left;
   cursor: pointer;
-  box-shadow: none !important;
-  text-shadow: none !important;
-  filter: none !important;
+  box-shadow: none;
+  text-shadow: none;
+  filter: none;
   font-size: var(--expensica-font-size);
   font-weight: 400;
   transition: background-color 0.1s;
 }
 
 .expensica-category-quick-menu button.expensica-category-quick-menu-item:hover {
-  background: var(--background-modifier-hover) !important;
-  background-color: var(--background-modifier-hover) !important;
-  background-image: none !important;
-  box-shadow: none !important;
+  background: var(--background-modifier-hover);
+  background-color: var(--background-modifier-hover);
+  background-image: none;
+  box-shadow: none;
   outline: none;
 }
 
@@ -1794,8 +1794,8 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
 
 .expensica-category-quick-menu button.expensica-category-quick-menu-item.is-selected {
   font-weight: 600;
-  background: var(--background-modifier-hover) !important;
-  background-color: var(--background-modifier-hover) !important;
+  background: var(--background-modifier-hover);
+  background-color: var(--background-modifier-hover);
 }
 
 .expensica-category-quick-menu-item-emoji {
@@ -1817,8 +1817,11 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
 }
 
 .expensica-category-quick-menu button.expensica-category-quick-menu-new-button {
-  all: unset;
   box-sizing: border-box;
+  appearance: none;
+  margin: 0;
+  font-family: inherit;
+  line-height: inherit;
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -1828,15 +1831,15 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
   padding: var(--expensica-gap-md);
   border: 0;
   border-radius: 0;
-  background: var(--background-primary) !important;
-  background-color: var(--background-primary) !important;
-  background-image: none !important;
+  background: var(--background-primary);
+  background-color: var(--background-primary);
+  background-image: none;
   color: var(--text-normal);
   text-align: left;
   cursor: pointer;
-  box-shadow: none !important;
-  text-shadow: none !important;
-  filter: none !important;
+  box-shadow: none;
+  text-shadow: none;
+  filter: none;
   font-size: var(--expensica-font-size);
   font-weight: 400;
   transition: background-color 0.1s;
@@ -1844,10 +1847,10 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
 
 .expensica-category-quick-menu button.expensica-category-quick-menu-new-button:hover,
 .expensica-category-quick-menu button.expensica-category-quick-menu-new-button:focus-visible {
-  background: var(--background-modifier-hover) !important;
-  background-color: var(--background-modifier-hover) !important;
-  background-image: none !important;
-  box-shadow: none !important;
+  background: var(--background-modifier-hover);
+  background-color: var(--background-modifier-hover);
+  background-image: none;
+  box-shadow: none;
   outline: none;
 }
 
@@ -1953,16 +1956,16 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
   min-height: var(--expensica-account-editor-measured-height, 0px);
 }
 
-.modal-content:has(.expensica-account-editor-modal) {
-  max-height: none !important;
-  overflow: visible !important;
+.modal-content.expensica-account-editor-modal {
+  max-height: none;
+  overflow: visible;
   min-height: var(--expensica-account-editor-measured-height, 0px);
 }
 
 .expensica-account-editor-modal .expensica-select-options {
-  max-height: none !important;
-  overflow-y: visible !important;
-  overflow: visible !important;
+  max-height: none;
+  overflow-y: visible;
+  overflow: visible;
 }
 
 .expensica-account-editor-modal .expensica-form {
@@ -2217,7 +2220,6 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
   width: min(calc(var(--expensica-time-clock-size) + var(--expensica-gap-xl) * 2), calc(100vw - var(--expensica-gap-2xl)));
   max-width: calc(100vw - var(--expensica-gap-2xl));
   max-height: calc(100vh - var(--expensica-gap-2xl));
-  max-height: calc(100dvh - var(--expensica-gap-2xl));
   min-width: 0;
   min-height: 0;
   padding: 0;
@@ -2228,7 +2230,6 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
   width: 100%;
   max-width: none;
   max-height: calc(100vh - var(--expensica-gap-2xl));
-  max-height: calc(100dvh - var(--expensica-gap-2xl));
   min-height: 0;
   margin: 0;
   padding: var(--expensica-gap-xl);
@@ -2295,7 +2296,7 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
 }
 
 .expensica-time-selector [hidden] {
-  display: none !important;
+  display: none;
 }
 
 .expensica-time-selector-separator {
@@ -2473,7 +2474,6 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
   width: min(calc(var(--expensica-date-calendar-size) + var(--expensica-gap-xl) * 2), calc(100vw - var(--expensica-gap-2xl)));
   max-width: calc(100vw - var(--expensica-gap-2xl));
   max-height: calc(100vh - var(--expensica-gap-2xl));
-  max-height: calc(100dvh - var(--expensica-gap-2xl));
   min-width: 0;
   min-height: 0;
   padding: 0;
@@ -2484,7 +2484,6 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
   width: 100%;
   max-width: none;
   max-height: calc(100vh - var(--expensica-gap-2xl));
-  max-height: calc(100dvh - var(--expensica-gap-2xl));
   min-height: 0;
   margin: 0;
   padding: var(--expensica-gap-xl);
@@ -2493,6 +2492,15 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
   overscroll-behavior: contain;
   color: var(--expensica-text-primary);
   background-color: var(--expensica-bg-primary);
+}
+
+@supports (height: 100dvh) {
+  .modal.expensica-time-selector-modal,
+  .expensica-time-selector-modal .modal-content.expensica-time-selector,
+  .modal.expensica-date-selector-modal,
+  .expensica-date-selector-modal .modal-content.expensica-date-selector {
+    max-height: calc(100dvh - var(--expensica-gap-2xl));
+  }
 }
 
 .expensica-date-selector .expensica-modal-title {
@@ -2698,7 +2706,7 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
 }
 
 .expensica-date-selector [hidden] {
-  display: none !important;
+  display: none;
 }
 
 .expensica-date-selector .expensica-form-footer {
@@ -2821,7 +2829,7 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
 }
 
 .expensica-import-modal [hidden] {
-  display: none !important;
+  display: none;
 }
 
 .expensica-form-footer,
@@ -3156,18 +3164,18 @@ to { opacity: 1; transform: translateY(0); }
   animation-delay: 0.3s;
 }
 
-.expensica-suppress-motion .expensica-animate,
-.expensica-suppress-motion .transaction-animate-delay,
-.expensica-is-refreshing .expensica-animate,
-.expensica-is-refreshing .transaction-animate-delay {
-  animation: none !important;
-  animation-delay: 0ms !important;
-  opacity: 1 !important;
-  transform: none !important;
+.expensica-suppress-motion.expensica-suppress-motion .expensica-animate,
+.expensica-suppress-motion.expensica-suppress-motion .transaction-animate-delay,
+.expensica-is-refreshing.expensica-is-refreshing .expensica-animate,
+.expensica-is-refreshing.expensica-is-refreshing .transaction-animate-delay {
+  animation: none;
+  animation-delay: 0ms;
+  opacity: 1;
+  transform: none;
 }
 
-.expensica-is-refreshing * {
-  transition-duration: 0s !important;
+.expensica-is-refreshing.expensica-is-refreshing * {
+  transition-duration: 0s;
 }
 
 /* Responsive adjustments */
@@ -4147,8 +4155,8 @@ to {
 .is-mobile .expensica-calendar-details-container {
   flex: 1 1 auto;
   width: 100%;
-  height: auto !important;
-  max-height: none !important;
+  height: auto;
+  max-height: none;
 }
 
 .is-mobile .expensica-calendar-grid-container {
@@ -4179,7 +4187,7 @@ to {
 }
 
 .is-mobile .expensica-tabs {
-  display: flex !important;
+  display: flex;
   width: 100%;
   min-width: 0;
   min-height: 44px;
@@ -4188,7 +4196,6 @@ to {
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
   gap: var(--expensica-gap-sm);
   padding-bottom: 2px;
 }
@@ -4198,7 +4205,7 @@ to {
 }
 
 .is-mobile .expensica-tab {
-  display: inline-flex !important;
+  display: inline-flex;
   flex: 0 0 auto;
   white-space: nowrap;
   min-width: max-content;
@@ -4215,7 +4222,7 @@ to {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 112px));
   justify-content: center;
-  column-gap: var(--expensica-gap-md);
+  gap: 0 var(--expensica-gap-md);
   margin-top: var(--expensica-gap-md);
   max-width: 100%;
   max-height: none;
@@ -4228,7 +4235,7 @@ to {
 
 .is-mobile .expensica-income-expense-legend {
   grid-template-columns: repeat(3, minmax(0, 130px));
-  column-gap: var(--expensica-gap-md);
+  gap: 0 var(--expensica-gap-md);
 }
 
 .is-mobile .expensica-income-expense-legend .expensica-category-chip {
@@ -4239,7 +4246,7 @@ to {
 
 .is-mobile .expensica-cumulative-expenses-legend {
   grid-template-columns: repeat(var(--expensica-cumulative-legend-columns, 1), minmax(0, 112px));
-  column-gap: var(--expensica-gap-md);
+  gap: 0 var(--expensica-gap-md);
 }
 
 .is-mobile .expensica-cumulative-expenses-legend-item {
@@ -4542,7 +4549,6 @@ to {
     background-color: var(--background-primary);
     border-radius: var(--expensica-radius-sm);
     border: 1px solid var(--expensica-border-primary);
-    scrollbar-width: thin;
 }
 
 .expensica-category-checkboxes::-webkit-scrollbar {
@@ -4885,20 +4891,20 @@ to {
     margin: 0 auto;
 }
 
-.modal:has(.expensica-confirmation-modal) {
-    width: fit-content !important;
-    max-width: fit-content !important;
-    margin: 0 auto !important;
-    left: 0 !important;
-    right: 0 !important;
+.modal.expensica-confirmation-dialog {
+    width: fit-content;
+    max-width: fit-content;
+    margin: 0 auto;
+    left: 0;
+    right: 0;
 }
 
-.modal-content:has(.expensica-confirmation-modal) {
-    width: fit-content !important;
-    min-width: 0 !important;
-    max-width: fit-content !important;
-    display: inline-block !important;
-    margin: 0 auto !important;
+.modal-content.expensica-confirmation-modal {
+    width: fit-content;
+    min-width: 0;
+    max-width: fit-content;
+    display: inline-block;
+    margin: 0 auto;
 }
 
 .expensica-confirmation-modal .expensica-modal-title {
@@ -5767,7 +5773,7 @@ to {
 .expensica-categories-tab {
     padding: 0;
     display: grid;
-    column-gap: var(--expensica-gap-lg);
+    gap: var(--expensica-gap-sm) var(--expensica-gap-lg);
     row-gap: var(--expensica-gap-sm);
 }
 
@@ -5798,8 +5804,8 @@ to {
 }
 
 .expensica-categories-tab .expensica-categories-list > .expensica-categories-unused-title {
-    margin-top: var(--expensica-gap-lg) !important;
-    margin-bottom: var(--expensica-gap-lg) !important;
+    margin-top: var(--expensica-gap-lg);
+    margin-bottom: var(--expensica-gap-lg);
 }
 
 .expensica-category-card-row {
@@ -6394,10 +6400,10 @@ button.expensica-category-card-edit-button:active {
 }
 
 .expensica-category-color-palette-modal {
-  width: fit-content !important;
-  min-width: 0 !important;
-  height: fit-content !important;
-  min-height: 0 !important;
+  width: fit-content;
+  min-width: 0;
+  height: fit-content;
+  min-height: 0;
   max-width: none;
   max-height: none;
   padding: 0;
@@ -6408,22 +6414,22 @@ button.expensica-category-card-edit-button:active {
   flex: 0 0 auto;
 }
 
-.modal:has(.expensica-category-color-palette-modal),
-.modal-content:has(.expensica-category-color-palette-modal) {
-  width: fit-content !important;
-  min-width: 0 !important;
-  max-width: none !important;
-  height: fit-content !important;
-  max-height: none !important;
-  overflow: visible !important;
+.modal.expensica-category-color-palette-dialog,
+.modal-content.expensica-category-color-palette-modal {
+  width: fit-content;
+  min-width: 0;
+  max-width: none;
+  height: fit-content;
+  max-height: none;
+  overflow: visible;
 }
 
-.modal:has(.expensica-category-color-palette-modal) .modal-close-button {
+.modal.expensica-category-color-palette-dialog .modal-close-button {
   display: none;
 }
 
-.modal-content:has(.expensica-category-color-palette-modal) {
-  padding: var(--expensica-gap-sm) !important;
+.modal-content.expensica-category-color-palette-modal {
+  padding: var(--expensica-gap-sm);
 }
 
 .expensica-category-color-palette-grid {
@@ -6470,15 +6476,15 @@ button.expensica-category-card-edit-button:active {
   margin: 0 0 var(--expensica-gap-md);
 }
 
-.modal:has(.expensica-emoji-picker-modal),
-.modal-content:has(.expensica-emoji-picker-modal) {
-  width: fit-content !important;
-  min-width: 0 !important;
-  height: fit-content !important;
-  min-height: 0 !important;
-  max-width: none !important;
-  max-height: none !important;
-  overflow: visible !important;
+.modal.expensica-emoji-picker-dialog,
+.modal-content.expensica-emoji-picker-modal {
+  width: fit-content;
+  min-width: 0;
+  height: fit-content;
+  min-height: 0;
+  max-width: none;
+  max-height: none;
+  overflow: visible;
 }
 
 .expensica-emoji-picker-modal .emoji-picker-form {
@@ -7447,8 +7453,7 @@ button.expensica-category-card-edit-button:active {
 .expensica-dashboard-transactions-tab > .expensica-transactions-tab-chips {
     display: flex;
     flex-wrap: wrap;
-    column-gap: var(--expensica-gap-sm);
-    row-gap: var(--size-4-3, 12px);
+    gap: var(--size-4-3, 12px) var(--expensica-gap-sm);
     justify-content: flex-start;
     padding: 0;
     width: 100%;
@@ -7612,8 +7617,10 @@ button.expensica-category-card-edit-button:active {
 }
 
 .expensica-dashboard-transactions-tab .expensica-filter-category-option {
-    all: unset;
     box-sizing: border-box;
+    appearance: none;
+    margin: 0;
+    font-family: inherit;
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
@@ -7724,48 +7731,48 @@ button.expensica-category-card-edit-button:active {
     align-items: center;
 }
 
-.expensica-custom-input {
-    width: 100% !important;
-    height: 48px !important;
-    padding: 0.85rem 3.5rem 0.85rem 3rem !important;
-    border: 1px solid var(--background-modifier-border) !important;
-    border-radius: 8px !important;
-    background-color: var(--background-primary) !important;
-    color: var(--text-normal) !important;
-    font-size: 1rem !important;
-    line-height: 1.5 !important;
-    transition: all 0.2s ease !important;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+.expensica-custom-search .expensica-custom-input {
+    width: 100%;
+    height: 48px;
+    padding: 0.85rem 3.5rem 0.85rem 3rem;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    background-color: var(--background-primary);
+    color: var(--text-normal);
+    font-size: 1rem;
+    line-height: 1.5;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
-.expensica-custom-input:focus {
-    outline: none !important;
-    border-color: var(--interactive-accent) !important;
-    box-shadow: 0 0 0 2px var(--interactive-accent-tint) !important;
+.expensica-custom-search .expensica-custom-input:focus {
+    outline: none;
+    border-color: var(--interactive-accent);
+    box-shadow: 0 0 0 2px var(--interactive-accent-tint);
 }
 
 .expensica-custom-search .expensica-search-icon {
-    position: absolute !important;
-    left: 1rem !important;
-    top: 50% !important;
-    transform: translateY(-50%) !important;
-    color: var(--text-muted) !important;
-    pointer-events: none !important;
-    z-index: 1 !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    pointer-events: none;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.expensica-custom-input:focus + .expensica-search-icon {
-    color: var(--interactive-accent) !important;
+.expensica-custom-search .expensica-custom-input:focus + .expensica-search-icon {
+    color: var(--interactive-accent);
 }
 
 @media (max-width: 768px) {
-    .expensica-custom-input {
-        padding: 0.75rem 3.25rem 0.75rem 2.75rem !important;
-        font-size: 0.9rem !important;
-        height: 42px !important;
+    .expensica-custom-search .expensica-custom-input {
+        padding: 0.75rem 3.25rem 0.75rem 2.75rem;
+        font-size: 0.9rem;
+        height: 42px;
     }
 }
 
@@ -7998,7 +8005,7 @@ button.expensica-category-card-edit-button:active {
   border: none;
   border-bottom: 1px solid var(--background-modifier-border);
   box-shadow: none;
-  color: var(--text-normal) !important;
+  color: var(--text-normal);
   display: block;
   font-size: var(--expensica-font-size-lg);
   font-weight: 600;
@@ -8006,15 +8013,15 @@ button.expensica-category-card-edit-button:active {
   line-height: 1.3;
   min-height: 1.3em;
   max-width: 100%;
-  opacity: 1 !important;
+  opacity: 1;
   overflow: visible;
   padding: 0 0 10px 0;
   position: relative;
   transform: none;
-  visibility: visible !important;
+  visibility: visible;
   white-space: normal;
   width: 100%;
-  -webkit-text-fill-color: var(--text-normal) !important;
+  -webkit-text-fill-color: var(--text-normal);
 }
 
 /* Tooltip Redesign */
@@ -8081,7 +8088,7 @@ button.expensica-category-card-edit-button:active {
   background: transparent;
   border: none;
   box-shadow: none;
-  color: var(--text-normal) !important;
+  color: var(--text-normal);
   display: block;
   font-size: var(--expensica-font-size-lg);
   font-weight: 600;
@@ -8090,11 +8097,11 @@ button.expensica-category-card-edit-button:active {
   margin: 0;
   min-height: 1.3em;
   overflow: visible;
-  opacity: 1 !important;
+  opacity: 1;
   padding: 0;
   position: relative;
   transform: none;
-  visibility: visible !important;
+  visibility: visible;
   white-space: normal;
   width: max-content;
   max-width: 100%;
@@ -8126,12 +8133,12 @@ h2.expensica-calendar-title,
 h2.expensica-transactions-title,
 h3.expensica-chart-title,
 h4.expensica-transactions-title {
-  -webkit-text-fill-color: var(--text-normal) !important;
-  color: var(--text-normal) !important;
+  -webkit-text-fill-color: var(--text-normal);
+  color: var(--text-normal);
   font-size: var(--expensica-font-size-lg);
   font-weight: 600;
-  opacity: 1 !important;
-  visibility: visible !important;
+  opacity: 1;
+  visibility: visible;
 }
 
 /* Calendar Heatmap Legend improvements */
@@ -8192,8 +8199,7 @@ h4.expensica-transactions-title {
 .expensica-calendar-transaction-item.expensica-transaction .expensica-transaction-meta {
   display: flex;
   align-items: center;
-  column-gap: var(--expensica-gap-sm);
-  row-gap: var(--expensica-gap-sm);
+  gap: var(--expensica-gap-sm);
   flex-wrap: nowrap;
 }
 
@@ -8288,7 +8294,7 @@ h4.expensica-transactions-title {
 /* Mobile optimization for the legend */
 @media screen and (max-width: 768px) {
   .expensica-calendar-svg .legend text {
-    font-size: 10px !important;
+    font-size: 10px;
   }
 }
 
@@ -8846,10 +8852,10 @@ h4.expensica-transactions-title {
   transition: transform 0.3s ease;
 }
 .dropdown-icon-open {
-  transform: rotate(180deg) !important;
+  transform: rotate(180deg);
 }
 .dropdown-icon-closed {
-  transform: rotate(0deg) !important;
+  transform: rotate(0deg);
 }
 
 /* Classes for percentage-based visualizations */
@@ -9309,7 +9315,7 @@ body:not(.is-mobile) .expensica-chart-container {
 
 .expensica-calendar-nav::after {
   content: none;
-  display: none !important;
+  display: none;
 }
 
 .expensica-calendar-nav-button {
