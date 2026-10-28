@@ -22,6 +22,9 @@ class Element {
     createEl(tag, options) { const el = new Element(tag, options); this.children.push(el); el.parentElement = this; return el; }
     createDiv(options) { return this.createEl('div', options); }
     createSpan(options) { return this.createEl('span', options); }
+    createSvg(tag, options) { return this.createEl(tag, options); }
+    setCssProps(properties) { Object.assign(this.style, properties); }
+    setCssStyles(properties) { Object.assign(this.style, properties); }
     empty() { this.children = []; }
     addClass(name) { this.classes.add(name); }
     removeClass(name) { this.classes.delete(name); }
@@ -800,6 +803,7 @@ function recoveryHarness() {
             files.set(file, text);
         }
     } }, workspace: { getLeavesOfType: () => [{ view: { containerEl: { children: [null, container] } } }], layoutReady: true,
+        getActiveViewOfType() { return this.activeLeaf?.view; },
         activeLeaf: { view: { getViewType: () => 'expensica-dashboard-view', containerEl: {} } } } };
     p.refreshExpensicaViews = async () => {};
     const { view, effects } = mutationView(p);
@@ -2209,6 +2213,7 @@ function pickerHarness({ desktop = true, bridge = 'remote', canceled = false, se
         exists: async file => files.has(file), read: async file => files.get(file),
         write: async (file, content) => { storage.writes++; if (storage.fail) throw Error('Permission denied'); files.set(file, content); }
     }) }, workspace: { getLeavesOfType: () => [], layoutReady: true,
+        getActiveViewOfType() { return this.activeLeaf?.view; },
         activeLeaf: { view: { getViewType: () => 'expensica-dashboard-view', containerEl: {} } } } };
     p.refreshExpensicaViews = async () => {};
     const start = shownModals.length;

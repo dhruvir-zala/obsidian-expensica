@@ -10,6 +10,9 @@ class Element {
     createEl(tag, options) { const child = new Element(options); child.tag = tag; this.children.push(child); return child; }
     createDiv(options) { return this.createEl('div', options); }
     createSpan(options) { return this.createEl('span', options); }
+    createSvg(tag, options) { return this.createEl(tag, options); }
+    setCssProps(properties) { Object.assign(this.style ||= {}, properties); }
+    setCssStyles(properties) { Object.assign(this.style ||= {}, properties); }
     setAttribute() {}
     querySelector(selector) {
         return this.children.find(child => child.cls === selector.slice(1))
@@ -67,6 +70,7 @@ function setup() {
             write: async (file, content) => { writes.push(file); files.set(file, content); }
         } },
         workspace: { getLeavesOfType: () => [], layoutReady: true,
+            getActiveViewOfType() { return this.activeLeaf?.view; },
             activeLeaf: { view: { getViewType: () => 'expensica-dashboard-view', containerEl: {} } } }
     };
     return { plugin, files, writes, dialogs, notices, models,

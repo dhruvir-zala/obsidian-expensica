@@ -2,10 +2,7 @@ import { Notice } from 'obsidian';
 
 export function showExpensicaNotice(message: string, timeout?: number): Notice {
     const fragment = document.createDocumentFragment();
-    const content = document.createElement('span');
-    content.className = 'expensica-notice-content';
-    content.textContent = message;
-    fragment.appendChild(content);
+    fragment.createEl('span', { text: message, cls: 'expensica-notice-content' });
 
     return new Notice(fragment, timeout);
 }

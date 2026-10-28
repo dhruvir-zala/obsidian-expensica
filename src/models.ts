@@ -443,7 +443,7 @@ function fallbackRandomIdPart(): string {
 
     return sortTransactionsByDateTimeDesc(transactions, sourceTransactions)
       .reverse()
-      .reduce((balances, transaction) => {
+      .reduce<Record<string, number>>((balances, transaction) => {
         if (transaction.type === TransactionType.INCOME) {
           runningBalance += transaction.amount;
         } else if (transaction.type === TransactionType.EXPENSE) {
@@ -452,7 +452,7 @@ function fallbackRandomIdPart(): string {
 
         balances[transaction.id] = runningBalance;
         return balances;
-      }, {} as Record<string, number>);
+      }, {});
   }
   
   // Helper function to format a date
@@ -961,3 +961,36 @@ function fallbackRandomIdPart(): string {
       return byMonth;
     }
   }
+
+export interface SvgIconShape {
+  tag: 'path' | 'polyline' | 'circle' | 'rect' | 'line';
+  attrs: Record<string, string>;
+}
+
+export interface SvgIconOptions {
+  size: number;
+  strokeWidth: string;
+  ariaHidden?: boolean;
+}
+
+// Builds a stroke-style SVG icon via DOM APIs so no markup is parsed from strings.
+export function appendSvgIcon(parent: HTMLElement, options: SvgIconOptions, shapes: SvgIconShape[]): SVGSVGElement {
+  const size = String(options.size);
+  const svg = parent.createSvg('svg', {
+    attr: {
+      width: size,
+      height: size,
+      viewBox: '0 0 24 24',
+      fill: 'none',
+      stroke: 'currentColor',
+      'stroke-width': options.strokeWidth,
+      'stroke-linecap': 'round',
+      'stroke-linejoin': 'round',
+      ...(options.ariaHidden ? { 'aria-hidden': 'true' } : {})
+    }
+  });
+  for (const shape of shapes) {
+    svg.createSvg(shape.tag, { attr: shape.attrs });
+  }
+  return svg;
+}

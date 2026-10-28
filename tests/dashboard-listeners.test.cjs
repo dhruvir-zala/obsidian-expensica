@@ -42,6 +42,9 @@ class Element {
     createEl(tag, options) { return this.appendChild(new Element(this.ownerDocument, tag, options)); }
     createDiv(options) { return this.createEl('div', options); }
     createSpan(options) { return this.createEl('span', options); }
+    createSvg(tag, options) { return this.createEl(tag, options); }
+    setCssProps(properties) { Object.assign(this.style ||= {}, properties); }
+    setCssStyles(properties) { Object.assign(this.style ||= {}, properties); }
     remove() {
         if (this.parentElement) this.parentElement.children = this.parentElement.children.filter(child => child !== this);
         this.parentElement = null;

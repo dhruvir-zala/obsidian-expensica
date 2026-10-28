@@ -14,12 +14,60 @@ import {
 } from './models';
 import ExpensicaPlugin from '../main';
 import type { SharedDateRangeState } from '../main';
-import { TransactionModal, DateRangeType, DateRange } from './dashboard-view';
+import {
+    TransactionModal,
+    ExpensicaDashboardView,
+    EXPENSICA_VIEW_TYPE,
+    DateRangeType,
+    DateRange
+} from './dashboard-view';
 import { ConfirmationModal } from './confirmation-modal';
 import { showExpensicaNotice } from './notice';
 import { renderTransactionCard, showTransactionBulkCategoryMenu } from './transaction-card';
 import { renderCategoryChip } from './category-chip';
 import { showCategoryQuickMenu } from './category-quick-menu';
+
+type SvgIconShape = {
+    tag: 'circle' | 'line' | 'path' | 'polygon' | 'polyline' | 'rect';
+    attributes: Record<string, string>;
+};
+
+function appendSvgIcon(container: HTMLElement, size: number, shapes: SvgIconShape[], strokeWidth = '2'): void {
+    const createSvg = container.createSvg;
+    if (typeof createSvg !== 'function') return;
+
+    const svg = createSvg.call(container, 'svg', {
+        attr: {
+            width: size,
+            height: size,
+            viewBox: '0 0 24 24',
+            fill: 'none',
+            stroke: 'currentColor',
+            'stroke-width': strokeWidth,
+            'stroke-linecap': 'round',
+            'stroke-linejoin': 'round',
+            'aria-hidden': 'true'
+        }
+    });
+
+    shapes.forEach(({ tag, attributes }) => {
+        svg.createSvg(tag, { attr: attributes });
+    });
+}
+
+function createRenameIcon(container: HTMLElement, size: number): void {
+    appendSvgIcon(container, size, [
+        { tag: 'path', attributes: { d: 'M12 20h9' } },
+        { tag: 'path', attributes: { d: 'M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z' } }
+    ], '2.1');
+}
+
+function createRemoveIcon(container: HTMLElement): void {
+    appendSvgIcon(container, 12, [
+        { tag: 'line', attributes: { x1: '18', y1: '6', x2: '6', y2: '18' } },
+        { tag: 'line', attributes: { x1: '6', y1: '6', x2: '18', y2: '18' } }
+    ], '2.4');
+}
 
 function getTransactionAccountReferences(plugin: ExpensicaPlugin, transaction: Transaction): string[] {
     if (transaction.type !== TransactionType.INTERNAL) {
@@ -74,11 +122,11 @@ function getRunningBalanceByTransactionIdForAccount(
     const isCredit = plugin.findAccountByReference(accountReference)?.type === AccountType.CREDIT;
 
     return chronologicalTransactions
-        .reduce((balances, transaction) => {
+        .reduce<Record<string, number>>((balances, transaction) => {
             runningBalance += getAccountTransactionAmount(plugin, transaction, accountReference, isCredit);
             balances[transaction.id] = runningBalance;
             return balances;
-        }, {} as Record<string, number>);
+        }, {});
 }
 
 function formatRunningBalanceLabel(plugin: ExpensicaPlugin, balance: number, accountReference?: string): string {
@@ -105,7 +153,9 @@ class BulkRenameTransactionsModal extends Modal {
         contentEl.addClass('expensica-modal', 'expensica-bulk-rename-modal');
 
         const title = contentEl.createEl('h2', { cls: 'expensica-modal-title' });
-        title.innerHTML = '<span class="expensica-modal-title-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg></span> Bulk Rename';
+        const titleIcon = title.createSpan('expensica-modal-title-icon');
+        createRenameIcon(titleIcon, 18);
+        title.appendText(' Bulk Rename');
 
         const form = contentEl.createEl('form', { cls: 'expensica-form' });
         const formGroup = form.createDiv('expensica-form-group');
@@ -228,9 +278,9 @@ export class ExpensicaTransactionsView implements TransactionView {
     }
 
     deactivate() {
-        if (this._debounceTimeout != null) clearTimeout(this._debounceTimeout);
-        if (this._focusTimeout != null) clearTimeout(this._focusTimeout);
-        if (this._scrollRestoreFrame != null) cancelAnimationFrame(this._scrollRestoreFrame);
+        if (this._debounceTimeout !== null) window.clearTimeout(this._debounceTimeout);
+        if (this._focusTimeout !== null) window.clearTimeout(this._focusTimeout);
+        if (this._scrollRestoreFrame !== null) window.cancelAnimationFrame(this._scrollRestoreFrame);
         this._debounceTimeout = null;
         this._focusTimeout = null;
         this._scrollRestoreFrame = null;
@@ -266,7 +316,10 @@ export class ExpensicaTransactionsView implements TransactionView {
         
         // Add search icon
         const searchIcon = searchContainer.createDiv('expensica-search-icon');
-        searchIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>';
+        appendSvgIcon(searchIcon, 18, [
+            { tag: 'circle', attributes: { cx: '11', cy: '11', r: '8' } },
+            { tag: 'line', attributes: { x1: '21', y1: '21', x2: '16.65', y2: '16.65' } }
+        ]);
 
         this.renderCategoryFilter(searchContainer);
         this.renderSelectedFilterChips(searchSection);
@@ -278,8 +331,7 @@ export class ExpensicaTransactionsView implements TransactionView {
         
         searchInput.addEventListener('input', (e) => {
             e.stopPropagation();
-            const target = e.target as HTMLInputElement;
-            this.searchQuery = target.value;
+            this.searchQuery = searchInput.value;
             this.inputFocused = true;
             this.currentPage = 1;
             this.updateSearchResults();
@@ -295,10 +347,10 @@ export class ExpensicaTransactionsView implements TransactionView {
         
         // Restore focus if needed
         if (preserveFocus && this.inputFocused) {
-            const timeout = setTimeout(() => {
+            const timeout = window.setTimeout(() => {
                 if (this._focusTimeout !== timeout) return;
                 this._focusTimeout = null;
-                if (this.embeddedContentEl !== container || container.isConnected === false) return;
+                if (this.embeddedContentEl !== container || !container.isConnected) return;
                 searchInput.focus();
             }, 0);
             this._focusTimeout = timeout;
@@ -327,7 +379,9 @@ export class ExpensicaTransactionsView implements TransactionView {
                 title: 'Filter transactions'
             }
         });
-        filterButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>';
+        appendSvgIcon(filterButton, 18, [
+            { tag: 'polygon', attributes: { points: '22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3' } }
+        ]);
 
         const filterMenu = filterContainer.createDiv('expensica-filter-menu');
         filterMenu.addClass('is-hidden');
@@ -353,7 +407,7 @@ export class ExpensicaTransactionsView implements TransactionView {
             filterMenu.toggleClass('is-hidden', !isHidden);
 
             if (isHidden) {
-                setTimeout(() => {
+                window.setTimeout(() => {
                     document.addEventListener('click', closeMenu, { once: true });
                 }, 0);
             }
@@ -372,7 +426,9 @@ export class ExpensicaTransactionsView implements TransactionView {
         const menuItem = filterMenu.createDiv('expensica-filter-menu-item expensica-filter-menu-parent');
         menuItem.createSpan({ text: label, cls: 'expensica-filter-menu-value' });
         const menuArrow = menuItem.createSpan('expensica-filter-menu-arrow');
-        menuArrow.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>';
+        appendSvgIcon(menuArrow, 14, [
+            { tag: 'polyline', attributes: { points: '15 18 9 12 15 6' } }
+        ], '2.25');
 
         const submenu = menuItem.createDiv('expensica-filter-submenu');
         renderOptions(submenu);
@@ -458,7 +514,7 @@ export class ExpensicaTransactionsView implements TransactionView {
                     'data-account-reference': accountReference
                 }
             });
-            button.style.color = getAccountColor(account, accounts);
+            button.style.setProperty('color', getAccountColor(account, accounts));
             button.createSpan({ text: getAccountEmoji(account.type), cls: 'expensica-filter-category-emoji' });
             button.createSpan({ text: account.name, cls: 'expensica-filter-category-name' });
             button.addEventListener('click', (event) => {
@@ -477,7 +533,7 @@ export class ExpensicaTransactionsView implements TransactionView {
                 'aria-label': 'Filter by categories'
             }
         });
-        menuButton.style.textAlign = 'left';
+        menuButton.setCssProps({ textAlign: 'left' });
         menuButton.createSpan({ text: 'Categories', cls: 'expensica-filter-menu-value' });
 
         menuButton.addEventListener('click', (event) => {
@@ -579,7 +635,7 @@ export class ExpensicaTransactionsView implements TransactionView {
             chip.setAttribute('aria-label', `Remove ${category.name} filter`);
 
             const removeIcon = chip.createSpan('expensica-selected-filter-remove');
-            removeIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+            createRemoveIcon(removeIcon);
 
             chip.addEventListener('click', () => {
                 this.removeSelectedCategory(category.id);
@@ -595,15 +651,15 @@ export class ExpensicaTransactionsView implements TransactionView {
                 'aria-label': `Remove ${text} filter`
             }
         });
-        if (color) chip.style.color = color;
+        if (color) chip.style.setProperty('color', color);
         chip.createSpan({ text });
         const removeIcon = chip.createSpan('expensica-selected-filter-remove');
-        removeIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+        createRemoveIcon(removeIcon);
         chip.addEventListener('click', onRemove);
     }
 
     refreshSelectedFilterChips() {
-        const searchSection = this.getActiveContentEl().querySelector('.expensica-search-section') as HTMLElement | null;
+        const searchSection = this.getActiveContentEl().querySelector<HTMLElement>('.expensica-search-section');
         if (!searchSection) {
             return;
         }
@@ -614,8 +670,9 @@ export class ExpensicaTransactionsView implements TransactionView {
 
     refreshCategoryFilterOptions() {
         this.getActiveContentEl().querySelectorAll('.expensica-filter-category-option[data-filter-type]').forEach(option => {
-            const type = option.getAttribute('data-filter-type') as TransactionType | null;
-            const isSelected = !!type && this.selectedTypeFilters.includes(type);
+            const filterType = option.getAttribute('data-filter-type');
+            const type = Object.values(TransactionType).find(candidate => candidate === filterType);
+            const isSelected = type !== undefined && this.selectedTypeFilters.includes(type);
             option.toggleClass('is-selected', isSelected);
             option.setAttribute('aria-pressed', String(isSelected));
         });
@@ -756,11 +813,11 @@ export class ExpensicaTransactionsView implements TransactionView {
     restoreScrollPosition() {
         const container = this.embeddedContentEl;
         if (!container) return;
-        if (this._scrollRestoreFrame != null) cancelAnimationFrame(this._scrollRestoreFrame);
-        const frame = requestAnimationFrame(() => {
+        if (this._scrollRestoreFrame !== null) window.cancelAnimationFrame(this._scrollRestoreFrame);
+        const frame = window.requestAnimationFrame(() => {
             if (this._scrollRestoreFrame !== frame) return;
             this._scrollRestoreFrame = null;
-            if (this.embeddedContentEl !== container || container.isConnected === false) return;
+            if (this.embeddedContentEl !== container || !container.isConnected) return;
             container.scrollTop = this.scrollTop;
         });
         this._scrollRestoreFrame = frame;
@@ -796,8 +853,8 @@ export class ExpensicaTransactionsView implements TransactionView {
     }
 
     applyNavigationFilter(filter: TransactionNavigationFilter) {
-        if (this._debounceTimeout != null) {
-            clearTimeout(this._debounceTimeout);
+        if (this._debounceTimeout !== null) {
+            window.clearTimeout(this._debounceTimeout);
             this._debounceTimeout = null;
         }
         this.searchQuery = '';
@@ -827,7 +884,7 @@ export class ExpensicaTransactionsView implements TransactionView {
         return range;
     }
 
-    async loadTransactionsData(resetPage = false) {
+    loadTransactionsData(resetPage = false) {
         // Load all transactions
         const allTransactions = this.plugin.getAllTransactions();
         
@@ -995,7 +1052,12 @@ export class ExpensicaTransactionsView implements TransactionView {
 
         if (level === 'day') {
             const iconEl = titleEl.createSpan('expensica-transaction-group-title-icon');
-            iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
+            appendSvgIcon(iconEl, 12, [
+                { tag: 'rect', attributes: { x: '3', y: '4', width: '18', height: '18', rx: '2', ry: '2' } },
+                { tag: 'line', attributes: { x1: '16', y1: '2', x2: '16', y2: '6' } },
+                { tag: 'line', attributes: { x1: '8', y1: '2', x2: '8', y2: '6' } },
+                { tag: 'line', attributes: { x1: '3', y1: '10', x2: '21', y2: '10' } }
+            ]);
         }
 
         titleEl.createSpan({
@@ -1041,7 +1103,11 @@ export class ExpensicaTransactionsView implements TransactionView {
             runningBalanceLabel,
             secondaryRunningBalanceLabel,
             onEdit: (transaction) => {
-                const modal = new TransactionModal(this.app, this.plugin, this as any, transaction, transaction.type);
+                const dashboardView = this.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE)
+                    .map(leaf => leaf.view)
+                    .find((view): view is ExpensicaDashboardView => view instanceof ExpensicaDashboardView);
+                if (!dashboardView) return;
+                const modal = new TransactionModal(this.app, this.plugin, dashboardView, transaction, transaction.type);
                 modal.open();
             },
             onCategoryChange: async (transaction, categoryId) => {
@@ -1081,7 +1147,10 @@ export class ExpensicaTransactionsView implements TransactionView {
                 title: 'Clear selected transactions'
             }
         });
-        clearButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+        appendSvgIcon(clearButton, 14, [
+            { tag: 'line', attributes: { x1: '18', y1: '6', x2: '6', y2: '18' } },
+            { tag: 'line', attributes: { x1: '6', y1: '6', x2: '18', y2: '18' } }
+        ], '2.4');
         clearButton.addEventListener('click', () => {
             this.clearSelectedTransactions();
         });
@@ -1153,7 +1222,7 @@ export class ExpensicaTransactionsView implements TransactionView {
                 title: 'Rename selected transactions'
             }
         });
-        renameButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>';
+        createRenameIcon(renameButton, 14);
         renameButton.addEventListener('click', () => {
             new BulkRenameTransactionsModal(this.app, async (name) => {
                 await this.bulkRenameSelectedTransactions(name);
@@ -1168,7 +1237,12 @@ export class ExpensicaTransactionsView implements TransactionView {
                 title: 'Delete selected transactions'
             }
         });
-        deleteButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
+        appendSvgIcon(deleteButton, 14, [
+            { tag: 'polyline', attributes: { points: '3 6 5 6 21 6' } },
+            { tag: 'path', attributes: { d: 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2' } },
+            { tag: 'line', attributes: { x1: '10', y1: '11', x2: '10', y2: '17' } },
+            { tag: 'line', attributes: { x1: '14', y1: '11', x2: '14', y2: '17' } }
+        ], '2.2');
         deleteButton.addEventListener('click', () => {
             void this.deleteSelectedTransactions();
         });
@@ -1260,7 +1334,7 @@ export class ExpensicaTransactionsView implements TransactionView {
     }
 
     private syncBulkSelectionFooter() {
-        const container = this.getActiveContentEl().querySelector('.expensica-transactions-section') as HTMLElement | null;
+        const container = this.getActiveContentEl().querySelector<HTMLElement>('.expensica-transactions-section');
         if (!container) {
             return;
         }
@@ -1342,7 +1416,9 @@ export class ExpensicaTransactionsView implements TransactionView {
         });
 
         const dropdownIcon = currentSelection.createSpan({ cls: 'expensica-date-range-icon' });
-        dropdownIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+        appendSvgIcon(dropdownIcon, 14, [
+            { tag: 'polyline', attributes: { points: '6 9 12 15 18 9' } }
+        ]);
 
         const optionsContainer = selector.createDiv('expensica-date-range-options expensica-date-range-hidden');
 
@@ -1369,7 +1445,7 @@ export class ExpensicaTransactionsView implements TransactionView {
             optionsContainer.toggleClass('expensica-date-range-hidden', !isHidden);
 
             if (isHidden) {
-                setTimeout(() => {
+                window.setTimeout(() => {
                     document.addEventListener('click', () => {
                         optionsContainer.addClass('expensica-date-range-hidden');
                     }, { once: true });
@@ -1461,7 +1537,7 @@ export class ExpensicaTransactionsView implements TransactionView {
         }
 
         const totals = this.getFilteredTransactionTotals();
-        const titleContainer = container.querySelector('.expensica-transaction-total-chips') as HTMLElement | null;
+        const titleContainer = container.querySelector<HTMLElement>('.expensica-transaction-total-chips');
         if (titleContainer) {
             const shares = this.getTransactionShares();
             this.syncTransactionTotalChip(titleContainer, 'spent', totals.expenses, shares.spending);
@@ -1647,22 +1723,22 @@ export class ExpensicaTransactionsView implements TransactionView {
         const wasFocused = this.inputFocused;
         
         // Use a more efficient debounce approach
-        if (this._debounceTimeout != null) {
-            clearTimeout(this._debounceTimeout);
+        if (this._debounceTimeout !== null) {
+            window.clearTimeout(this._debounceTimeout);
         }
         
-        const timeout = setTimeout(() => {
+        const timeout = window.setTimeout(() => {
             // A cancelled render can share its container with a later render.
             if (this._debounceTimeout !== timeout) return;
             this._debounceTimeout = null;
-            if (this.embeddedContentEl !== container || container.isConnected === false) return;
+            if (this.embeddedContentEl !== container || !container.isConnected) return;
             this.loadTransactionsData(true);
             this.persistTransactionsState();
             this.refreshTransactionsListOnly();
 
             // Restore focus to search input if it was previously focused
             if (wasFocused) {
-                const searchInput = container.querySelector('#expensica-search-input') as HTMLInputElement;
+                const searchInput = container.querySelector<HTMLInputElement>('#expensica-search-input');
                 if (searchInput) {
                     searchInput.focus();
                 }
@@ -1749,7 +1825,7 @@ export class ExpensicaTransactionsView implements TransactionView {
         });
     }
     
-    private _debounceTimeout: NodeJS.Timeout | null = null;
-    private _focusTimeout: NodeJS.Timeout | null = null;
+    private _debounceTimeout: number | null = null;
+    private _focusTimeout: number | null = null;
     private _scrollRestoreFrame: number | null = null;
 } 

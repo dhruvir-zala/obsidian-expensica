@@ -23,6 +23,9 @@ class Element {
     createEl(tag, options) { const child = new Element(options); this.children.push(child); return child; }
     createDiv(options) { return this.createEl('div', options); }
     createSpan(options) { return this.createEl('span', options); }
+    createSvg(tag, options) { return this.createEl(tag, options); }
+    setCssProps(properties) { Object.assign(this.style, properties); }
+    setCssStyles(properties) { Object.assign(this.style, properties); }
     addClass(value) { this.classes.add(value); }
     removeClass(value) { this.classes.delete(value); }
     toggleClass() {}
@@ -34,7 +37,20 @@ class Element {
         || this.children.map(child => child.querySelector(selector)).find(Boolean); }
 }
 const models = load('src/models.ts');
-const obsidian = { Modal: class {}, ItemView: class {}, Plugin: class {}, PluginSettingTab: class {} };
+class Setting {
+    constructor(container) { this.controlEl = container; }
+    setClass() { return this; }
+    addSearch(callback) {
+        const search = {
+            inputEl: new Element(),
+            setPlaceholder() { return this; },
+            onChange() { return this; }
+        };
+        callback(search);
+        return this;
+    }
+}
+const obsidian = { Modal: class {}, ItemView: class {}, Plugin: class {}, PluginSettingTab: class {}, Setting };
 const extra = '\nexport { formatRunningBalanceLabel };';
 const dashboard = load('src/dashboard-view.ts', { './models': models, obsidian,
     'chart.js': { Tooltip: { positioners: {} } } }, extra + '\nexport { renderOverviewCurrencyValue };');

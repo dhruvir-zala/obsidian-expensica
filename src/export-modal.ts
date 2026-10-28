@@ -36,7 +36,8 @@ export class ExportModal extends Modal {
     
     // Modal header
     const modalTitle = contentEl.createEl('h2', { cls: 'expensica-modal-title' });
-    modalTitle.innerHTML = '<span class="expensica-modal-title-icon">📤</span> Export Transactions';
+    modalTitle.createSpan({ cls: 'expensica-modal-title-icon', text: '📤' });
+    modalTitle.appendText(' Export Transactions');
     
     // Create form container
     const form = contentEl.createEl('form', { cls: 'expensica-form' });
@@ -196,7 +197,7 @@ export class ExportModal extends Modal {
     }
     
     // Get selected categories if not using "select all"
-    const selectAllCheckbox = document.getElementById('select-all-categories') as HTMLInputElement;
+    const selectAllCheckbox = this.contentEl.querySelector<HTMLInputElement>('#select-all-categories');
     if (selectAllCheckbox && !selectAllCheckbox.checked) {
       const selectedCategories: string[] = [];
       this.categoryCheckboxes.forEach((checkbox, categoryId) => {
@@ -272,19 +273,14 @@ export class ExportModal extends Modal {
     const url = window.URL.createObjectURL(blob);
     
     // Create a temporary link element
-    const downloadLink = document.createElement('a');
-    downloadLink.href = url;
-    downloadLink.download = filename;
-    
-    // Add the link to the document
-    document.body.appendChild(downloadLink);
+    const downloadLink = document.body.createEl('a', { attr: { href: url, download: filename } });
     
     // Programmatically click the link to trigger the download
     downloadLink.click();
     
     // Clean up by removing the link and revoking the URL
-    document.body.removeChild(downloadLink);
-    setTimeout(() => {
+    downloadLink.remove();
+    activeWindow.setTimeout(() => {
       window.URL.revokeObjectURL(url);
     }, 100);
   }
@@ -311,10 +307,12 @@ export class ExportModal extends Modal {
       this.categoryCheckboxes.set(category.id, checkbox);
       
       // Create label
-      categoryContainer.createEl('label', {
+      const label = categoryContainer.createEl('label', {
         attr: { for: `category-${category.id}` },
         cls: 'expensica-category-checkbox-label'
-      }).innerHTML = `<span class="category-emoji">${this.plugin.getCategoryEmoji(category.id)}</span> ${category.name}`;
+      });
+      label.createSpan({ cls: 'category-emoji', text: this.plugin.getCategoryEmoji(category.id) });
+      label.appendText(` ${category.name}`);
     });
   }
   

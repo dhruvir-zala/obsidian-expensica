@@ -99,10 +99,13 @@ test('every permutation produces the same total order', () => {
 });
 
 class Element {
-    constructor() { this.classList = new Set(); }
+    constructor() { this.classList = new Set(); this.style = {}; }
     createDiv() { return new Element(); }
     createEl() { return new Element(); }
     createSpan() { return new Element(); }
+    createSvg() { return new Element(); }
+    setCssProps(properties) { Object.assign(this.style, properties); }
+    setCssStyles(properties) { Object.assign(this.style, properties); }
     addClass() {}
     setAttribute() {}
     querySelector() { return null; }

@@ -876,6 +876,7 @@ function harness() {
         exists: async file => files.has(file), read: async file => { if (!files.has(file)) throw Error('read failed'); return files.get(file); },
         write: async (file, text) => { writes.push(file); if (fail) throw Error('disk full'); files.set(file, text); }
     } }, workspace: { getLeavesOfType: () => [], layoutReady: true,
+        getActiveViewOfType() { return this.activeLeaf?.view; },
         activeLeaf: { view: { getViewType: () => 'expensica-dashboard-view', containerEl: {} } } } };
     p.refreshExpensicaViews = async () => { refreshes++; };
     return { p, notices, dialogs, writes, files, fail(value) { fail = value; }, refreshes: () => refreshes };

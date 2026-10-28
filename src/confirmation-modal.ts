@@ -69,9 +69,11 @@ export class ConfirmationModal extends Modal {
             }
             if (this.resolved) this.close();
         };
-        confirmBtn.addEventListener('click', () => this.plugin
-            ? this.plugin.runSaveOperation(this, this.title.replace(/\?$/, ''), submit)
-            : submit());
+        confirmBtn.addEventListener('click', () => {
+            void (this.plugin
+                ? this.plugin.runSaveOperation(this, this.title.replace(/\?$/, ''), submit)
+                : submit());
+        });
     }
 
     close() {
@@ -84,7 +86,10 @@ export class ConfirmationModal extends Modal {
         contentEl.empty();
         if (!this.resolved) {
             this.resolved = true;
-            this.onConfirm(this.confirmed);
+            const confirmed = this.confirmed;
+            Promise.resolve(this.onConfirm(confirmed)).catch((error: unknown) => {
+                console.error('Expensica: Confirmation callback failed', error);
+            });
         }
     }
 } 

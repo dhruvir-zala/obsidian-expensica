@@ -46,11 +46,11 @@ function getRunningBalanceByTransactionIdForAccount(
 
     return sortTransactionsByDateTimeDesc(transactions, plugin.getAllTransactions())
         .reverse()
-        .reduce((balances, transaction) => {
+        .reduce<Record<string, number>>((balances, transaction) => {
             runningBalance += getAccountTransactionAmount(plugin, transaction, accountReference);
             balances[transaction.id] = runningBalance;
             return balances;
-        }, {} as Record<string, number>);
+        }, {});
 }
 
 function formatRunningBalanceLabel(plugin: ExpensicaPlugin, balance: number, accountReference?: string): string {
@@ -393,6 +393,7 @@ export class CalendarHeatmap {
         
         // Track selected cell for reference
         let selectedCell: d3.Selection<SVGRectElement, DayData, d3.BaseType, unknown> | null = null;
+        const calendar = this;
         
         // Add week numbers if enabled
         if (this.plugin.settings.showWeekNumbers) {
@@ -472,9 +473,9 @@ export class CalendarHeatmap {
             })
             .classed('has-expenses', (d: DayData) => d.totalAmount > 0)
             .classed('is-today', (d: DayData) => isCurrentMonth && d.date.getDate() === todayDate)
-            .on('mouseover', (event: MouseEvent, d: DayData) => {
+            .on('mouseover', function (this: SVGRectElement, event: MouseEvent, d: DayData) {
                 // Highlight the cell
-                const cell = d3.select<SVGRectElement, DayData>(event.currentTarget as SVGRectElement);
+                const cell = d3.select<SVGRectElement, DayData>(this);
                 cell.transition()
                     .duration(100) // Faster transition for better responsiveness
                     .attr('stroke', 'var(--interactive-accent)')
@@ -482,7 +483,7 @@ export class CalendarHeatmap {
                     .attr('opacity', 1);
                 
                 // Show tooltip
-                this.tooltipDiv.transition()
+                calendar.tooltipDiv.transition()
                     .duration(100)
                     .style('opacity', .9);
                 
@@ -490,7 +491,7 @@ export class CalendarHeatmap {
                 const expenseTransactions = d.transactions.filter(t => t.type === TransactionType.EXPENSE);
                 
                 // Calculate percentage of monthly expenses for this day
-                const monthlyTotal = this.transactions
+                const monthlyTotal = calendar.transactions
                     .filter(t => t.type === TransactionType.EXPENSE)
                     .reduce((sum, t) => sum + t.amount, 0);
                 
@@ -500,37 +501,53 @@ export class CalendarHeatmap {
                 const daysInMonth = new Date(year, month + 1, 0).getDate();
                 
                 const dailyAverage = monthlyTotal / daysInMonth;
-                const comparedToAverage = dailyAverage > 0 
-                    ? (((d.totalAmount - dailyAverage) / dailyAverage) * 100).toFixed(0)
-                    : '0';
-                
-                let comparisonText = '';
+                const comparedToAverage = dailyAverage > 0
+                    ? ((d.totalAmount - dailyAverage) / dailyAverage) * 100
+                    : 0;
+                const roundedComparison = Number(comparedToAverage.toFixed(0));
+                let comparisonText: { className: string; text: string } | null = null;
                 if (d.totalAmount > 0) {
-                    if (parseInt(comparedToAverage) > 20) {
-                        comparisonText = `<div class="tooltip-comparison tooltip-higher">▲ ${comparedToAverage}% above daily average</div>`;
-                    } else if (parseInt(comparedToAverage) < -20) {
-                        comparisonText = `<div class="tooltip-comparison tooltip-lower">▼ ${Math.abs(parseInt(comparedToAverage))}% below daily average</div>`;
+                    if (roundedComparison > 20) {
+                        comparisonText = {
+                            className: 'tooltip-comparison tooltip-higher',
+                            text: `▲ ${roundedComparison}% above daily average`
+                        };
+                    } else if (roundedComparison < -20) {
+                        comparisonText = {
+                            className: 'tooltip-comparison tooltip-lower',
+                            text: `▼ ${Math.abs(roundedComparison)}% below daily average`
+                        };
                     }
                 }
-                
-                // Enhanced tooltip with more context
-                this.tooltipDiv.html(`
-                    <div class="tooltip-title">${d.formattedDate}</div>
-                    <div class="tooltip-value">${formatCurrency(d.totalAmount, this.plugin.settings.defaultCurrency, true)}</div>
-                    <div class="tooltip-hint">${expenseTransactions.length} expense(s) · ${percentage}% of monthly spend</div>
-                    ${comparisonText}
-                `)
+
+                calendar.tooltipDiv.selectAll('*').remove();
+                calendar.tooltipDiv.append('div')
+                    .attr('class', 'tooltip-title')
+                    .text(d.formattedDate);
+                calendar.tooltipDiv.append('div')
+                    .attr('class', 'tooltip-value')
+                    .text(formatCurrency(d.totalAmount, calendar.plugin.settings.defaultCurrency, true));
+                calendar.tooltipDiv.append('div')
+                    .attr('class', 'tooltip-hint')
+                    .text(`${expenseTransactions.length} expense(s) · ${percentage}% of monthly spend`);
+                if (comparisonText) {
+                    calendar.tooltipDiv.append('div')
+                        .attr('class', comparisonText.className)
+                        .text(comparisonText.text);
+                }
+
+                calendar.tooltipDiv
                     .style('left', (event.pageX + 10) + 'px')
                     .style('top', (event.pageY - 28) + 'px');
             })
-            .on('mouseout', (event: MouseEvent, d: DayData) => {
+            .on('mouseout', function (this: SVGRectElement, event: MouseEvent, d: DayData) {
                 // Don't reset if this is the selected cell
-                if (selectedCell && selectedCell.node() === event.currentTarget) {
+                if (selectedCell && selectedCell.node() === this) {
                     return;
                 }
                 
                 // Reset the cell with Notion styling
-                d3.select<SVGRectElement, DayData>(event.currentTarget as SVGRectElement)
+                d3.select<SVGRectElement, DayData>(this)
                     .transition()
                     .duration(100) // Faster transition for better responsiveness
                     .attr('stroke', (d: DayData) => {
@@ -553,11 +570,11 @@ export class CalendarHeatmap {
                     });
                 
                 // Hide tooltip with subtle fade
-                this.tooltipDiv.transition()
+                calendar.tooltipDiv.transition()
                     .duration(100)
                     .style('opacity', 0);
             })
-            .on('click', (event: MouseEvent, d: DayData) => {
+            .on('click', function (this: SVGRectElement, event: MouseEvent, d: DayData) {
                 // Remove previous selection
                 if (selectedCell) {
                     selectedCell
@@ -574,15 +591,15 @@ export class CalendarHeatmap {
                 }
                 
                 // Highlight the selected cell with a Notion-like subtle highlight
-                selectedCell = d3.select<SVGRectElement, DayData>(event.currentTarget as SVGRectElement);
+                selectedCell = d3.select<SVGRectElement, DayData>(this);
                 selectedCell
                     .attr('stroke', 'var(--interactive-accent)')
                     .attr('stroke-width', 2.5); // Increased thickness for better visibility
-                this.selectedDate = d.date;
-                this.onSelectedDateChange?.(d.date);
+                calendar.selectedDate = d.date;
+                calendar.onSelectedDateChange?.(d.date);
                 
                 // Show transaction details with a nice transition
-                this.showDayDetails(d);
+                calendar.showDayDetails(d);
             });
         
         // Add day number with Notion-inspired styling
@@ -964,7 +981,10 @@ export class CalendarHeatmap {
                         
                         // Create the color bar
                         const colorBar = categoryBar.createDiv('expensica-bar-fill color-bar-fill color-bar-hue');
-                        colorBar.setAttribute('style', `--color-bar-percentage: ${percentage}%; --category-color: ${categoryData.color}`);
+                        colorBar.setCssProps({
+                            '--color-bar-percentage': `${percentage}%`,
+                            '--category-color': categoryData.color
+                        });
 
                         // Label with amount and percentage
                         const labelEl = categoryBar.createDiv('expensica-bar-label');
@@ -1051,7 +1071,7 @@ export class CalendarHeatmap {
             transactionEl.classList.add('expensica-transaction-animate');
 
             if (sortedTransactions.length > 1) {
-                const amountEl = transactionEl.querySelector('.expensica-transaction-amount') as HTMLElement | null;
+                const amountEl = transactionEl.querySelector<HTMLElement>('.expensica-transaction-amount');
                 amountEl?.createSpan({
                     text: `${((transaction.amount / totalExpenses) * 100).toFixed(0)}%`,
                     cls: 'expensica-percentage'
@@ -1059,7 +1079,7 @@ export class CalendarHeatmap {
             }
 
             // Add animation delay for staggered entrance
-            transactionEl.setAttribute('style', `--transaction-delay: ${index * 50}ms`);
+            transactionEl.setCssProps({ '--transaction-delay': `${index * 50}ms` });
         });
     }
 
@@ -1138,8 +1158,10 @@ export class CalendarHeatmap {
 
     private updateCalendarScaleBounds(svgWidth: number) {
         const minimumSvgWidth = svgWidth * this.minimumCellScale;
-        this.calendarContainer.style.setProperty('--expensica-panel-natural-width', `${svgWidth}px`);
-        this.calendarContainer.style.setProperty('--expensica-panel-min-width', `${minimumSvgWidth}px`);
+        this.calendarContainer.setCssProps({
+            '--expensica-panel-natural-width': `${svgWidth}px`,
+            '--expensica-panel-min-width': `${minimumSvgWidth}px`
+        });
     }
 
     private getCalendarGridWidth() {
@@ -1160,9 +1182,11 @@ export class CalendarHeatmap {
         const calendarHeight = this.calendarContainer.getBoundingClientRect().height;
         const detailsHeight = calendarHeight > 0 ? calendarHeight : this.height;
 
-        this.detailsContainer.style.boxSizing = 'border-box';
-        this.detailsContainer.style.height = `${detailsHeight}px`;
-        this.detailsContainer.style.maxHeight = `${detailsHeight}px`;
+        this.detailsContainer.setCssStyles({
+            boxSizing: 'border-box',
+            height: `${detailsHeight}px`,
+            maxHeight: `${detailsHeight}px`
+        });
     }
 
     private getLayoutKey(svgWidth: number, svgHeight: number) {

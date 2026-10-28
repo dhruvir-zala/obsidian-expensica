@@ -107,10 +107,12 @@ function sameTransactionData(left: unknown, right: unknown): boolean {
     if (!left || !right || typeof left !== 'object' || typeof right !== 'object'
         || Array.isArray(left) !== Array.isArray(right)) return false;
     if (Array.isArray(left) && Array.isArray(right) && left.length !== right.length) return false;
-    const keys = Object.keys(left).filter(key => (left as Record<string, unknown>)[key] !== undefined);
-    const rightKeys = Object.keys(right).filter(key => (right as Record<string, unknown>)[key] !== undefined);
-    return keys.length === rightKeys.length && keys.every(key => Object.prototype.hasOwnProperty.call(right, key)
-        && sameTransactionData((left as Record<string, unknown>)[key], (right as Record<string, unknown>)[key]));
+    const leftRecord = left as Record<string, unknown>;
+    const rightRecord = right as Record<string, unknown>;
+    const keys = Object.keys(leftRecord).filter(key => leftRecord[key] !== undefined);
+    const rightKeys = Object.keys(rightRecord).filter(key => rightRecord[key] !== undefined);
+    return keys.length === rightKeys.length && keys.every(key => Object.prototype.hasOwnProperty.call(rightRecord, key)
+        && sameTransactionData(leftRecord[key], rightRecord[key]));
 }
 
 function collectTransactionErrors(value: unknown, existing: Transaction[], accounts?: Account[], repairDuplicateIds = false, allowSelfTransfers = false): TransactionValidationIssue[] {
@@ -135,7 +137,8 @@ function collectTransactionErrors(value: unknown, existing: Transaction[], accou
         }
         const row = entry as Record<string, unknown>;
         for (const field of ['id', 'date', 'type', 'description']) {
-            if (typeof row[field] !== 'string' || !(row[field] as string).trim()) invalid(field, 'expected a non-empty string');
+            const fieldValue = row[field];
+            if (typeof fieldValue !== 'string' || !fieldValue.trim()) invalid(field, 'expected a non-empty string');
         }
         let comparableAmount = row.amount;
         if (typeof row.amount === 'string') {
@@ -170,7 +173,8 @@ function collectTransactionErrors(value: unknown, existing: Transaction[], accou
         if (typeof row.time === 'string' && row.time && getTimeInSeconds(row.time) === null) invalid('time', 'time must be HH:mm:ss, from 00:00:00 to 23:59:59');
         if (row.type === TransactionType.INTERNAL) {
             for (const field of ['fromAccount', 'toAccount']) {
-                if (row[field] == null || (typeof row[field] === 'string' && !(row[field] as string).trim())) invalid(field, 'transfer accounts are required');
+                const fieldValue = row[field];
+                if (fieldValue == null || (typeof fieldValue === 'string' && !fieldValue.trim())) invalid(field, 'transfer accounts are required');
             }
             if (!allowSelfTransfers && isSelfTransfer(row as unknown as Transaction)) invalid('toAccount', 'transfer accounts must differ');
         }
@@ -195,7 +199,7 @@ function collectTransactionErrors(value: unknown, existing: Transaction[], accou
                 const reference = row[field];
                 // Already reported field types and missing transfer endpoints need no second error.
                 if (reference != null && typeof reference !== 'string') continue;
-                if (row.type === TransactionType.INTERNAL && !(reference as string | undefined)?.trim()) continue;
+                if (row.type === TransactionType.INTERNAL && !(typeof reference === 'string' && reference.trim())) continue;
                 const account = resolveAccountReference(reference, references, field === 'account' ? defaultReference : undefined);
                 if (!account) {
                     const raw = typeof reference === 'string' ? reference : '';

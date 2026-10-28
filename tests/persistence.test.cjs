@@ -62,6 +62,7 @@ function setup() {
             files.set(file, text);
         }
     } }, workspace: { getLeavesOfType: () => [], layoutReady: true,
+        getActiveViewOfType() { return this.activeLeaf?.view; },
         activeLeaf: { view: { getViewType: () => 'expensica-dashboard-view', containerEl: {} } } } };
     p.refreshExpensicaViews = async () => { refreshes++; };
     return { p, files, failures, notices, ImportModal, refreshes: () => refreshes,
@@ -374,6 +375,9 @@ test('import dialog retains its file selection after a failed write and closes a
         createEl(tag, options) { const el = new Element(tag, options); this.children.push(el); return el; }
         createDiv(options) { return this.createEl('div', options); }
         createSpan(options) { return this.createEl('span', options); }
+        createSvg(tag, options) { return this.createEl(tag, options); }
+        setCssProps(properties) { Object.assign(this.style, properties); }
+        setCssStyles(properties) { Object.assign(this.style, properties); }
         empty() { this.children = []; }
         setAttribute() {}
         querySelector(selector) { return this.find(el => el.cls === selector.slice(1)); }

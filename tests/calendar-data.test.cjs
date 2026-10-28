@@ -60,13 +60,29 @@ const dailyBalances = instance => Array.from(instance.calendarData, day => day.d
 
 test('calendar chart hover uses compact currency while leaving raw day values and details intact', () => {
     const handlers = {};
-    let html = '';
+    const tooltipNodes = [];
     const chain = {};
     for (const method of ['selectAll', 'remove', 'data', 'enter', 'append', 'attr', 'classed', 'text', 'filter', 'transition', 'duration', 'style']) {
         chain[method] = () => chain;
     }
     chain.on = (name, callback) => { handlers[name] = callback; return chain; };
-    chain.html = content => { html = content; return chain; };
+    const tooltip = {
+        transition() { return this; },
+        duration() { return this; },
+        style() { return this; },
+        selectAll(selector) {
+            assert.equal(selector, '*');
+            return { remove() { tooltipNodes.length = 0; } };
+        },
+        append(tag) {
+            const node = { tag, attributes: {}, textContent: '' };
+            tooltipNodes.push(node);
+            return {
+                attr(name, value) { node.attributes[name] = value; return this; },
+                text(value) { node.textContent = value; return this; }
+            };
+        }
+    };
     const { CalendarHeatmap } = load('src/visualizations/calendar-view.ts', { '../models': models, d3: { select: () => chain } });
     const entry = row('original', '2026-10-15', { amount: 1540.89 });
     const day = { date: models.parseLocalDate(entry.date), dateKey: entry.date, formattedDate: 'Oct 15',
@@ -75,14 +91,41 @@ test('calendar chart hover uses compact currency while leaving raw day values an
     const p = plugin([entry]);
     p.settings.defaultCurrency = 'CAD';
     const instance = Object.assign(Object.create(CalendarHeatmap.prototype), {
-        plugin: p, svg: chain, tooltipDiv: chain, currentDate: models.parseLocalDate('2026-10-01'),
+        plugin: p, svg: chain, tooltipDiv: tooltip, currentDate: models.parseLocalDate('2026-10-01'),
         calendarData: [day], transactions: [entry], maxAmount: entry.amount, cellSize: 30, cellGap: 4,
         getColorScale: () => () => '#fff', renderColorLegend() {}, showDayDetails() {}
     });
     instance.renderCalendar();
     for (const value of [0, 0.49, -0.49, 999.49, 999.5, 1000, 1540.89, -1540.89, 1000000]) {
-        handlers.mouseover({ currentTarget: {}, pageX: 10, pageY: 20 }, { ...day, totalAmount: value });
-        assert.ok(html.includes(`<div class="tooltip-value">${models.formatCurrency(value, 'CAD', true)}</div>`));
+        handlers.mouseover.call({}, { currentTarget: {}, pageX: 10, pageY: 20 }, { ...day, totalAmount: value });
+        const expectedNodes = [
+            { tag: 'div', attributes: { class: 'tooltip-title' }, textContent: 'Oct 15' },
+            { tag: 'div', attributes: { class: 'tooltip-value' }, textContent: models.formatCurrency(value, 'CAD', true) },
+            {
+                tag: 'div',
+                attributes: { class: 'tooltip-hint' },
+                textContent: `1 expense(s) · ${((value / entry.amount) * 100).toFixed(1)}% of monthly spend`
+            }
+        ];
+        const dailyAverage = entry.amount / 31;
+        const roundedComparison = dailyAverage > 0
+            ? Number((((value - dailyAverage) / dailyAverage) * 100).toFixed(0))
+            : 0;
+        if (value > 0 && roundedComparison > 20) {
+            expectedNodes.push({
+                tag: 'div',
+                attributes: { class: 'tooltip-comparison tooltip-higher' },
+                textContent: `▲ ${roundedComparison}% above daily average`
+            });
+        } else if (value > 0 && roundedComparison < -20) {
+            expectedNodes.push({
+                tag: 'div',
+                attributes: { class: 'tooltip-comparison tooltip-lower' },
+                textContent: `▼ ${Math.abs(roundedComparison)}% below daily average`
+            });
+        }
+        assert.deepEqual(tooltipNodes.map(({ tag, attributes, textContent }) => ({ tag, attributes, textContent })), expectedNodes);
+        assert.equal(tooltipNodes.every(node => node.tag === 'div'), true);
     }
     assert.equal(JSON.stringify(day), original);
     assert.equal(models.formatCurrency(day.dayBalance, 'CAD'), '-$1,540.89');

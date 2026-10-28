@@ -32,6 +32,9 @@ class Element {
     createEl(tag, options) { const child = new Element(options); child.tag = tag; this.children.push(child); return child; }
     createDiv(options) { return this.createEl('div', options); }
     createSpan(options) { return this.createEl('span', options); }
+    createSvg(tag, options) { return this.createEl(tag, options); }
+    setCssProps(properties) { Object.assign(this.style ||= {}, properties); }
+    setCssStyles(properties) { Object.assign(this.style ||= {}, properties); }
     addClass() {}
     setAttribute() {}
     addEventListener(name, callback) { this.listeners[name] = callback; }
@@ -80,7 +83,9 @@ function harness(files = new Map(), date = '2026-10-22T18:34:56.789Z') {
         read: async file => { reads.push(file); if (!files.has(file)) throw Error('Unavailable'); return files.get(file); },
         write: async (file, content) => { writes.push({ file, content }); if (failWrite) throw Error('disk full'); files.set(file, content); }
     } }, workspace: {
-        getLeavesOfType: () => [], layoutReady: true, activeLeaf: leaf('expensica-dashboard-view'),
+        getLeavesOfType: () => [], layoutReady: true,
+        getActiveViewOfType() { return this.activeLeaf?.view; },
+        activeLeaf: leaf('expensica-dashboard-view'),
         on(name, callback) { const callbacks = events.get(name) || []; callbacks.push(callback); events.set(name, callbacks); return {}; },
         onLayoutReady(callback) { if (this.layoutReady) callback(); else layoutCallbacks.push(callback); }
     } };

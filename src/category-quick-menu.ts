@@ -1,5 +1,5 @@
 import { App, Modal } from 'obsidian';
-import { Category, CategoryType, ColorPalette, getCommonCategoryEmojis, INTERNAL_CATEGORY_ID } from './models';
+import { appendSvgIcon, Category, CategoryType, ColorPalette, getCommonCategoryEmojis, INTERNAL_CATEGORY_ID } from './models';
 import type ExpensicaPlugin from '../main';
 import { EmojiPickerModal } from './emoji-picker-modal';
 import { showExpensicaNotice } from './notice';
@@ -72,8 +72,7 @@ class CategoryQuickMenu {
         this.boundHandleDocumentKeydown = this.handleDocumentKeydown.bind(this);
         this.selectedCategoryIds = new Set(options?.selectedCategoryIds ?? (selectedCategoryId ? [selectedCategoryId] : []));
 
-        this.menuEl = document.createElement('div');
-        this.menuEl.className = 'expensica-category-quick-menu';
+        this.menuEl = createDiv({ cls: 'expensica-category-quick-menu' });
         this.menuEl.setAttribute('role', 'menu');
 
         const searchSection = this.menuEl.createDiv('expensica-category-quick-menu-section');
@@ -98,11 +97,16 @@ class CategoryQuickMenu {
                 type: 'button'
             }
         });
-        newCategoryButton.innerHTML = '<span class="expensica-category-quick-menu-new-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></span><span class="expensica-category-quick-menu-new-label">New Category</span>';
+        const newIconEl = newCategoryButton.createSpan({ cls: 'expensica-category-quick-menu-new-icon', attr: { 'aria-hidden': 'true' } });
+        appendSvgIcon(newIconEl, { size: 14, strokeWidth: '2.2' }, [
+            { tag: 'path', attrs: { d: 'M12 5v14' } },
+            { tag: 'path', attrs: { d: 'M5 12h14' } }
+        ]);
+        newCategoryButton.createSpan({ cls: 'expensica-category-quick-menu-new-label', text: 'New Category' });
         newCategoryButton.addEventListener('click', () => {
             this.close();
-            new NewCategoryModal(this.plugin.app, this.plugin, this.categoryType, async (categoryId) => {
-                await this.onCategoryChange(categoryId);
+            new NewCategoryModal(this.plugin.app, this.plugin, this.categoryType, (categoryId) => {
+                return this.onCategoryChange(categoryId);
             }).open();
         });
 
@@ -117,7 +121,7 @@ class CategoryQuickMenu {
         this.position();
 
         if (this.autoFocusSearch) {
-            requestAnimationFrame(() => {
+            activeWindow.requestAnimationFrame(() => {
                 this.searchInputEl.focus();
                 this.searchInputEl.select();
             });
@@ -207,7 +211,7 @@ class CategoryQuickMenu {
 
             event.preventDefault();
             event.stopPropagation();
-            this.selectCategory(activeCategory.id);
+            void this.selectCategory(activeCategory.id);
         }
     }
 
@@ -322,7 +326,7 @@ class CategoryQuickMenu {
             });
 
             optionButton.addEventListener('click', () => {
-                this.selectCategory(category.id);
+                void this.selectCategory(category.id);
             });
         });
 
@@ -376,14 +380,17 @@ class CategoryQuickMenu {
             this.selectedCategoryIds.add(categoryId);
         }
 
-        void Promise.resolve(this.onCategoryChange(categoryId)).finally(() => {
-            if (!this.menuEl.isConnected) {
-                return;
+        try {
+            await this.onCategoryChange(categoryId);
+        } catch (error) {
+            console.error('Expensica: Category change did not complete', error);
+            showExpensicaNotice('Category could not be changed. Please try again.');
+        } finally {
+            if (this.menuEl.isConnected) {
+                this.renderList(this.searchInputEl.value);
+                this.searchInputEl.focus();
             }
-
-            this.renderList(this.searchInputEl.value);
-            this.searchInputEl.focus();
-        });
+        }
     }
 }
 
@@ -406,7 +413,8 @@ class NewCategoryModal extends Modal {
         contentEl.addClass('expensica-modal');
 
         const title = contentEl.createEl('h2', { cls: 'expensica-modal-title' });
-        title.innerHTML = `<span class="expensica-modal-title-icon">\u{1F3F7}\u{FE0F}</span> ${this.categoryType === CategoryType.INCOME ? 'New Income Category' : 'New Expense Category'}`;
+        title.createSpan({ cls: 'expensica-modal-title-icon', text: '\u{1F3F7}\u{FE0F}' });
+        title.appendText(` ${this.categoryType === CategoryType.INCOME ? 'New Income Category' : 'New Expense Category'}`);
 
         const form = contentEl.createEl('form', { cls: 'expensica-form' });
         const nameGroup = form.createDiv('expensica-form-group');
@@ -484,23 +492,32 @@ class NewCategoryModal extends Modal {
             this.close();
         });
 
-        form.addEventListener('submit', async (event: SubmitEvent) => {
+        form.addEventListener('submit', (event: SubmitEvent) => {
             event.preventDefault();
+            void this.submitForm(nameInput, () => selectedEmoji, () => selectedColor);
+        });
 
-            const normalizedName = this.plugin.normalizeCategoryName(nameInput.value.trim()).name.trim();
-            if (!normalizedName) {
-                showExpensicaNotice('Category name is required.');
-                return;
-            }
+        activeWindow.requestAnimationFrame(() => {
+            nameInput.focus();
+        });
+    }
 
-            const duplicate = this.plugin.getCategories(this.categoryType).find(category =>
-                this.plugin.normalizeCategoryName(category.name).name.toLowerCase() === normalizedName.toLowerCase()
-            );
-            if (duplicate) {
-                showExpensicaNotice(`Category "${normalizedName}" already exists.`);
-                return;
-            }
+    private async submitForm(nameInput: HTMLInputElement, getEmoji: () => string, getColor: () => string): Promise<void> {
+        const normalizedName = this.plugin.normalizeCategoryName(nameInput.value.trim()).name.trim();
+        if (!normalizedName) {
+            showExpensicaNotice('Category name is required.');
+            return;
+        }
 
+        const duplicate = this.plugin.getCategories(this.categoryType).find(category =>
+            this.plugin.normalizeCategoryName(category.name).name.toLowerCase() === normalizedName.toLowerCase()
+        );
+        if (duplicate) {
+            showExpensicaNotice(`Category "${normalizedName}" already exists.`);
+            return;
+        }
+
+        try {
             const categoryId = createCategoryId(normalizedName, this.plugin, this.categoryType);
             if (this.categoryType === CategoryType.INCOME) {
                 await this.plugin.addIncomeCategory({
@@ -513,15 +530,14 @@ class NewCategoryModal extends Modal {
                     name: normalizedName
                 });
             }
-            await this.plugin.updateCategoryEmoji(categoryId, selectedEmoji);
-            await this.plugin.updateCategoryColor(categoryId, selectedColor);
+            await this.plugin.updateCategoryEmoji(categoryId, getEmoji());
+            await this.plugin.updateCategoryColor(categoryId, getColor());
             await this.onSave(categoryId);
             this.close();
-        });
-
-        requestAnimationFrame(() => {
-            nameInput.focus();
-        });
+        } catch (error) {
+            console.error('Expensica: New category did not save', error);
+            showExpensicaNotice('Category could not be saved. Please try again.');
+        }
     }
 
     onClose() {
@@ -609,9 +625,8 @@ function normalizeColorInputValue(color: string): string {
         return `#${color.slice(1).split('').map(char => `${char}${char}`).join('')}`;
     }
 
-    const probe = document.createElement('div');
+    const probe = document.body.createDiv();
     probe.style.color = color;
-    document.body.appendChild(probe);
     const computed = getComputedStyle(probe).color;
     probe.remove();
 

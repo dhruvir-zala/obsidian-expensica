@@ -249,20 +249,84 @@ function getTrendPercentage(currentValue: number, previousValue: number): number
     return ((currentValue - previousValue) / Math.abs(previousValue)) * 100;
 }
 
-function getTrendMarkup(trendPercentage: number, comparisonLabel: string, isPositiveNews: boolean): string {
+function renderTrend(
+    container: HTMLElement,
+    trendPercentage: number,
+    comparisonLabel: string,
+    isPositiveNews: boolean
+): void {
     const formattedPercentage = `${Math.abs(trendPercentage).toFixed(1)}%`;
 
     if (isEffectivelyZero(trendPercentage)) {
-        return `${formattedPercentage} from ${comparisonLabel}`;
+        container.textContent = `${formattedPercentage} from ${comparisonLabel}`;
+        return;
     }
 
     const isUpward = trendPercentage >= 0;
     const trendClass = isPositiveNews ? 'is-positive' : 'is-negative';
-    const arrow = isUpward
-        ? '<polyline points="18 15 12 9 6 15"></polyline>'
-        : '<polyline points="6 9 12 15 18 9"></polyline>';
+    const indicator = container.createSpan(`expensica-card-trend-indicator ${trendClass}`);
+    const svg = indicator.createSvg('svg', {
+        attr: {
+            viewBox: '0 0 24 24',
+            fill: 'none',
+            stroke: 'currentColor',
+            'stroke-linecap': 'round',
+            'stroke-linejoin': 'round'
+        }
+    });
+    svg.createSvg('polyline', {
+        attr: { points: isUpward ? '18 15 12 9 6 15' : '6 9 12 15 18 9' }
+    });
+    container.createSpan({ text: ` ${formattedPercentage} from ${comparisonLabel}` });
+}
 
-    return `<span class="expensica-card-trend-indicator ${trendClass}"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">${arrow}</svg></span> ${formattedPercentage} from ${comparisonLabel}`;
+function handleDashboardAsync(operation: string, action: () => Promise<unknown>): void {
+    void action().catch(error => {
+        console.error(`Expensica: ${operation} did not complete`, error);
+        showExpensicaNotice(`${operation} could not finish. Please try again.`);
+    });
+}
+
+type DashboardSvgShape = {
+    tag: 'line' | 'path' | 'polyline' | 'rect';
+    attributes: Record<string, string>;
+};
+
+function createDashboardSvgIcon(
+    container: HTMLElement,
+    size: string,
+    strokeWidth: string,
+    shapes: DashboardSvgShape[],
+    ariaHidden = false
+): SVGSVGElement {
+    const svg = container.createSvg('svg', {
+        attr: {
+            width: size,
+            height: size,
+            viewBox: '0 0 24 24',
+            fill: 'none',
+            stroke: 'currentColor',
+            'stroke-width': strokeWidth,
+            'stroke-linecap': 'round',
+            'stroke-linejoin': 'round',
+            ...(ariaHidden ? { 'aria-hidden': 'true' } : {})
+        }
+    });
+    shapes.forEach(({ tag, attributes }) => svg.createSvg(tag, { attr: attributes }));
+    return svg;
+}
+
+function appendCreditCardIcon(container: HTMLElement): void {
+    createDashboardSvgIcon(container, '14', '2', [
+        { tag: 'rect', attributes: { x: '2', y: '5', width: '20', height: '14', rx: '2' } },
+        { tag: 'line', attributes: { x1: '2', y1: '10', x2: '22', y2: '10' } }
+    ]);
+}
+
+function appendChevronIcon(container: HTMLElement, size: string): void {
+    createDashboardSvgIcon(container, size, '2', [
+        { tag: 'polyline', attributes: { points: '6 9 12 15 18 9' } }
+    ]);
 }
 
 // existingTransactions includes the original row on edits, in canonical ledger order.
@@ -317,7 +381,23 @@ class BulkRenameTransactionsModal extends Modal {
         contentEl.addClass('expensica-modal', 'expensica-bulk-rename-modal');
 
         const title = contentEl.createEl('h2', { cls: 'expensica-modal-title' });
-        title.innerHTML = '<span class="expensica-modal-title-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg></span> Bulk Rename';
+        const titleIcon = title.createSpan({ cls: 'expensica-modal-title-icon' });
+        const titleSvg = titleIcon.createSvg('svg', {
+            attr: {
+                width: '18',
+                height: '18',
+                viewBox: '0 0 24 24',
+                fill: 'none',
+                stroke: 'currentColor',
+                'stroke-width': '2.1',
+                'stroke-linecap': 'round',
+                'stroke-linejoin': 'round',
+                'aria-hidden': 'true'
+            }
+        });
+        titleSvg.createSvg('path', { attr: { d: 'M12 20h9' } });
+        titleSvg.createSvg('path', { attr: { d: 'M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z' } });
+        title.createSpan({ text: ' Bulk Rename' });
 
         const form = contentEl.createEl('form', { cls: 'expensica-form' });
         const formGroup = form.createDiv('expensica-form-group');
@@ -354,7 +434,7 @@ class BulkRenameTransactionsModal extends Modal {
 
         form.addEventListener('submit', (event) => {
             event.preventDefault();
-            return this.plugin.runSaveOperation(this, 'Rename transactions', async () => {
+            void this.plugin.runSaveOperation(this, 'Rename transactions', async () => {
                 if (!form.reportValidity()) return false;
                 const nextName = input.value.trim();
                 if (!nextName) {
@@ -692,7 +772,7 @@ export class ExpensicaDashboardView extends ItemView {
         }
 
         this.resizeRefreshTimeout = window.setTimeout(() => {
-            requestAnimationFrame(() => {
+            window.requestAnimationFrame(() => {
                 this.setChartAnimations(false);
                 this.resizeChartsToContainers();
                 this.premiumVisualizations?.resize();
@@ -745,7 +825,7 @@ export class ExpensicaDashboardView extends ItemView {
         }
 
         this.calendarResizeTimeout = window.setTimeout(() => {
-            requestAnimationFrame(() => {
+            window.requestAnimationFrame(() => {
                 this.premiumVisualizations?.resize();
             });
             this.calendarResizeTimeout = null;
@@ -818,14 +898,18 @@ export class ExpensicaDashboardView extends ItemView {
 
         const { width, height, minimumWidth, minimumHeight, isMiniDonut } = this.getChartCanvasDimensions(container);
 
-        container.style.setProperty('--expensica-panel-natural-width', `${width}px`);
-        container.style.setProperty('--expensica-panel-natural-height', `${height}px`);
+        container.setCssProps({
+            '--expensica-panel-natural-width': `${width}px`,
+            '--expensica-panel-natural-height': `${height}px`
+        });
         if (isMiniDonut) {
             container.style.removeProperty('--expensica-panel-min-width');
             container.style.removeProperty('--expensica-panel-min-height');
         } else {
-            container.style.setProperty('--expensica-panel-min-width', `${minimumWidth}px`);
-            container.style.setProperty('--expensica-panel-min-height', `${minimumHeight}px`);
+            container.setCssProps({
+                '--expensica-panel-min-width': `${minimumWidth}px`,
+                '--expensica-panel-min-height': `${minimumHeight}px`
+            });
         }
         canvas.width = width;
         canvas.height = height;
@@ -833,8 +917,10 @@ export class ExpensicaDashboardView extends ItemView {
             canvas.style.removeProperty('min-width');
             canvas.style.removeProperty('min-height');
         } else {
-            canvas.style.minWidth = 'var(--expensica-panel-min-width)';
-            canvas.style.minHeight = 'var(--expensica-panel-min-height)';
+            canvas.setCssStyles({
+                minWidth: 'var(--expensica-panel-min-width)',
+                minHeight: 'var(--expensica-panel-min-height)'
+            });
         }
     }
 
@@ -845,18 +931,24 @@ export class ExpensicaDashboardView extends ItemView {
 
         const { width, height, minimumWidth, minimumHeight, isMiniDonut } = this.getChartCanvasDimensions(container);
 
-        container.style.setProperty('--expensica-panel-natural-width', `${width}px`);
-        container.style.setProperty('--expensica-panel-natural-height', `${height}px`);
+        container.setCssProps({
+            '--expensica-panel-natural-width': `${width}px`,
+            '--expensica-panel-natural-height': `${height}px`
+        });
         if (isMiniDonut) {
             container.style.removeProperty('--expensica-panel-min-width');
             container.style.removeProperty('--expensica-panel-min-height');
             canvas.style.removeProperty('min-width');
             canvas.style.removeProperty('min-height');
         } else {
-            container.style.setProperty('--expensica-panel-min-width', `${minimumWidth}px`);
-            container.style.setProperty('--expensica-panel-min-height', `${minimumHeight}px`);
-            canvas.style.minWidth = 'var(--expensica-panel-min-width)';
-            canvas.style.minHeight = 'var(--expensica-panel-min-height)';
+            container.setCssProps({
+                '--expensica-panel-min-width': `${minimumWidth}px`,
+                '--expensica-panel-min-height': `${minimumHeight}px`
+            });
+            canvas.setCssStyles({
+                minWidth: 'var(--expensica-panel-min-width)',
+                minHeight: 'var(--expensica-panel-min-height)'
+            });
         }
 
         if (!force && canvas.width === width && canvas.height === height) {
@@ -925,7 +1017,7 @@ export class ExpensicaDashboardView extends ItemView {
         container
             .querySelectorAll<HTMLElement>('.expensica-canvas-container')
             .forEach(canvasContainer => {
-                const canvas = canvasContainer.querySelector('canvas') as HTMLCanvasElement | null;
+                const canvas = canvasContainer.querySelector('canvas');
                 this.clearChartLayoutConstraints(canvasContainer, canvas || undefined);
             });
     }
@@ -937,7 +1029,7 @@ export class ExpensicaDashboardView extends ItemView {
 
         if (!canvasContainer) return;
 
-        const canvas = canvasContainer.querySelector('canvas') as HTMLCanvasElement | null;
+        const canvas = canvasContainer.querySelector('canvas');
         this.clearChartLayoutConstraints(canvasContainer, canvas || undefined);
     }
 
@@ -990,18 +1082,19 @@ export class ExpensicaDashboardView extends ItemView {
             return false;
         }
 
-        categoriesContainer.style.height = `${targetHeight}px`;
-        incomeExpenseContainer.style.height = `${targetHeight}px`;
+        categoriesContainer.setCssStyles({ height: `${targetHeight}px` });
+        incomeExpenseContainer.setCssStyles({ height: `${targetHeight}px` });
         return true;
     }
 
     private getCssPixelValue(element: HTMLElement, property: string, fallback: number): number {
-        const probe = document.createElement('div');
-        probe.style.position = 'absolute';
-        probe.style.visibility = 'hidden';
-        probe.style.pointerEvents = 'none';
-        probe.style.width = `var(${property})`;
-        element.appendChild(probe);
+        const probe = element.createDiv();
+        probe.setCssStyles({
+            position: 'absolute',
+            visibility: 'hidden',
+            pointerEvents: 'none'
+        });
+        probe.setCssProps({ width: `var(${property})` });
         const value = parseFloat(getComputedStyle(probe).width);
         probe.remove();
         return Number.isFinite(value) && value > 0 ? value : fallback;
@@ -1251,10 +1344,9 @@ export class ExpensicaDashboardView extends ItemView {
     }
 
     private getChartBarRadius() {
-        const probe = document.createElement('span');
-        probe.style.borderRadius = 'var(--expensica-chart-bar-radius)';
-        probe.style.display = 'none';
-        document.body.appendChild(probe);
+        const probe = document.body.createSpan();
+        probe.setCssProps({ 'border-radius': 'var(--expensica-chart-bar-radius)' });
+        probe.setCssStyles({ display: 'none' });
         const radius = parseFloat(getComputedStyle(probe).borderTopLeftRadius);
         probe.remove();
         return Number.isFinite(radius) ? radius : 4;
@@ -1878,16 +1970,18 @@ export class ExpensicaDashboardView extends ItemView {
             this.app,
             'Delete Transaction?',
             `Are you sure you want to delete this ${transaction.type.toLowerCase()} transaction? This action cannot be undone.`,
-            async (confirmed) => {
+            (confirmed) => {
                 if (confirmed) {
-                    await this.plugin.deleteTransaction(id, this);
-                    onConfirmDelete?.();
-                    this.selectedTransactionIds.delete(id);
-                    await this.loadTransactionsData();
-                    this.requestAllChartAnimations();
-                    this.renderDashboard();
-                    showExpensicaNotice('Transaction deleted successfully');
-                    onDeleted?.();
+                    handleDashboardAsync('Delete transaction', async () => {
+                        await this.plugin.deleteTransaction(id, this);
+                        onConfirmDelete?.();
+                        this.selectedTransactionIds.delete(id);
+                        await this.loadTransactionsData();
+                        this.requestAllChartAnimations();
+                        this.renderDashboard();
+                        showExpensicaNotice('Transaction deleted successfully');
+                        onDeleted?.();
+                    });
                 }
             }, 'Delete', this.plugin
         ).open();
@@ -1904,14 +1998,16 @@ export class ExpensicaDashboardView extends ItemView {
             this.app,
             'Delete Budget?',
             `Are you sure you want to delete the budget for ${categoryName}? This action cannot be undone.`,
-            async (confirmed) => {
+            (confirmed) => {
                 if (!confirmed) {
                     return;
                 }
 
-                await this.plugin.deleteBudget(id);
-                showExpensicaNotice('Budget deleted successfully');
-                onDeleted?.();
+                handleDashboardAsync('Delete budget', async () => {
+                    await this.plugin.deleteBudget(id);
+                    showExpensicaNotice('Budget deleted successfully');
+                    onDeleted?.();
+                });
             }, 'Delete', this.plugin
         ).open();
     }
@@ -1925,17 +2021,19 @@ export class ExpensicaDashboardView extends ItemView {
             this.app,
             'Delete Transactions?',
             `Are you sure you want to delete ${selectedTransactions.length} selected transactions? This action cannot be undone.`,
-            async (confirmed) => {
+            (confirmed) => {
                 if (!confirmed) {
                     return;
                 }
 
-                await this.plugin.deleteTransactions(selectedTransactions.map(transaction => transaction.id), this);
-                this.selectedTransactionIds.clear();
-                await this.loadTransactionsData();
-                this.requestAllChartAnimations();
-                this.renderDashboard();
-                showExpensicaNotice('Transactions deleted successfully');
+                handleDashboardAsync('Delete transactions', async () => {
+                    await this.plugin.deleteTransactions(selectedTransactions.map(transaction => transaction.id), this);
+                    this.selectedTransactionIds.clear();
+                    await this.loadTransactionsData();
+                    this.requestAllChartAnimations();
+                    this.renderDashboard();
+                    showExpensicaNotice('Transactions deleted successfully');
+                });
             }, 'Delete', this.plugin
         ).open();
     }
@@ -2112,7 +2210,7 @@ export class ExpensicaDashboardView extends ItemView {
         const container = this.containerEl.children[1] as HTMLElement | undefined;
         if (!container) return;
 
-        requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
             container.scrollTop = this.scrollTop;
         });
     }
@@ -2124,7 +2222,7 @@ export class ExpensicaDashboardView extends ItemView {
             return;
         }
 
-        requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
             const anchor = container.querySelector(selector) as HTMLElement | null;
             if (!anchor) {
                 this.pendingChartScrollAnchorSelector = null;
@@ -2168,7 +2266,7 @@ export class ExpensicaDashboardView extends ItemView {
         this.scrollTop = 0;
         if (!container) return;
 
-        requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
             container.scrollTop = 0;
         });
     }
@@ -2463,46 +2561,12 @@ export class ExpensicaDashboardView extends ItemView {
             // Enhanced empty state
             const emptyState = budgetList.createDiv('expensica-empty-budget-state');
             
-            // Create SVG icon using DOM methods
-            const svgIcon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-            svgIcon.setAttribute("width", "24");
-            svgIcon.setAttribute("height", "24");
-            svgIcon.setAttribute("viewBox", "0 0 24 24");
-            svgIcon.setAttribute("fill", "none");
-            svgIcon.setAttribute("stroke", "currentColor");
-            svgIcon.setAttribute("stroke-width", "1");
-            svgIcon.setAttribute("stroke-linecap", "round");
-            svgIcon.setAttribute("stroke-linejoin", "round");
-            
-            // Add SVG elements
-            const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-            rect.setAttribute("x", "2");
-            rect.setAttribute("y", "3");
-            rect.setAttribute("width", "20");
-            rect.setAttribute("height", "14");
-            rect.setAttribute("rx", "2");
-            rect.setAttribute("ry", "2");
-            svgIcon.appendChild(rect);
-            
-            const line1 = document.createElementNS("http://www.w3.org/2000/svg", "line");
-            line1.setAttribute("x1", "8");
-            line1.setAttribute("y1", "21");
-            line1.setAttribute("x2", "16");
-            line1.setAttribute("y2", "21");
-            svgIcon.appendChild(line1);
-            
-            const line2 = document.createElementNS("http://www.w3.org/2000/svg", "line");
-            line2.setAttribute("x1", "12");
-            line2.setAttribute("y1", "17");
-            line2.setAttribute("x2", "12");
-            line2.setAttribute("y2", "21");
-            svgIcon.appendChild(line2);
-            
-            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            path.setAttribute("d", "M6 8h.01M12 8h.01M18 8h.01");
-            svgIcon.appendChild(path);
-            
-            emptyState.appendChild(svgIcon);
+            createDashboardSvgIcon(emptyState, '24', '1', [
+                { tag: 'rect', attributes: { x: '2', y: '3', width: '20', height: '14', rx: '2', ry: '2' } },
+                { tag: 'line', attributes: { x1: '8', y1: '21', x2: '16', y2: '21' } },
+                { tag: 'line', attributes: { x1: '12', y1: '17', x2: '12', y2: '21' } },
+                { tag: 'path', attributes: { d: 'M6 8h.01M12 8h.01M18 8h.01' } }
+            ]);
             
             // Add heading
             const heading = emptyState.createEl('h3');
@@ -2587,7 +2651,7 @@ export class ExpensicaDashboardView extends ItemView {
 
             this.prepareChartCanvasSize(canvas);
 
-            setTimeout(() => {
+            window.setTimeout(() => {
                 this.createCategoryExpensesChart(canvas, null, categoryData);
             }, 50);
 
@@ -2655,14 +2719,8 @@ export class ExpensicaDashboardView extends ItemView {
             const budgetedCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-animate');
             const budgetedCardTitle = budgetedCard.createEl('h3', { cls: 'expensica-card-title' });
             
-            // Create emoji span
-            const budgetedEmojiSpan = document.createElement('span');
-            budgetedEmojiSpan.className = 'emoji';
-            budgetedEmojiSpan.textContent = '💰';
-            budgetedCardTitle.appendChild(budgetedEmojiSpan);
-            
-            // Add text node
-            budgetedCardTitle.appendChild(document.createTextNode(' Total Budgeted'));
+            budgetedCardTitle.createSpan({ text: '💰', cls: 'emoji' });
+            budgetedCardTitle.createSpan({ text: ' Total Budgeted' });
             budgetedCard.createEl('p', {
                 text: this.formatBudgetCurrency(0),
                 cls: 'expensica-card-value expensica-budget'
@@ -2672,14 +2730,8 @@ export class ExpensicaDashboardView extends ItemView {
             const spentCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-animate expensica-animate-delay-1');
             const spentCardTitle = spentCard.createEl('h3', { cls: 'expensica-card-title' });
             
-            // Create emoji span
-            const spentEmojiSpan = document.createElement('span');
-            spentEmojiSpan.className = 'emoji';
-            spentEmojiSpan.textContent = '💸';
-            spentCardTitle.appendChild(spentEmojiSpan);
-            
-            // Add text node
-            spentCardTitle.appendChild(document.createTextNode(' Total Spent'));
+            spentCardTitle.createSpan({ text: '💸', cls: 'emoji' });
+            spentCardTitle.createSpan({ text: ' Total Spent' });
             spentCard.createEl('p', {
                 text: this.formatBudgetCurrency(0),
                 cls: 'expensica-card-value expensica-expense'
@@ -2689,14 +2741,8 @@ export class ExpensicaDashboardView extends ItemView {
             const remainingCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-animate expensica-animate-delay-2');
             const remainingCardTitle = remainingCard.createEl('h3', { cls: 'expensica-card-title' });
             
-            // Create emoji span
-            const remainingEmojiSpan = document.createElement('span');
-            remainingEmojiSpan.className = 'emoji';
-            remainingEmojiSpan.textContent = '💵';
-            remainingCardTitle.appendChild(remainingEmojiSpan);
-            
-            // Add text node
-            remainingCardTitle.appendChild(document.createTextNode(' Remaining'));
+            remainingCardTitle.createSpan({ text: '💵', cls: 'emoji' });
+            remainingCardTitle.createSpan({ text: ' Remaining' });
             remainingCard.createEl('p', {
                 text: this.formatBudgetCurrency(0),
                 cls: 'expensica-card-value expensica-budget-remaining'
@@ -2718,7 +2764,8 @@ export class ExpensicaDashboardView extends ItemView {
         // Total budgeted card
         const budgetedCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-animate');
         const budgetedCardTitle = budgetedCard.createEl('h3', { cls: 'expensica-card-title' });
-        budgetedCardTitle.innerHTML = '<span class="emoji">💰</span> Total Budgeted';
+        budgetedCardTitle.createSpan({ text: '💰', cls: 'emoji' });
+        budgetedCardTitle.createSpan({ text: ' Total Budgeted' });
         budgetedCard.createEl('p', {
             text: this.formatBudgetCurrency(totalBudgeted),
             cls: 'expensica-card-value expensica-budget'
@@ -2728,14 +2775,8 @@ export class ExpensicaDashboardView extends ItemView {
         const spentCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-animate expensica-animate-delay-1');
         const spentCardTitle = spentCard.createEl('h3', { cls: 'expensica-card-title' });
         
-        // Create emoji span
-        const totalSpentEmojiSpan = document.createElement('span');
-        totalSpentEmojiSpan.className = 'emoji';
-        totalSpentEmojiSpan.textContent = '💸';
-        spentCardTitle.appendChild(totalSpentEmojiSpan);
-        
-        // Add text node
-        spentCardTitle.appendChild(document.createTextNode(' Total Spent'));
+        spentCardTitle.createSpan({ text: '💸', cls: 'emoji' });
+        spentCardTitle.createSpan({ text: ' Total Spent' });
         spentCard.createEl('p', {
             text: this.formatBudgetCurrency(totalSpent),
             cls: 'expensica-card-value expensica-expense'
@@ -2745,14 +2786,8 @@ export class ExpensicaDashboardView extends ItemView {
         const remainingCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-animate expensica-animate-delay-2');
         const remainingCardTitle = remainingCard.createEl('h3', { cls: 'expensica-card-title' });
         
-        // Create emoji span
-        const totalRemainingEmojiSpan = document.createElement('span');
-        totalRemainingEmojiSpan.className = 'emoji';
-        totalRemainingEmojiSpan.textContent = '💵';
-        remainingCardTitle.appendChild(totalRemainingEmojiSpan);
-        
-        // Add text node
-        remainingCardTitle.appendChild(document.createTextNode(' Remaining'));
+        remainingCardTitle.createSpan({ text: '💵', cls: 'emoji' });
+        remainingCardTitle.createSpan({ text: ' Remaining' });
         remainingCard.createEl('p', {
             text: this.formatBudgetCurrency(remainingAmount),
             cls: 'expensica-card-value expensica-budget-remaining'
@@ -2881,71 +2916,23 @@ export class ExpensicaDashboardView extends ItemView {
             cls: 'expensica-standard-button shadcn-btn shadcn-btn-primary',
         });
         
-        // Create SVG icon
-        const expenseSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        expenseSvg.setAttribute("width", "16");
-        expenseSvg.setAttribute("height", "16");
-        expenseSvg.setAttribute("viewBox", "0 0 24 24");
-        expenseSvg.setAttribute("fill", "none");
-        expenseSvg.setAttribute("stroke", "currentColor");
-        expenseSvg.setAttribute("stroke-width", "2");
-        expenseSvg.setAttribute("stroke-linecap", "round");
-        expenseSvg.setAttribute("stroke-linejoin", "round");
-        
-        // Add plus icon
-        const expenseVertLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        expenseVertLine.setAttribute("x1", "12");
-        expenseVertLine.setAttribute("y1", "5");
-        expenseVertLine.setAttribute("x2", "12");
-        expenseVertLine.setAttribute("y2", "19");
-        expenseSvg.appendChild(expenseVertLine);
-        
-        const expenseHorLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        expenseHorLine.setAttribute("x1", "5");
-        expenseHorLine.setAttribute("y1", "12");
-        expenseHorLine.setAttribute("x2", "19");
-        expenseHorLine.setAttribute("y2", "12");
-        expenseSvg.appendChild(expenseHorLine);
-        
-        addTransactionBtn.appendChild(expenseSvg);
-        addTransactionBtn.appendChild(document.createTextNode(" Transaction"));
+        createDashboardSvgIcon(addTransactionBtn, '16', '2', [
+            { tag: 'line', attributes: { x1: '12', y1: '5', x2: '12', y2: '19' } },
+            { tag: 'line', attributes: { x1: '5', y1: '12', x2: '19', y2: '12' } }
+        ]);
+        addTransactionBtn.createSpan({ text: ' Transaction' });
 
         // Add export button with shadcn design
         const exportBtn = actionsEl.createEl('button', {
             cls: 'expensica-standard-button shadcn-btn shadcn-btn-primary',
         });
         
-        // Create SVG icon
-        const exportSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        exportSvg.setAttribute("width", "16");
-        exportSvg.setAttribute("height", "16");
-        exportSvg.setAttribute("viewBox", "0 0 24 24");
-        exportSvg.setAttribute("fill", "none");
-        exportSvg.setAttribute("stroke", "currentColor");
-        exportSvg.setAttribute("stroke-width", "2");
-        exportSvg.setAttribute("stroke-linecap", "round");
-        exportSvg.setAttribute("stroke-linejoin", "round");
-        
-        // Add path
-        const exportPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        exportPath.setAttribute("d", "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4");
-        exportSvg.appendChild(exportPath);
-        
-        // Add polyline
-        const exportPolyline = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-        exportPolyline.setAttribute("points", "7 10 12 15 17 10");
-        exportSvg.appendChild(exportPolyline);
-        
-        // Add line
-        const exportLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        exportLine.setAttribute("x1", "12");
-        exportLine.setAttribute("y1", "15");
-        exportLine.setAttribute("x2", "12");
-        exportLine.setAttribute("y2", "3");
-        exportSvg.appendChild(exportLine);
-        
-        exportBtn.appendChild(exportSvg);
-        exportBtn.appendChild(document.createTextNode(" Export"));
+        createDashboardSvgIcon(exportBtn, '16', '2', [
+            { tag: 'path', attributes: { d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' } },
+            { tag: 'polyline', attributes: { points: '7 10 12 15 17 10' } },
+            { tag: 'line', attributes: { x1: '12', y1: '15', x2: '12', y2: '3' } }
+        ]);
+        exportBtn.createSpan({ text: ' Export' });
 
         const importBtn = actionsEl.createEl('button', {
             cls: 'expensica-standard-button shadcn-btn shadcn-btn-primary',
@@ -2978,50 +2965,12 @@ export class ExpensicaDashboardView extends ItemView {
         // Current selection display with calendar icon
         const currentSelection = dateRangeSelector.createDiv('expensica-standard-button shadcn-date-range-current');
         
-        // Calendar icon
-        const calendarSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        calendarSvg.setAttribute("width", "16");
-        calendarSvg.setAttribute("height", "16");
-        calendarSvg.setAttribute("viewBox", "0 0 24 24");
-        calendarSvg.setAttribute("fill", "none");
-        calendarSvg.setAttribute("stroke", "currentColor");
-        calendarSvg.setAttribute("stroke-width", "2");
-        calendarSvg.setAttribute("stroke-linecap", "round");
-        calendarSvg.setAttribute("stroke-linejoin", "round");
-        
-        // Calendar rectangle
-        const calendarRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-        calendarRect.setAttribute("x", "3");
-        calendarRect.setAttribute("y", "4");
-        calendarRect.setAttribute("width", "18");
-        calendarRect.setAttribute("height", "18");
-        calendarRect.setAttribute("rx", "2");
-        calendarRect.setAttribute("ry", "2");
-        calendarSvg.appendChild(calendarRect);
-        
-        // Calendar lines
-        const line1 = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        line1.setAttribute("x1", "16");
-        line1.setAttribute("y1", "2");
-        line1.setAttribute("x2", "16");
-        line1.setAttribute("y2", "6");
-        calendarSvg.appendChild(line1);
-        
-        const line2 = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        line2.setAttribute("x1", "8");
-        line2.setAttribute("y1", "2");
-        line2.setAttribute("x2", "8");
-        line2.setAttribute("y2", "6");
-        calendarSvg.appendChild(line2);
-        
-        const line3 = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        line3.setAttribute("x1", "3");
-        line3.setAttribute("y1", "10");
-        line3.setAttribute("x2", "21");
-        line3.setAttribute("y2", "10");
-        calendarSvg.appendChild(line3);
-        
-        currentSelection.appendChild(calendarSvg);
+        createDashboardSvgIcon(currentSelection, '16', '2', [
+            { tag: 'rect', attributes: { x: '3', y: '4', width: '18', height: '18', rx: '2', ry: '2' } },
+            { tag: 'line', attributes: { x1: '16', y1: '2', x2: '16', y2: '6' } },
+            { tag: 'line', attributes: { x1: '8', y1: '2', x2: '8', y2: '6' } },
+            { tag: 'line', attributes: { x1: '3', y1: '10', x2: '21', y2: '10' } }
+        ]);
         
         const dateRangeText = currentSelection.createSpan({ 
             text: this.dateRange.label,
@@ -3030,21 +2979,7 @@ export class ExpensicaDashboardView extends ItemView {
         
         // Chevron down icon
         const dropdownIcon = currentSelection.createSpan({ cls: 'shadcn-date-range-icon' });
-        const chevronSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        chevronSvg.setAttribute("width", "14");
-        chevronSvg.setAttribute("height", "14");
-        chevronSvg.setAttribute("viewBox", "0 0 24 24");
-        chevronSvg.setAttribute("fill", "none");
-        chevronSvg.setAttribute("stroke", "currentColor");
-        chevronSvg.setAttribute("stroke-width", "2");
-        chevronSvg.setAttribute("stroke-linecap", "round");
-        chevronSvg.setAttribute("stroke-linejoin", "round");
-        
-        const polyline = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-        polyline.setAttribute("points", "6 9 12 15 18 9");
-        chevronSvg.appendChild(polyline);
-        
-        dropdownIcon.appendChild(chevronSvg);
+        appendChevronIcon(dropdownIcon, '14');
 
         // Dropdown options container
         const optionsContainer = dateRangeSelector.createDiv('shadcn-date-range-options');
@@ -3063,13 +2998,15 @@ export class ExpensicaDashboardView extends ItemView {
             }
             
             // Handle option selection
-            optionItem.addEventListener('click', async () => {
-                await this.applyDateRangeSelection(option.type);
-                dateRangeText.textContent = this.dateRange.label;
-                
-                // Hide the dropdown and reset icon rotation
-                optionsContainer.addClass('shadcn-date-range-hidden');
-                dropdownIcon.classList.remove('dropdown-icon-open');
+            optionItem.addEventListener('click', () => {
+                handleDashboardAsync('Update date range', async () => {
+                    await this.applyDateRangeSelection(option.type);
+                    dateRangeText.textContent = this.dateRange.label;
+                    
+                    // Hide the dropdown and reset icon rotation
+                    optionsContainer.addClass('shadcn-date-range-hidden');
+                    dropdownIcon.classList.remove('dropdown-icon-open');
+                });
             });
         });
 
@@ -3158,8 +3095,10 @@ export class ExpensicaDashboardView extends ItemView {
                 cls: `expensica-chart-range-button${this.dateRange.type === option.type ? ' is-active' : ''}`
             });
             button.type = 'button';
-            button.addEventListener('click', async () => {
-                await this.applyDateRangeSelection(option.type, container);
+            button.addEventListener('click', () => {
+                handleDashboardAsync('Update date range', async () => {
+                    await this.applyDateRangeSelection(option.type, container);
+                });
             });
         });
     }
@@ -3190,12 +3129,13 @@ export class ExpensicaDashboardView extends ItemView {
         const incomeCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-overview-card-primary expensica-animate');
         this.linkSummaryCardToTransactions(incomeCard, 'View income transactions', { type: TransactionType.INCOME });
         const incomeCardTitle = incomeCard.createEl('h3', { cls: 'expensica-card-title' });
-        incomeCardTitle.innerHTML = '<span class="emoji">💰</span> Income';
+        incomeCardTitle.createSpan({ text: '💰', cls: 'emoji' });
+        incomeCardTitle.createSpan({ text: ' Income' });
         renderOverviewCurrencyValue(incomeCard, this.plugin.settings.defaultCurrency, totalIncome, 'expensica-income');
 
         if (comparison) {
             const trendEl = incomeCard.createEl('div', { cls: 'expensica-card-trend' });
-            trendEl.innerHTML = getTrendMarkup(incomeTrend, comparisonLabel, totalIncome >= prevTotalIncome);
+            renderTrend(trendEl, incomeTrend, comparisonLabel, totalIncome >= prevTotalIncome);
         }
 
 
@@ -3203,12 +3143,13 @@ export class ExpensicaDashboardView extends ItemView {
         const expensesCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-overview-card-primary expensica-animate expensica-animate-delay-1');
         this.linkSummaryCardToTransactions(expensesCard, 'View expense transactions', { type: TransactionType.EXPENSE });
         const expensesCardTitle = expensesCard.createEl('h3', { cls: 'expensica-card-title' });
-        expensesCardTitle.innerHTML = '<span class="emoji">💸</span> Expenses';
+        expensesCardTitle.createSpan({ text: '💸', cls: 'emoji' });
+        expensesCardTitle.createSpan({ text: ' Expenses' });
         renderOverviewCurrencyValue(expensesCard, this.plugin.settings.defaultCurrency, totalExpenses, 'expensica-expense');
 
         if (comparison) {
             const trendEl = expensesCard.createEl('div', { cls: 'expensica-card-trend' });
-            trendEl.innerHTML = getTrendMarkup(expenseTrend, comparisonLabel, totalExpenses <= prevTotalExpenses);
+            renderTrend(trendEl, expenseTrend, comparisonLabel, totalExpenses <= prevTotalExpenses);
         }
 
 
@@ -3216,12 +3157,13 @@ export class ExpensicaDashboardView extends ItemView {
         const netBalanceCard = summaryEl.createDiv('expensica-card expensica-overview-card expensica-overview-card-primary expensica-animate expensica-animate-delay-2');
         this.linkSummaryCardToTransactions(netBalanceCard, 'View all transactions', {});
         const netBalanceCardTitle = netBalanceCard.createEl('h3', { cls: 'expensica-card-title' });
-        netBalanceCardTitle.innerHTML = '<span class="emoji">⚖️</span> Net Balance';
+        netBalanceCardTitle.createSpan({ text: '⚖️', cls: 'emoji' });
+        netBalanceCardTitle.createSpan({ text: ' Net Balance' });
         renderOverviewCurrencyValue(netBalanceCard, this.plugin.settings.defaultCurrency, netBalance, 'expensica-balance');
 
         if (comparison) {
             const trendEl = netBalanceCard.createEl('div', { cls: 'expensica-card-trend' });
-            trendEl.innerHTML = getTrendMarkup(netBalanceTrend, comparisonLabel, netBalance >= prevNetBalance);
+            renderTrend(trendEl, netBalanceTrend, comparisonLabel, netBalance >= prevNetBalance);
         }
 
         const balanceAccounts = this.plugin.settings.enableAccounts
@@ -3251,23 +3193,27 @@ export class ExpensicaDashboardView extends ItemView {
             const balanceCard = summaryEl.createDiv(`expensica-card expensica-overview-card expensica-overview-card-balance expensica-animate expensica-animate-delay-${Math.min(3, index + 3)}`);
             this.linkSummaryCardToTransactions(balanceCard, `View ${account.name} transactions`, { accountReference });
             const balanceCardTitle = balanceCard.createEl('h3', { cls: 'expensica-card-title' });
-            balanceCardTitle.innerHTML = this.plugin.settings.enableAccounts
-                ? `<span class="emoji">${getAccountEmoji(account.type)}</span> ${account.name} Balance`
-                : '<span class="emoji">💵</span> Running Balance';
+            balanceCardTitle.createSpan({
+                text: this.plugin.settings.enableAccounts ? getAccountEmoji(account.type) : '💵',
+                cls: 'emoji'
+            });
+            balanceCardTitle.createSpan({
+                text: this.plugin.settings.enableAccounts ? ` ${account.name} Balance` : ' Running Balance'
+            });
             const balanceValue = renderOverviewCurrencyValue(
                 balanceCard,
                 this.plugin.settings.defaultCurrency,
                 accountBalance,
                 'expensica-balance'
             );
-            balanceValue.style.color = accountColor;
+            balanceValue.setCssStyles({ color: accountColor });
 
             if (comparison) {
                 const trendEl = balanceCard.createEl('div', { cls: 'expensica-card-trend' });
                 const isPositiveNews = account.type === AccountType.CREDIT
                     ? accountBalance <= prevAccountBalance
                     : accountBalance >= prevAccountBalance;
-                trendEl.innerHTML = getTrendMarkup(accountBalanceTrend, comparisonLabel, isPositiveNews);
+                renderTrend(trendEl, accountBalanceTrend, comparisonLabel, isPositiveNews);
             }
         });
 
@@ -3325,7 +3271,7 @@ export class ExpensicaDashboardView extends ItemView {
         const canvas = canvasContainer.createEl('canvas', { attr: { id: 'expenses-chart' }});
 
         // Create chart based on selected period
-        setTimeout(() => {
+        window.setTimeout(() => {
             this.updateCategoryChartLayout(container, chartLayout);
             this.createCategoryExpensesChart(canvas, legendContainer);
         }, 50);
@@ -3793,7 +3739,7 @@ export class ExpensicaDashboardView extends ItemView {
         }
 
         const canvas = canvasContainer.createEl('canvas', { attr: { id: 'cumulative-expenses-chart' } });
-        setTimeout(() => this.createCumulativeExpensesChart(canvas, legendContainer), 50);
+        window.setTimeout(() => this.createCumulativeExpensesChart(canvas, legendContainer), 50);
     }
 
     createCumulativeExpensesChart(canvas: HTMLCanvasElement, legendContainer: HTMLElement | null = null) {
@@ -4074,12 +4020,14 @@ export class ExpensicaDashboardView extends ItemView {
         legendItems: { label: string; color: string }[]
     ) {
         container.empty();
-        container.style.setProperty('--expensica-cumulative-legend-columns', String(Math.min(Math.max(legendItems.length, 1), 2)));
+        container.setCssProps({
+            '--expensica-cumulative-legend-columns': String(Math.min(Math.max(legendItems.length, 1), 2))
+        });
 
         legendItems.forEach((item) => {
             const legendItem = container.createDiv('expensica-cumulative-expenses-legend-item');
             const swatch = legendItem.createSpan('expensica-cumulative-expenses-legend-line');
-            swatch.style.backgroundColor = item.color;
+            swatch.setCssStyles({ backgroundColor: item.color });
 
             legendItem.createSpan({
                 text: item.label,
@@ -4218,7 +4166,7 @@ export class ExpensicaDashboardView extends ItemView {
             this.renderCategoryExpensesLegend(legendContainer, this.expensesChart, categoryData);
         }
 
-        requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
             this.updateDashboardChartGridLayout();
             this.syncChartsAfterCategoryLayoutChange();
         });
@@ -4246,7 +4194,7 @@ export class ExpensicaDashboardView extends ItemView {
 
         container.addClass('expensica-category-chip-grid');
         container.addClass('expensica-donut-category-legend');
-        container.style.setProperty('--expensica-category-chip-columns', String(columnCount));
+        container.setCssProps({ '--expensica-category-chip-columns': String(columnCount) });
 
         categoryData.forEach((category, index) => {
             const categoryName = category.name;
@@ -4255,12 +4203,12 @@ export class ExpensicaDashboardView extends ItemView {
                 cls: 'expensica-category-chip expensica-donut-legend-chip',
                 attr: { type: 'button' }
             });
-            legendItem.style.setProperty('--expensica-category-chip-color', category.color);
+            legendItem.setCssProps({ '--expensica-category-chip-color': category.color });
             legendItem.setAttribute('aria-label', `Toggle ${categoryName}`);
             legendItem.toggleClass('is-hidden', !chart.getDataVisibility(index));
 
             const swatch = legendItem.createSpan('expensica-category-chip-swatch');
-            swatch.style.backgroundColor = category.color;
+            swatch.setCssStyles({ backgroundColor: category.color });
 
             if (categoryEmoji) {
                 legendItem.createSpan({ text: categoryEmoji, cls: 'expensica-donut-legend-emoji' });
@@ -4648,7 +4596,7 @@ export class ExpensicaDashboardView extends ItemView {
         const canvas = canvasContainer.createEl('canvas', { attr: { id: 'income-expense-chart' }});
 
         // Create chart
-        setTimeout(() => {
+        window.setTimeout(() => {
             this.createIncomeExpenseChart(canvas, legendContainer);
         }, 50);
     }
@@ -5154,7 +5102,7 @@ export class ExpensicaDashboardView extends ItemView {
             cls: 'shadcn-date-range-text expensica-chart-type-text'
         });
         const dropdownIcon = chartTypeCurrent.createSpan({ cls: 'shadcn-date-range-icon expensica-chart-type-icon' });
-        dropdownIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+        appendChevronIcon(dropdownIcon, '14');
 
         const chartTypeMenu = chartTypeSelector.createDiv('shadcn-date-range-options expensica-chart-type-options shadcn-date-range-hidden');
         chartTypeOptions.forEach(option => {
@@ -5354,7 +5302,10 @@ export class ExpensicaDashboardView extends ItemView {
                 title: 'Clear selected transactions'
             }
         });
-        clearButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+        createDashboardSvgIcon(clearButton, '14', '2.4', [
+            { tag: 'line', attributes: { x1: '18', y1: '6', x2: '6', y2: '18' } },
+            { tag: 'line', attributes: { x1: '6', y1: '6', x2: '18', y2: '18' } }
+        ], true);
         clearButton.addEventListener('click', () => {
             this.selectedTransactionIds.clear();
             this.syncOverviewVisibleTransactionSelectionState();
@@ -5433,7 +5384,10 @@ export class ExpensicaDashboardView extends ItemView {
                 title: 'Rename selected transactions'
             }
         });
-        renameButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>';
+        createDashboardSvgIcon(renameButton, '14', '2.1', [
+            { tag: 'path', attributes: { d: 'M12 20h9' } },
+            { tag: 'path', attributes: { d: 'M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z' } }
+        ], true);
         renameButton.addEventListener('click', () => {
             new BulkRenameTransactionsModal(this.app, async (name) => {
                 await this.bulkRenameSelectedTransactions(name);
@@ -5448,7 +5402,12 @@ export class ExpensicaDashboardView extends ItemView {
                 title: 'Delete selected transactions'
             }
         });
-        deleteButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
+        createDashboardSvgIcon(deleteButton, '14', '2.2', [
+            { tag: 'polyline', attributes: { points: '3 6 5 6 21 6' } },
+            { tag: 'path', attributes: { d: 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2' } },
+            { tag: 'line', attributes: { x1: '10', y1: '11', x2: '10', y2: '17' } },
+            { tag: 'line', attributes: { x1: '14', y1: '11', x2: '14', y2: '17' } }
+        ], true);
         deleteButton.addEventListener('click', () => {
             void this.deleteSelectedTransactions(selectedTransactions);
         });
@@ -5516,7 +5475,12 @@ export class ExpensicaDashboardView extends ItemView {
 
         if (level === 'day') {
             const iconEl = titleEl.createSpan('expensica-transaction-group-title-icon');
-            iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
+            createDashboardSvgIcon(iconEl, '12', '2', [
+                { tag: 'rect', attributes: { x: '3', y: '4', width: '18', height: '18', rx: '2', ry: '2' } },
+                { tag: 'line', attributes: { x1: '16', y1: '2', x2: '16', y2: '6' } },
+                { tag: 'line', attributes: { x1: '8', y1: '2', x2: '8', y2: '6' } },
+                { tag: 'line', attributes: { x1: '3', y1: '10', x2: '21', y2: '10' } }
+            ]);
         }
 
         titleEl.createSpan({
@@ -5680,11 +5644,10 @@ export class ExpensicaDashboardView extends ItemView {
     }
 
     resolveCssColor(color: string, fallback: string): string {
-        const probe = document.createElement('span');
-        probe.style.color = fallback;
-        probe.style.color = color;
-        probe.style.display = 'none';
-        document.body.appendChild(probe);
+        const probe = document.body.createSpan();
+        probe.setCssStyles({ color: fallback });
+        probe.setCssStyles({ color });
+        probe.setCssStyles({ display: 'none' });
         const resolvedColor = getComputedStyle(probe).color;
         probe.remove();
         return resolvedColor && resolvedColor !== 'rgba(0, 0, 0, 0)' ? resolvedColor : fallback;
@@ -5811,9 +5774,14 @@ export class ExpensicaDashboardView extends ItemView {
 export class DateRangePickerModal extends Modal {
     startDate: Date;
     endDate: Date;
-    onConfirm: (startDate: Date, endDate: Date) => void;
+    onConfirm: (startDate: Date, endDate: Date) => void | Promise<void>;
 
-    constructor(app: App, startDate: Date, endDate: Date, onConfirm: (startDate: Date, endDate: Date) => void) {
+    constructor(
+        app: App,
+        startDate: Date,
+        endDate: Date,
+        onConfirm: (startDate: Date, endDate: Date) => void | Promise<void>
+    ) {
         super(app);
         this.startDate = startDate;
         this.endDate = endDate;
@@ -5828,7 +5796,8 @@ export class DateRangePickerModal extends Modal {
         
         // Modal title
         const modalTitle = contentEl.createEl('h2', { cls: 'expensica-modal-title' });
-        modalTitle.innerHTML = '<span class="expensica-modal-title-icon">📅</span> Custom Date Range';
+        modalTitle.createSpan({ text: '📅', cls: 'expensica-modal-title-icon' });
+        modalTitle.createSpan({ text: ' Custom Date Range' });
         
         // Create form container
         const form = contentEl.createDiv('expensica-form');
@@ -5907,7 +5876,9 @@ export class DateRangePickerModal extends Modal {
                     return;
                 }
                 
-                this.onConfirm(start, end);
+                handleDashboardAsync('Apply custom date range', async () => {
+                    await this.onConfirm(start, end);
+                });
                 this.close();
             } else {
                 showExpensicaNotice('Please select both start and end dates');
@@ -5972,7 +5943,8 @@ export class TransactionModal extends Modal {
         contentEl.addClass('expensica-modal');
 
         const modalTitle = contentEl.createEl('h2', { cls: 'expensica-modal-title' });
-        modalTitle.innerHTML = `<span class="expensica-modal-title-icon">${this.getModalIcon()}</span> ${this.getTitle()}`;
+        modalTitle.createSpan({ text: this.getModalIcon(), cls: 'expensica-modal-title-icon' });
+        modalTitle.createSpan({ text: ` ${this.getTitle()}` });
 
         const form = contentEl.createEl('form', {
             cls: 'expensica-form',
@@ -6091,7 +6063,7 @@ export class TransactionModal extends Modal {
         });
         const typeDisplayText = typeDisplay.createSpan('expensica-select-display-text');
         const typeDropdownIcon = typeDisplay.createSpan('expensica-select-arrow');
-        typeDropdownIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+        appendChevronIcon(typeDropdownIcon, '16');
         const typeOptionsMenu = typeSelectContainer.createDiv('expensica-select-options expensica-select-hidden');
         const updateTypeSelection = (type: TransactionType) => {
             const option = typeOptions.find(item => item.value === type);
@@ -6280,7 +6252,7 @@ export class TransactionModal extends Modal {
         });
         const categoryDisplayText = categoryDisplay.createSpan('expensica-select-display-text');
         const dropdownIcon = categoryDisplay.createSpan('expensica-select-arrow');
-        dropdownIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+        appendChevronIcon(dropdownIcon, '16');
 
         // Check if we need to show a warning about deleted category
         let categoryWarning: HTMLDivElement | null = null;
@@ -6312,7 +6284,12 @@ export class TransactionModal extends Modal {
 
             selectedCategoryId = category.id;
             hiddenCategorySelect.value = category.id;
-            categoryDisplayText.innerHTML = `<span class="expensica-category-emoji">${this.plugin.getCategoryEmoji(category.id)}</span> ${category.name}`;
+            categoryDisplayText.empty();
+            categoryDisplayText.createSpan({
+                text: this.plugin.getCategoryEmoji(category.id),
+                cls: 'expensica-category-emoji'
+            });
+            categoryDisplayText.createSpan({ text: ` ${category.name}` });
 
             if (categoryWarning) {
                 categoryWarning.remove();
@@ -6332,7 +6309,12 @@ export class TransactionModal extends Modal {
                     attr: { value: INTERNAL_CATEGORY_ID }
                 });
                 hiddenCategorySelect.value = INTERNAL_CATEGORY_ID;
-                categoryDisplayText.innerHTML = `<span class="expensica-category-emoji">${selectedCategoryEmoji}</span> ${selectedCategoryLabel}`;
+                categoryDisplayText.empty();
+                categoryDisplayText.createSpan({
+                    text: selectedCategoryEmoji,
+                    cls: 'expensica-category-emoji'
+                });
+                categoryDisplayText.createSpan({ text: ` ${selectedCategoryLabel}` });
                 return;
             }
 
@@ -6386,14 +6368,15 @@ export class TransactionModal extends Modal {
             }
             closeModalSelectMenus();
             if (categoryMenuOpen) {
-                const syntheticOutsideTarget = document.createElement('div');
-                syntheticOutsideTarget.style.position = 'fixed';
-                syntheticOutsideTarget.style.left = '0';
-                syntheticOutsideTarget.style.top = '0';
-                syntheticOutsideTarget.style.width = '1px';
-                syntheticOutsideTarget.style.height = '1px';
-                syntheticOutsideTarget.style.pointerEvents = 'none';
-                document.body.appendChild(syntheticOutsideTarget);
+                const syntheticOutsideTarget = document.body.createDiv();
+                syntheticOutsideTarget.setCssStyles({
+                    position: 'fixed',
+                    left: '0',
+                    top: '0',
+                    width: '1px',
+                    height: '1px',
+                    pointerEvents: 'none'
+                });
                 syntheticOutsideTarget.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
                 syntheticOutsideTarget.remove();
                 syncCategoryMenuState();
@@ -6418,7 +6401,7 @@ export class TransactionModal extends Modal {
             }, hiddenCategorySelect.value || undefined);
             window.setTimeout(() => {
                 syncCategoryMenuState();
-                (document.querySelector('.expensica-category-quick-menu-search-input') as HTMLInputElement | null)?.focus();
+                document.querySelector<HTMLInputElement>('.expensica-category-quick-menu-search-input')?.focus();
             }, 0);
         });
 
@@ -6453,7 +6436,7 @@ export class TransactionModal extends Modal {
             });
             const accountDisplayText = accountDisplay.createSpan('expensica-select-display-text');
             const accountDropdownIcon = accountDisplay.createSpan('expensica-select-arrow');
-            accountDropdownIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+            appendChevronIcon(accountDropdownIcon, '16');
             const accountOptionsMenu = accountSelectContainer.createDiv('expensica-select-options expensica-select-hidden');
 
             const accountOptions = [...this.plugin.getAccounts()];
@@ -6472,11 +6455,13 @@ export class TransactionModal extends Modal {
                 const parsedAccount = parseAccountReference(accountReference);
                 selectedAccountReference = formatAccountReference(parsedAccount.type, parsedAccount.name);
                 accountSelect.value = selectedAccountReference;
-                accountDisplayText.innerHTML = `${getCreditCardSvgMarkup()} ${parsedAccount.name} · ${getAccountTypeLabel(parsedAccount.type)}`;
+                accountDisplayText.empty();
+                appendCreditCardIcon(accountDisplayText);
+                accountDisplayText.createSpan({ text: ` ${parsedAccount.name} · ${getAccountTypeLabel(parsedAccount.type)}` });
                 const account = accountOptions.find(option =>
                     formatAccountReference(option.type, option.name) === selectedAccountReference
                 );
-                accountDisplayText.style.color = account ? getAccountColor(account, availableAccounts) : '';
+                accountDisplayText.setCssStyles({ color: account ? getAccountColor(account, availableAccounts) : '' });
                 accountOptionsMenu.querySelectorAll('.expensica-select-option').forEach(option => {
                     option.removeClass('expensica-option-selected');
                 });
@@ -6493,8 +6478,9 @@ export class TransactionModal extends Modal {
 
                 const optionEl = accountOptionsMenu.createEl('div', { cls: 'expensica-select-option' });
                 optionEl.setAttribute('data-account-reference', accountReference);
-                optionEl.innerHTML = `${getCreditCardSvgMarkup()} ${account.name} · ${getAccountTypeLabel(account.type)}`;
-                optionEl.style.color = getAccountColor(account, availableAccounts);
+                appendCreditCardIcon(optionEl);
+                optionEl.createSpan({ text: ` ${account.name} · ${getAccountTypeLabel(account.type)}` });
+                optionEl.setCssStyles({ color: getAccountColor(account, availableAccounts) });
                 optionEl.addEventListener('click', (event) => {
                     event.preventDefault();
                     event.stopPropagation();
@@ -6548,7 +6534,7 @@ export class TransactionModal extends Modal {
                 });
                 const displayText = display.createSpan('expensica-select-display-text');
                 const displayArrow = display.createSpan('expensica-select-arrow');
-                displayArrow.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+                appendChevronIcon(displayArrow, '16');
                 const optionsMenu = selectContainer.createDiv('expensica-select-options expensica-select-hidden');
                 accountOptions.forEach(account => {
                     select.createEl('option', {
@@ -6558,8 +6544,9 @@ export class TransactionModal extends Modal {
                     const reference = formatAccountReference(account.type, account.name);
                     const optionEl = optionsMenu.createEl('div', { cls: 'expensica-select-option' });
                     optionEl.setAttribute(`data-${id}-reference`, reference);
-                    optionEl.innerHTML = `${getCreditCardSvgMarkup()} ${account.name} · ${getAccountTypeLabel(account.type)}`;
-                    optionEl.style.color = getAccountColor(account, availableAccounts);
+                    appendCreditCardIcon(optionEl);
+                    optionEl.createSpan({ text: ` ${account.name} · ${getAccountTypeLabel(account.type)}` });
+                    optionEl.setCssStyles({ color: getAccountColor(account, availableAccounts) });
                     optionEl.addEventListener('click', (event) => {
                         event.preventDefault();
                         event.stopPropagation();
@@ -6570,11 +6557,13 @@ export class TransactionModal extends Modal {
                 const updateSelection = (reference: string) => {
                     select.value = reference;
                     const parsedAccount = parseAccountReference(reference);
-                    displayText.innerHTML = `${getCreditCardSvgMarkup()} ${parsedAccount.name} · ${getAccountTypeLabel(parsedAccount.type)}`;
+                    displayText.empty();
+                    appendCreditCardIcon(displayText);
+                    displayText.createSpan({ text: ` ${parsedAccount.name} · ${getAccountTypeLabel(parsedAccount.type)}` });
                     const account = accountOptions.find(option =>
                         formatAccountReference(option.type, option.name) === reference
                     );
-                    displayText.style.color = account ? getAccountColor(account, availableAccounts) : '';
+                    displayText.setCssStyles({ color: account ? getAccountColor(account, availableAccounts) : '' });
                     optionsMenu.querySelectorAll('.expensica-select-option').forEach(option => option.removeClass('expensica-option-selected'));
                     optionsMenu.querySelector(`[data-${id}-reference="${reference}"]`)?.addClass('expensica-option-selected');
                     optionsMenu.addClass('expensica-select-hidden');
@@ -6640,15 +6629,15 @@ export class TransactionModal extends Modal {
             const isInternalType = selectedTransactionType === TransactionType.INTERNAL;
             const isInternal = isInternalType && canUseInternalTransactions;
             if (fromAccountGroup) {
-                fromAccountGroup.style.display = isInternal ? '' : 'none';
+                fromAccountGroup.setCssStyles({ display: isInternal ? '' : 'none' });
             }
             if (toAccountGroup) {
-                toAccountGroup.style.display = isInternal ? '' : 'none';
+                toAccountGroup.setCssStyles({ display: isInternal ? '' : 'none' });
             }
             if (accountGroup) {
-                accountGroup.style.display = isInternal ? 'none' : '';
+                accountGroup.setCssStyles({ display: isInternal ? 'none' : '' });
             }
-            categoryGroup.style.display = isInternal && !isLockedInternalTransaction ? 'none' : '';
+            categoryGroup.setCssStyles({ display: isInternal && !isLockedInternalTransaction ? 'none' : '' });
             categoryDisplay.disabled = isInternalType;
             hiddenCategorySelect.required = !isInternalType;
             if (hiddenAccountSelect) {
@@ -6742,7 +6731,7 @@ export class TransactionModal extends Modal {
         let saving = false;
         form.addEventListener('submit', (e) => {
             e.preventDefault();
-            return this.plugin.runSaveOperation(this, this.transaction ? 'Edit transaction' : 'Add transaction', async () => {
+            void this.plugin.runSaveOperation(this, this.transaction ? 'Edit transaction' : 'Add transaction', async () => {
                 if (!form.reportValidity()) return false;
                 if (saving) return false;
                 saving = true;
@@ -6795,7 +6784,7 @@ export class TransactionModal extends Modal {
                         }
                     }
 
-                    const formData = new FormData(e.target as HTMLFormElement);
+                    const formData = new FormData(form);
                     const submittedTimeValue = formData.get('time') as string | null;
                     const submittedDisplayTime = submittedTimeValue || '';
                     const submittedTime = this.transaction && submittedDisplayTime === getTransactionFormTime(this.transaction)
@@ -6974,7 +6963,8 @@ export class AccountModal extends Modal {
         contentEl.addClass('expensica-account-editor-modal');
 
         const modalTitle = contentEl.createEl('h2', { cls: 'expensica-modal-title' });
-        modalTitle.innerHTML = '<span class="expensica-modal-title-icon">🏦</span> Create new account';
+        modalTitle.createSpan({ text: '🏦', cls: 'expensica-modal-title-icon' });
+        modalTitle.createSpan({ text: ' Create new account' });
 
         const form = contentEl.createEl('form', { cls: 'expensica-form' });
 
@@ -7061,7 +7051,7 @@ export class AccountModal extends Modal {
 
         form.addEventListener('submit', (event) => {
             event.preventDefault();
-            return this.plugin.runSaveOperation(this, 'Add account', async () => {
+            void this.plugin.runSaveOperation(this, 'Add account', async () => {
                 if (!form.reportValidity()) return false;
 
                 if (saveAccountButton.disabled) return false;
@@ -7104,10 +7094,6 @@ export class AccountModal extends Modal {
         this.plugin.releaseSaveOperation(this);
         this.contentEl.empty();
     }
-}
-
-function getCreditCardSvgMarkup(): string {
-    return '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>';
 }
 
 function getAccountTypeOptions(): Array<{ value: AccountType; label: string }> {
@@ -7240,27 +7226,29 @@ export class AccountEditorModal extends Modal {
             optionsMenu.removeClass('expensica-select-hidden');
         }
 
-        optionsMenu.style.visibility = 'hidden';
-        optionsMenu.style.pointerEvents = 'none';
+        optionsMenu.setCssStyles({ visibility: 'hidden', pointerEvents: 'none' });
 
         const dropdownHeight = optionsMenu.scrollHeight;
         const baseHeight = contentEl.scrollHeight - dropdownHeight;
         const measuredHeight = baseHeight + dropdownHeight;
         const measuredValue = `${measuredHeight}px`;
 
-        contentEl.style.setProperty('--expensica-account-editor-measured-height', measuredValue);
-        contentEl.style.minHeight = measuredValue;
-        modalContent?.style.setProperty('--expensica-account-editor-measured-height', measuredValue);
+        contentEl.setCssProps({ '--expensica-account-editor-measured-height': measuredValue });
+        contentEl.setCssStyles({ minHeight: measuredValue });
+        modalContent?.setCssProps({ '--expensica-account-editor-measured-height': measuredValue });
         if (modalContent) {
-            modalContent.style.minHeight = measuredValue;
-            modalContent.style.maxHeight = 'none';
-            modalContent.style.overflow = 'visible';
+            modalContent.setCssStyles({
+                minHeight: measuredValue,
+                maxHeight: 'none',
+                overflow: 'visible'
+            });
         }
-        this.modalEl.style.minHeight = measuredValue;
-        this.modalEl.style.maxHeight = 'none';
+        this.modalEl.setCssStyles({ minHeight: measuredValue, maxHeight: 'none' });
 
-        optionsMenu.style.visibility = previousVisibility;
-        optionsMenu.style.pointerEvents = previousPointerEvents;
+        optionsMenu.setCssStyles({
+            visibility: previousVisibility,
+            pointerEvents: previousPointerEvents
+        });
 
         if (wasHidden) {
             optionsMenu.addClass('expensica-select-hidden');
@@ -7282,7 +7270,11 @@ export class AccountEditorModal extends Modal {
         const modalLabel = this.account
             ? `Edit ${getAccountTypeLabel(this.account.type)} Account`
             : 'Create New Account';
-        modalTitle.innerHTML = `<span class="expensica-modal-title-icon">${getAccountEmoji(this.account?.type || AccountType.CHEQUING)}</span> ${modalLabel}`;
+        modalTitle.createSpan({
+            text: getAccountEmoji(this.account?.type || AccountType.CHEQUING),
+            cls: 'expensica-modal-title-icon'
+        });
+        modalTitle.createSpan({ text: ` ${modalLabel}` });
 
         const form = contentEl.createEl('form', { cls: 'expensica-form' });
 
@@ -7305,11 +7297,11 @@ export class AccountEditorModal extends Modal {
                 'aria-label': 'Choose color'
             }
         });
-        colorButton.style.setProperty('--expensica-category-button-color', selectedColor);
+        colorButton.setCssProps({ '--expensica-category-button-color': selectedColor });
         colorButton.addEventListener('click', () => {
             new CategoryColorPaletteModal(this.app, selectedColor, (color) => {
                 selectedColor = normalizePaletteColor(color) || selectedColor;
-                colorButton.style.setProperty('--expensica-category-button-color', selectedColor);
+                colorButton.setCssProps({ '--expensica-category-button-color': selectedColor });
             }).open();
         });
 
@@ -7349,7 +7341,7 @@ export class AccountEditorModal extends Modal {
         });
         const typeDisplayText = typeDisplay.createSpan('expensica-select-display-text');
         const typeDisplayArrow = typeDisplay.createSpan('expensica-select-arrow');
-        typeDisplayArrow.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+        appendChevronIcon(typeDisplayArrow, '16');
         const typeOptionsMenu = typeSelectContainer.createDiv('expensica-select-options expensica-select-hidden');
 
         const creditLimitSlot = form.createDiv('expensica-credit-limit-slot');
@@ -7397,7 +7389,9 @@ export class AccountEditorModal extends Modal {
 
         const updateTypeSelection = (type: AccountType) => {
             hiddenTypeSelect.value = type;
-            typeDisplayText.innerHTML = `${getCreditCardSvgMarkup()} ${getAccountTypeLabel(type)}`;
+            typeDisplayText.empty();
+            appendCreditCardIcon(typeDisplayText);
+            typeDisplayText.createSpan({ text: ` ${getAccountTypeLabel(type)}` });
             typeOptionsMenu.querySelectorAll('.expensica-select-option').forEach(option => {
                 option.removeClass('expensica-option-selected');
             });
@@ -7413,7 +7407,8 @@ export class AccountEditorModal extends Modal {
             });
             const optionEl = typeOptionsMenu.createEl('div', { cls: 'expensica-select-option' });
             optionEl.setAttribute('data-account-type', option.value);
-            optionEl.innerHTML = `${getCreditCardSvgMarkup()} ${option.label}`;
+            appendCreditCardIcon(optionEl);
+            optionEl.createSpan({ text: ` ${option.label}` });
             optionEl.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -7477,16 +7472,18 @@ export class AccountEditorModal extends Modal {
                 this.app,
                 'Delete Account?',
                 `Are you sure you want to delete this ${getAccountTypeLabel(this.account.type).toLowerCase()} account? This action cannot be undone.`,
-                async (confirmed) => {
+                (confirmed) => {
                     if (!confirmed) {
                         return;
                     }
 
-                    await this.plugin.deleteAccount(accountReference, this.dashboardView);
-                    await this.dashboardView?.loadTransactionsData();
-                    this.dashboardView?.requestAllChartAnimations();
-                    this.dashboardView?.renderDashboard();
-                    this.close();
+                    handleDashboardAsync('Delete account', async () => {
+                        await this.plugin.deleteAccount(accountReference, this.dashboardView);
+                        await this.dashboardView?.loadTransactionsData();
+                        this.dashboardView?.requestAllChartAnimations();
+                        this.dashboardView?.renderDashboard();
+                        this.close();
+                    });
                 }, 'Delete', this.plugin
             ).open();
         });
@@ -7523,12 +7520,12 @@ export class AccountEditorModal extends Modal {
                     || (this.account.creditLimit || 0) !== (nextAccount.creditLimit || 0)
                 )
             ) {
-                new AccountUpdateWarningModal(this.app, async (confirmed) => {
+                new AccountUpdateWarningModal(this.app, (confirmed) => {
                     if (!confirmed) {
                         return;
                     }
 
-                    await this.plugin.runSaveOperation(this, 'Edit account', () => submitAccount(event, true));
+                    void this.plugin.runSaveOperation(this, 'Edit account', () => submitAccount(event, true));
                 }).open();
                 return false;
             }
@@ -7537,7 +7534,7 @@ export class AccountEditorModal extends Modal {
         };
         form.addEventListener('submit', (event) => {
             event.preventDefault();
-            return this.plugin.runSaveOperation(this, this.account ? 'Edit account' : 'Add account', () => submitAccount(event));
+            void this.plugin.runSaveOperation(this, this.account ? 'Edit account' : 'Add account', () => submitAccount(event));
         });
     }
 
@@ -7580,9 +7577,12 @@ class CategoryModal extends Modal {
         };
 
         const modalTitle = contentEl.createEl('h2', { cls: 'expensica-modal-title' });
-        modalTitle.innerHTML = `<span class="expensica-modal-title-icon">🏷️</span> ${this.category
-            ? 'Edit Category'
-            : (draftCategory.type === CategoryType.INCOME ? 'New Income Category' : 'New Expenses Category')}`;
+        modalTitle.createSpan({ text: '🏷️', cls: 'expensica-modal-title-icon' });
+        modalTitle.createSpan({
+            text: ` ${this.category
+                ? 'Edit Category'
+                : (draftCategory.type === CategoryType.INCOME ? 'New Income Category' : 'New Expenses Category')}`
+        });
 
         const form = contentEl.createEl('form', { cls: 'expensica-form' });
         const nameGroup = form.createDiv('expensica-form-group');
@@ -7605,11 +7605,11 @@ class CategoryModal extends Modal {
                 'aria-label': 'Choose color'
             }
         });
-        colorButton.style.setProperty('--expensica-category-button-color', selectedColor);
+        colorButton.setCssProps({ '--expensica-category-button-color': selectedColor });
         colorButton.addEventListener('click', () => {
             new CategoryColorPaletteModal(this.app, selectedColor, (color) => {
                 selectedColor = this.normalizeColorInputValue(color);
-                colorButton.style.setProperty('--expensica-category-button-color', selectedColor);
+                colorButton.setCssProps({ '--expensica-category-button-color': selectedColor });
             }).open();
         });
 
@@ -7668,56 +7668,61 @@ class CategoryModal extends Modal {
             this.close();
         });
 
-        deleteBtn?.addEventListener('click', async () => {
+        deleteBtn?.addEventListener('click', () => {
             if (!this.category) {
                 return;
             }
 
-            const deleted = await this.plugin.deleteCategory(this.category.id);
-            if (deleted) {
-                this.dashboardView.renderDashboard();
-                this.close();
-            }
+            const categoryId = this.category.id;
+            handleDashboardAsync('Delete category', async () => {
+                const deleted = await this.plugin.deleteCategory(categoryId);
+                if (deleted) {
+                    this.dashboardView.renderDashboard();
+                    this.close();
+                }
+            });
         });
 
-        form.addEventListener('submit', async (event) => {
+        form.addEventListener('submit', (event) => {
             event.preventDefault();
 
-            const nextName = this.plugin.normalizeCategoryName(nameInput.value.trim()).name;
-            const nextEmoji = selectedEmoji || (this.category ? this.plugin.getCategoryEmoji(this.category.id) : this.plugin.getCategoryEmoji('other_expense'));
-            const nextColor = selectedColor;
+            handleDashboardAsync('Save category', async () => {
+                const nextName = this.plugin.normalizeCategoryName(nameInput.value.trim()).name;
+                const nextEmoji = selectedEmoji || (this.category ? this.plugin.getCategoryEmoji(this.category.id) : this.plugin.getCategoryEmoji('other_expense'));
+                const nextColor = selectedColor;
 
-            if (!nextName) {
-                showExpensicaNotice('Category name is required.');
-                return;
-            }
+                if (!nextName) {
+                    showExpensicaNotice('Category name is required.');
+                    return;
+                }
 
-            const duplicate = this.plugin.getCategories(draftCategory.type).find(candidate =>
-                candidate.id !== draftCategory.id
-                && this.plugin.normalizeCategoryName(candidate.name).name.toLowerCase() === nextName.toLowerCase()
-            );
-            if (duplicate) {
-                showExpensicaNotice(`Category "${nextName}" already exists.`);
-                return;
-            }
+                const duplicate = this.plugin.getCategories(draftCategory.type).find(candidate =>
+                    candidate.id !== draftCategory.id
+                    && this.plugin.normalizeCategoryName(candidate.name).name.toLowerCase() === nextName.toLowerCase()
+                );
+                if (duplicate) {
+                    showExpensicaNotice(`Category "${nextName}" already exists.`);
+                    return;
+                }
 
-            if (this.category) {
-                await this.plugin.updateCategory({
-                    ...this.category,
-                    name: nextName
-                });
-                await this.plugin.updateCategoryEmoji(this.category.id, nextEmoji);
-                await this.plugin.updateCategoryColor(this.category.id, nextColor);
-            } else {
-                await this.plugin.addCategory({
-                    ...draftCategory,
-                    name: nextName
-                });
-                await this.plugin.updateCategoryEmoji(draftCategory.id, nextEmoji);
-                await this.plugin.updateCategoryColor(draftCategory.id, nextColor);
-            }
-            this.dashboardView.renderDashboard();
-            this.close();
+                if (this.category) {
+                    await this.plugin.updateCategory({
+                        ...this.category,
+                        name: nextName
+                    });
+                    await this.plugin.updateCategoryEmoji(this.category.id, nextEmoji);
+                    await this.plugin.updateCategoryColor(this.category.id, nextColor);
+                } else {
+                    await this.plugin.addCategory({
+                        ...draftCategory,
+                        name: nextName
+                    });
+                    await this.plugin.updateCategoryEmoji(draftCategory.id, nextEmoji);
+                    await this.plugin.updateCategoryColor(draftCategory.id, nextColor);
+                }
+                this.dashboardView.renderDashboard();
+                this.close();
+            });
         });
     }
 
@@ -7735,9 +7740,8 @@ class CategoryModal extends Modal {
             return `#${color.slice(1).split('').map(char => `${char}${char}`).join('')}`;
         }
 
-        const probe = document.createElement('div');
-        probe.style.color = color;
-        document.body.appendChild(probe);
+        const probe = document.body.createDiv();
+        probe.setCssStyles({ color });
         const computed = getComputedStyle(probe).color;
         probe.remove();
 
@@ -7776,7 +7780,7 @@ class CategoryColorPaletteModal extends Modal {
                     'aria-label': `Select color ${normalizedColor}`
                 }
             });
-            swatch.style.backgroundColor = normalizedColor;
+            swatch.setCssStyles({ backgroundColor: normalizedColor });
             if (normalizedColor.toLowerCase() === this.currentColor.toLowerCase()) {
                 swatch.addClass('is-selected');
             }
@@ -7843,7 +7847,8 @@ class BudgetModal extends Modal {
 
         // Add title with icon
         const modalTitle = contentEl.createEl('h2', { cls: 'expensica-modal-title' });
-        modalTitle.innerHTML = `<span class="expensica-modal-title-icon">📊</span> ${this.budget ? 'Edit Budget' : 'Add Budget'}`;
+        modalTitle.createSpan({ text: '📊', cls: 'expensica-modal-title-icon' });
+        modalTitle.createSpan({ text: ` ${this.budget ? 'Edit Budget' : 'Add Budget'}` });
 
         // Create form
         const form = contentEl.createEl('form', { cls: 'expensica-form' });
@@ -7907,7 +7912,7 @@ class BudgetModal extends Modal {
         let saving = false;
         form.addEventListener('submit', (e) => {
             e.preventDefault();
-            return this.plugin.runSaveOperation(this, this.budget ? 'Edit budget' : 'Add budget', async () => {
+            void this.plugin.runSaveOperation(this, this.budget ? 'Edit budget' : 'Add budget', async () => {
                 if (!form.reportValidity()) return false;
                 if (this.isRollover && this.needsRolloverStart() && !this.rolloverStartInput?.value) {
                     this.rolloverStartButton?.click();
@@ -7993,7 +7998,7 @@ class BudgetModal extends Modal {
         
         // Create arrow icon
         const arrowIcon = this.categoryDisplay.createDiv('expensica-select-arrow');
-        arrowIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+        appendChevronIcon(arrowIcon, '18');
         
         // Create options container
         this.categoryOptions = customSelectContainer.createDiv('expensica-select-options expensica-select-hidden');
@@ -8019,12 +8024,17 @@ class BudgetModal extends Modal {
             
             // Create visual option using a different approach
             if (this.categoryOptions) {
-                const optionEl = document.createElement('div');
-                optionEl.className = 'expensica-select-option ' + 
-                    (this.selectedCategoryId === category.id ? 'expensica-option-selected ' : '') + 
-                    (isDisabled ? 'expensica-option-disabled' : '');
-                optionEl.innerHTML = `<span class="expensica-category-emoji">${this.plugin.getCategoryEmoji(category.id)}</span> ${category.name} ${isDisabled ? '<span class="expensica-option-note">(already budgeted)</span>' : ''}`;
-                this.categoryOptions.appendChild(optionEl);
+                const optionEl = this.categoryOptions.createDiv(
+                    `expensica-select-option${this.selectedCategoryId === category.id ? ' expensica-option-selected' : ''}${isDisabled ? ' expensica-option-disabled' : ''}`
+                );
+                optionEl.createSpan({
+                    text: this.plugin.getCategoryEmoji(category.id),
+                    cls: 'expensica-category-emoji'
+                });
+                optionEl.createSpan({ text: ` ${category.name}` });
+                if (isDisabled) {
+                    optionEl.createSpan({ text: ' (already budgeted)', cls: 'expensica-option-note' });
+                }
                 
                 // Skip event listener if disabled
                 if (isDisabled) return;
@@ -8042,7 +8052,12 @@ class BudgetModal extends Modal {
                     }
                     
                     // Update display text
-                    displayTextEl.innerHTML = `<span class="expensica-category-emoji">${this.plugin.getCategoryEmoji(category.id)}</span> ${category.name}`;
+                    displayTextEl.empty();
+                    displayTextEl.createSpan({
+                        text: this.plugin.getCategoryEmoji(category.id),
+                        cls: 'expensica-category-emoji'
+                    });
+                    displayTextEl.createSpan({ text: ` ${category.name}` });
                     
                     // Update selected class
                     if (this.categoryOptions) {
@@ -8062,7 +8077,9 @@ class BudgetModal extends Modal {
         
         // Set initial display text
         if (displayEmoji) {
-            displayTextEl.innerHTML = `<span class="expensica-category-emoji">${displayEmoji}</span> ${displayText}`;
+            displayTextEl.empty();
+            displayTextEl.createSpan({ text: displayEmoji, cls: 'expensica-category-emoji' });
+            displayTextEl.createSpan({ text: ` ${displayText}` });
         } else {
             displayTextEl.setText(displayText);
         }
@@ -8177,7 +8194,7 @@ class BudgetModal extends Modal {
         
         // Create arrow icon
         const arrowIcon = this.periodDisplay.createDiv('expensica-select-arrow');
-        arrowIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+        appendChevronIcon(arrowIcon, '18');
         
         // Create options container
         this.periodOptions = customSelectContainer.createDiv('expensica-select-options expensica-select-hidden');
@@ -8186,16 +8203,15 @@ class BudgetModal extends Modal {
         periods.forEach(period => {
             // Create visual option using a different approach
             if (this.periodOptions) {
-                const optionEl = document.createElement('div');
-                optionEl.className = 'expensica-select-option ' + 
-                    (this.selectedPeriod === period.value ? 'expensica-option-selected' : '');
+                const optionEl = this.periodOptions.createDiv(
+                    `expensica-select-option${this.selectedPeriod === period.value ? ' expensica-option-selected' : ''}`
+                );
                 optionEl.textContent = period.text;
-                this.periodOptions.appendChild(optionEl);
                 
                 // Add click event
                 optionEl.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    this.selectedPeriod = period.value as BudgetPeriod;
+                    this.selectedPeriod = period.value;
                     
                     // Update hidden select
                     if (this.periodSelect) {

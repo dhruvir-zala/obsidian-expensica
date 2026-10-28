@@ -14,6 +14,9 @@ class Element {
     }
     createDiv(options) { return this.createEl('div', options); }
     createSpan(options) { return this.createEl('span', options); }
+    createSvg(tag, options) { return this.createEl(tag, options); }
+    setCssProps(properties) { Object.assign(this.style, properties); }
+    setCssStyles(properties) { Object.assign(this.style, properties); }
     addClass() {}
     setAttribute() {}
     empty() { this.children = []; }

@@ -1,5 +1,7 @@
 import {
+    appendSvgIcon,
     CategoryType,
+    SvgIconShape,
     getAccountColor,
     formatCurrency,
     getTransactionDisplayTime,
@@ -13,6 +15,17 @@ import { renderCategoryChip } from './category-chip';
 import { showCategoryQuickMenu } from './category-quick-menu';
 import { showExpensicaNotice } from './notice';
 import { formatTimeForDisplay } from './time-selector-modal';
+
+const CHECK_SHAPES: SvgIconShape[] = [{ tag: 'polyline', attrs: { points: '20 6 9 17 4 12' } }];
+const CLOCK_SHAPES: SvgIconShape[] = [
+    { tag: 'circle', attrs: { cx: '12', cy: '12', r: '10' } },
+    { tag: 'polyline', attrs: { points: '12 6 12 12 16 14' } }
+];
+const CHEVRON_SHAPES: SvgIconShape[] = [{ tag: 'polyline', attrs: { points: '9 6 15 12 9 18' } }];
+const CARD_SHAPES: SvgIconShape[] = [
+    { tag: 'rect', attrs: { x: '2', y: '5', width: '20', height: '14', rx: '2' } },
+    { tag: 'line', attrs: { x1: '2', y1: '10', x2: '22', y2: '10' } }
+];
 
 interface TransactionCardOptions {
     plugin: ExpensicaPlugin;
@@ -65,7 +78,7 @@ export function renderTransactionCard(container: HTMLElement, options: Transacti
             'aria-pressed': String(!!selected)
         }
     });
-    selectorEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+    appendSvgIcon(selectorEl, { size: 14, strokeWidth: '3', ariaHidden: true }, CHECK_SHAPES);
     selectorEl.toggleClass('is-selected', !!selected);
     selectorEl.toggleClass('is-disabled', !selectable);
     if (!selectable) {
@@ -91,7 +104,8 @@ export function renderTransactionCard(container: HTMLElement, options: Transacti
     const transactionTime = formatTimeForDisplay(getTransactionDisplayTime(transaction) || '', plugin.settings.timeFormat);
     if (transactionTime) {
         const timeEl = metaEl.createEl('span', { cls: 'expensica-transaction-date' });
-        timeEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> ${transactionTime}`;
+        appendSvgIcon(timeEl, { size: 12, strokeWidth: '2' }, CLOCK_SHAPES);
+        timeEl.appendText(` ${transactionTime}`);
     }
 
     if (plugin.settings.enableAccounts && transaction.type === TransactionType.INTERNAL) {
@@ -103,12 +117,13 @@ export function renderTransactionCard(container: HTMLElement, options: Transacti
         const accountEl = metaEl.createEl('span', { cls: 'expensica-transaction-account' });
         renderTransactionAccountEndpoint(accountEl, fromAccount.name, fromAccountRecord ? getAccountColor(fromAccountRecord, accounts) : undefined);
         const separatorEl = accountEl.createSpan({ cls: 'expensica-transaction-account-separator' });
-        separatorEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg>';
+        appendSvgIcon(separatorEl, { size: 12, strokeWidth: '2.25', ariaHidden: true }, CHEVRON_SHAPES);
         renderTransactionAccountEndpoint(accountEl, toAccount.name, toAccountRecord ? getAccountColor(toAccountRecord, accounts) : undefined);
     } else if (plugin.settings.enableAccounts) {
         const accountDisplay = plugin.getTransactionAccountDisplay(transaction.account);
         const accountEl = metaEl.createEl('span', { cls: 'expensica-transaction-account' });
-        accountEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg> ${accountDisplay.name}`;
+        appendSvgIcon(accountEl, { size: 12, strokeWidth: '2' }, CARD_SHAPES);
+        accountEl.appendText(` ${accountDisplay.name}`);
         accountEl.style.color = getAccountColor(accountDisplay, plugin.getAccounts());
     }
 
@@ -184,7 +199,7 @@ function renderTransactionAccountEndpoint(container: HTMLElement, name: string, 
     }
 
     const iconEl = endpointEl.createSpan({ cls: 'expensica-transaction-account-icon' });
-    iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>';
+    appendSvgIcon(iconEl, { size: 12, strokeWidth: '2', ariaHidden: true }, CARD_SHAPES);
 
     endpointEl.createSpan({
         text: name,
@@ -204,12 +219,12 @@ function showTransactionCategoryMenu(
         return;
     }
 
-    showCategoryQuickMenu(target, plugin, categoryType, async (categoryId) => {
+    showCategoryQuickMenu(target, plugin, categoryType, (categoryId) => {
         if (categoryId === transaction.category) {
-            return;
+            return Promise.resolve();
         }
 
-        await onCategoryChange(transaction, categoryId);
+        return onCategoryChange(transaction, categoryId);
     }, transaction.category);
 }
 

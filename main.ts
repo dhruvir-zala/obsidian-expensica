@@ -1,4 +1,4 @@
-import { App, FileSystemAdapter, Modal, Platform, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { App, Modal, Plugin, PluginSettingTab, Setting } from 'obsidian';
 
 import { AccountEditorModal, ExpensicaDashboardView, EXPENSICA_VIEW_TYPE, TransactionModal, DateRangeType, DashboardTab } from './src/dashboard-view';
 import { ExpensicaTransactionsView } from './src/transactions-view';
@@ -57,10 +57,6 @@ interface TransactionImportSource {
     text(): Promise<string>;
 }
 
-interface ImportFileDialog {
-    showOpenDialog(options: { title: string; defaultPath: string; filters: { name: string; extensions: string[] }[]; properties: string[] }): Promise<{ canceled: boolean; filePaths: string[] }>;
-}
-
 // Import visualizations for bundling
 import './src/dashboard-integration';
 import './src/visualizations/calendar-view';
@@ -71,6 +67,37 @@ import 'jspdf-autotable';
 
 function formatTransactionDescriptionForBanking(description: string): string {
     return description.trim().replace(/\s+/g, ' ').toUpperCase();
+}
+
+function createChevronIcon(parent: HTMLElement, size: number): void {
+    const svg = parent.createSvg('svg', {
+        attr: {
+            width: size,
+            height: size,
+            viewBox: '0 0 24 24',
+            fill: 'none',
+            stroke: 'currentColor',
+            'stroke-width': '2',
+            'stroke-linecap': 'round',
+            'stroke-linejoin': 'round'
+        }
+    });
+    svg.createSvg('polyline', { attr: { points: '6 9 12 15 18 9' } });
+}
+
+function createWarningIcon(parent: HTMLElement): void {
+    const svg = parent.createSvg('svg', {
+        attr: {
+            viewBox: '0 0 24 24',
+            fill: 'none',
+            stroke: 'currentColor',
+            'stroke-width': '2',
+            'stroke-linecap': 'round',
+            'stroke-linejoin': 'round'
+        }
+    });
+    svg.createSvg('circle', { attr: { cx: '12', cy: '12', r: '10' } });
+    svg.createSvg('path', { attr: { d: 'M12 8v4m0 4h.01' } });
 }
 
 // Define the global window interface to include jspdf
@@ -147,7 +174,8 @@ function validateLoadedData<T extends ProtectedDataset>(data: unknown, dataset: 
     if (!optionalString(data.lastUpdated)) {
         throw new Error(`Invalid ${dataset} timestamp`);
     }
-    const entries = data[dataset] as unknown[];
+    const entries = data[dataset];
+    if (!Array.isArray(entries)) throw new Error(`Invalid ${dataset} data: expected a ${dataset} array`);
     if (dataset === 'transactions') {
         // Historical self-transfers remain readable; mutation/import paths reject new ones.
         validateTransactions(entries, [], undefined, repairDuplicateIds, true);
@@ -178,6 +206,12 @@ export interface SharedDateRangeState {
     customStartDate: string | null;
     customEndDate: string | null;
     updatedAt: number;
+}
+
+function getSharedDateRangeApplier(view: unknown): ((state: SharedDateRangeState) => Promise<void>) | undefined {
+    if (view === null || typeof view !== 'object') return undefined;
+    const applier = Reflect.get(view, 'applySharedDateRangeState');
+    return typeof applier === 'function' ? applier.bind(view) : undefined;
 }
 
 // Define default settings
@@ -247,6 +281,12 @@ export default class ExpensicaPlugin extends Plugin {
     private unloaded = false;
     private persistenceTail: Promise<void> = Promise.resolve();
 
+    private runAsyncAction(action: () => Promise<unknown>): void {
+        void action().catch(() => {
+            showExpensicaNotice('Expensica could not complete that action.');
+        });
+    }
+
     private enqueuePersistence<T>(operation: () => Promise<T>): Promise<T> {
         const result = this.persistenceTail.then(operation);
         this.persistenceTail = result.then(() => undefined, () => undefined);
@@ -269,15 +309,14 @@ export default class ExpensicaPlugin extends Plugin {
         // Make jsPDF globally available
         try {
             window.jspdf = { jsPDF };
-            console.log('Expensica: jsPDF initialized successfully');
-        } catch (error) {
-            console.error('Expensica: Error initializing jsPDF', error);
+        } catch {
+            showExpensicaNotice('Could not initialize PDF export.');
         }
 
         // Add a ribbon icon for quick access
-        const ribbonIconEl = this.addRibbonIcon('dollar-sign', 'Expensica', (evt: MouseEvent) => {
+        const ribbonIconEl = this.addRibbonIcon('dollar-sign', 'Expensica', () => {
             // Open the Expensica dashboard
-            this.openDashboard();
+            this.runAsyncAction(() => this.openDashboard());
         });
         ribbonIconEl.addClass('expensica-ribbon-icon');
 
@@ -286,7 +325,7 @@ export default class ExpensicaPlugin extends Plugin {
             id: 'add-expense',
             name: 'Add New Expense',
             callback: () => {
-                this.openExpenseModal();
+                this.runAsyncAction(() => this.openExpenseModal());
             }
         });
 
@@ -295,7 +334,7 @@ export default class ExpensicaPlugin extends Plugin {
             id: 'add-income',
             name: 'Add New Income',
             callback: () => {
-                this.openIncomeModal();
+                this.runAsyncAction(() => this.openIncomeModal());
             }
         });
 
@@ -304,7 +343,7 @@ export default class ExpensicaPlugin extends Plugin {
             id: 'open-dashboard',
             name: 'Open Dashboard',
             callback: () => {
-                this.openDashboard();
+                this.runAsyncAction(() => this.openDashboard());
             }
         });
 
@@ -313,7 +352,7 @@ export default class ExpensicaPlugin extends Plugin {
             id: 'open-transactions',
             name: 'View All Transactions',
             callback: () => {
-                this.openTransactionsView();
+                this.runAsyncAction(() => this.openTransactionsView());
             }
         });
 
@@ -322,7 +361,7 @@ export default class ExpensicaPlugin extends Plugin {
             id: 'open-budget',
             name: 'Open Budget',
             callback: () => {
-                this.openBudgetView();
+                this.runAsyncAction(() => this.openBudgetView());
             }
         });
 
@@ -344,7 +383,7 @@ export default class ExpensicaPlugin extends Plugin {
                     showExpensicaNotice('Daily Finance Review feature is disabled. Please enable it in settings.');
                     return;
                 }
-                this.createDailyFinanceReview();
+                this.runAsyncAction(() => this.createDailyFinanceReview());
             }
         });
 
@@ -357,7 +396,7 @@ export default class ExpensicaPlugin extends Plugin {
                     showExpensicaNotice('Daily Finance Review for Any Date feature is disabled. Please enable it in settings.');
                     return;
                 }
-                this.createDailyFinanceReviewForDate();
+                this.runAsyncAction(() => this.createDailyFinanceReviewForDate());
             }
         });
 
@@ -449,9 +488,7 @@ export default class ExpensicaPlugin extends Plugin {
                 this.transactionsData = nextData;
             }
 
-            console.log('Expensica: Transactions loaded successfully', this.transactionsData.transactions.length, 'transactions found');
         } catch (error) {
-            console.error('Expensica: Error loading transactions data', error);
             this.transactionsData = previousData;
             this.protectDataset('transactions', error);
         }
@@ -486,7 +523,6 @@ export default class ExpensicaPlugin extends Plugin {
             this.transactionsData = nextData;
             this.resolveSaveFailures(this.transactionsFilePath);
         } catch (error) {
-            console.error('Failed to save transactions data:', error);
             throw this.markSaveError(error, this.transactionsFilePath);
         }
     }
@@ -515,9 +551,7 @@ export default class ExpensicaPlugin extends Plugin {
             this.transactionsData = this.normalizeTransactionsSnapshot({ ...previousData, accounts: parsedData.accounts }, false);
             this.clearDatasetProtection('accounts');
 
-            console.log('Expensica: Accounts loaded successfully', this.transactionsData.accounts.length, 'accounts found');
         } catch (error) {
-            console.error('Expensica: Error loading accounts data', error);
             this.transactionsData = previousData;
             this.protectDataset('accounts', error);
         }
@@ -545,7 +579,6 @@ export default class ExpensicaPlugin extends Plugin {
             this.transactionsData = nextData;
             this.resolveSaveFailures(this.accountsFilePath);
         } catch (error) {
-            console.error('Failed to save accounts data:', error);
             throw this.markSaveError(error, this.accountsFilePath);
         }
     }
@@ -580,10 +613,7 @@ export default class ExpensicaPlugin extends Plugin {
             }
             this.clearDatasetProtection('budgets');
 
-            // Log success
-            console.log('Expensica: Budgets loaded successfully', this.budgetData.budgets.length, 'budgets found');
         } catch (error) {
-            console.error('Expensica: Error loading budget data', error);
             this.budgetData = previousData;
             this.protectDataset('budgets', error);
         }
@@ -608,9 +638,7 @@ export default class ExpensicaPlugin extends Plugin {
             this.budgetData = nextData;
             this.resolveSaveFailures(this.budgetFilePath);
 
-            console.log('Expensica: Budgets saved successfully');
         } catch (error) {
-            console.error('Expensica: Error saving budget data', error);
             throw this.markSaveError(error, this.budgetFilePath);
         }
     }
@@ -645,7 +673,6 @@ export default class ExpensicaPlugin extends Plugin {
             if (result === false) return false;
             return true;
         } catch (error) {
-            console.error(`Expensica: ${operation} did not complete`, error);
             if (error instanceof TransactionValidationError) {
                 showExpensicaNotice(`${error.message} ${error.action}`);
                 return false;
@@ -707,8 +734,8 @@ export default class ExpensicaPlugin extends Plugin {
 
     private isExpensicaFocused(): boolean {
         const { workspace } = this.app;
-        const view = workspace.activeLeaf?.view;
-        return !this.unloaded && workspace.layoutReady && view?.getViewType() === EXPENSICA_VIEW_TYPE
+        const view = workspace.getActiveViewOfType(ExpensicaDashboardView);
+        return !this.unloaded && workspace.layoutReady && !!view
             && (view.containerEl.ownerDocument?.hasFocus() ?? true);
     }
 
@@ -772,7 +799,7 @@ export default class ExpensicaPlugin extends Plugin {
                 // A closed/discarded editor must never be replayed. Verify the file's
                 // accessibility using its validated current contents, not the discarded draft.
                 const content = await this.app.vault.adapter.read(failure.path);
-                const dataset = (['transactions', 'accounts', 'budgets'] as ProtectedDataset[])
+                const dataset = (['transactions', 'accounts', 'budgets'] as const)
                     .find(name => this.datasetPath(name) === failure.path);
                 try {
                     const parsed = dataset === 'transactions' ? parseTransactionFile(content).data : JSON.parse(content);
@@ -787,7 +814,6 @@ export default class ExpensicaPlugin extends Plugin {
                 return true;
             });
         } catch (error) {
-            console.error('Expensica: Save recovery failed', error);
             failure.error = this.recoveryMessage(error);
             if (!this.saveFailures.has(owner)) this.saveFailures.set(owner, { ...failure, retry: null });
             return false;
@@ -906,7 +932,6 @@ export default class ExpensicaPlugin extends Plugin {
                     await this.app.vault.adapter.write(this.accountsFilePath, this.pendingAccountRollback);
                     this.pendingAccountRollback = null;
                 } catch (error) {
-                    console.error('Expensica: Account restoration failed', error);
                     this.protectDataset('accounts', error);
                     this.protectDataset('transactions', error);
                 }
@@ -953,7 +978,6 @@ export default class ExpensicaPlugin extends Plugin {
                 try {
                     await this.retryDataRecovery();
                 } catch (error) {
-                    console.error('Expensica: Data recovery could not complete', error);
                     if (this.protectedDatasets.has(dataset)) this.loadFailureMessages.set(dataset, this.recoveryMessage(error));
                     this.refreshDataRecoveryWarnings();
                 }
@@ -990,7 +1014,7 @@ export default class ExpensicaPlugin extends Plugin {
         const heading = body.createDiv('expensica-recovery-card-heading');
         const icon = heading.createSpan('expensica-recovery-card-icon');
         icon.setAttribute('aria-hidden', 'true');
-        icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>';
+        createWarningIcon(icon);
         heading.createEl('h3', { text: title });
         const description = body.createEl('p');
         description.createSpan({ text: kind === 'warning' ? 'Several accounts in ' : 'The ' });
@@ -1002,8 +1026,8 @@ export default class ExpensicaPlugin extends Plugin {
 
     private refreshDataRecoveryWarnings(): void {
         for (const leaf of this.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE)) {
-            const container = leaf.view.containerEl.children[1] as HTMLElement | undefined;
-            if (container) this.renderDataRecoveryWarning(container);
+            const container = leaf.view.containerEl.children[1];
+            if (container instanceof HTMLElement) this.renderDataRecoveryWarning(container);
         }
     }
 
@@ -1026,8 +1050,9 @@ export default class ExpensicaPlugin extends Plugin {
     async openTransactionsView(filter?: TransactionNavigationFilter) {
         await this.openDashboard();
         const leaves = this.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE);
-        const dashboard = leaves.find(leaf => leaf.view instanceof ExpensicaDashboardView)?.view as ExpensicaDashboardView | undefined;
-        if (dashboard) {
+        const dashboardLeaf = leaves.find(leaf => leaf.view instanceof ExpensicaDashboardView);
+        if (dashboardLeaf?.view instanceof ExpensicaDashboardView) {
+            const dashboard = dashboardLeaf.view;
             await dashboard.loadTransactionsData();
             dashboard.switchDashboardTab(DashboardTab.TRANSACTIONS);
             if (filter) {
@@ -1063,17 +1088,17 @@ export default class ExpensicaPlugin extends Plugin {
     async openExpenseModal() {
         // Find the dashboard view if it exists
         const leaves = this.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE);
-        if (leaves.length > 0 && leaves[0].view instanceof ExpensicaDashboardView) {
-            const dashboardView = leaves[0].view as ExpensicaDashboardView;
+        const currentView = leaves[0]?.view;
+        if (currentView instanceof ExpensicaDashboardView) {
+            const dashboardView = currentView;
             const modal = new TransactionModal(this.app, this, dashboardView, null, TransactionType.EXPENSE);
             modal.open();
         } else {
             // Open the dashboard first, then open the modal
             await this.openDashboard();
-            setTimeout(() => {
-                const newLeaves = this.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE);
-                if (newLeaves.length > 0 && newLeaves[0].view instanceof ExpensicaDashboardView) {
-                    const dashboardView = newLeaves[0].view as ExpensicaDashboardView;
+            window.setTimeout(() => {
+                const dashboardView = this.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE)[0]?.view;
+                if (dashboardView instanceof ExpensicaDashboardView) {
                     const modal = new TransactionModal(this.app, this, dashboardView, null, TransactionType.EXPENSE);
                     modal.open();
                 }
@@ -1084,17 +1109,17 @@ export default class ExpensicaPlugin extends Plugin {
     async openIncomeModal() {
         // Find the dashboard view if it exists
         const leaves = this.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE);
-        if (leaves.length > 0 && leaves[0].view instanceof ExpensicaDashboardView) {
-            const dashboardView = leaves[0].view as ExpensicaDashboardView;
+        const currentView = leaves[0]?.view;
+        if (currentView instanceof ExpensicaDashboardView) {
+            const dashboardView = currentView;
             const modal = new TransactionModal(this.app, this, dashboardView, null, TransactionType.INCOME);
             modal.open();
         } else {
             // Open the dashboard first, then open the modal
             await this.openDashboard();
-            setTimeout(() => {
-                const newLeaves = this.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE);
-                if (newLeaves.length > 0 && newLeaves[0].view instanceof ExpensicaDashboardView) {
-                    const dashboardView = newLeaves[0].view as ExpensicaDashboardView;
+            window.setTimeout(() => {
+                const dashboardView = this.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE)[0]?.view;
+                if (dashboardView instanceof ExpensicaDashboardView) {
                     const modal = new TransactionModal(this.app, this, dashboardView, null, TransactionType.INCOME);
                     modal.open();
                 }
@@ -1276,9 +1301,9 @@ export default class ExpensicaPlugin extends Plugin {
             if (view instanceof ExpensicaDashboardView) {
                 try {
                     await view.refreshData(budgetsOnly);
-                } catch (error) {
+                } catch {
                     // A committed mutation must not become a retryable save because a view failed.
-                    console.error('Expensica: Could not refresh a dashboard', error);
+                    showExpensicaNotice('Changes were saved, but the dashboard could not refresh. Reopen it to update the view.');
                 }
             }
         }
@@ -1293,19 +1318,13 @@ export default class ExpensicaPlugin extends Plugin {
         const leaves = this.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE);
 
         for (const leaf of leaves) {
-            const view = leaf.view as unknown;
+            const view: unknown = leaf.view;
             if (view === sourceView) {
                 continue;
             }
 
-            if (
-                view
-                && typeof view === 'object'
-                && 'applySharedDateRangeState' in view
-                && typeof (view as { applySharedDateRangeState: (state: SharedDateRangeState) => Promise<void> }).applySharedDateRangeState === 'function'
-            ) {
-                await (view as { applySharedDateRangeState: (state: SharedDateRangeState) => Promise<void> }).applySharedDateRangeState(sharedState);
-            }
+            const applySharedDateRangeState = getSharedDateRangeApplier(view);
+            if (applySharedDateRangeState) await applySharedDateRangeState(sharedState);
         }
     }
 
@@ -1739,7 +1758,6 @@ export default class ExpensicaPlugin extends Plugin {
                     this.pendingAccountRollback = previousAccountsFile;
                     this.protectDataset('accounts');
                     this.protectDataset('transactions');
-                    console.error('Expensica: Could not restore accounts after a failed update', rollbackError);
                     showExpensicaNotice('Account recovery is required. Keep Expensica open and choose Retry to restore the previous accounts.', 10000);
                 }
                 throw error;
@@ -1942,8 +1960,7 @@ export default class ExpensicaPlugin extends Plugin {
                 await this.app.vault.adapter.write(filePath, jsonData);
                 showExpensicaNotice('Transactions exported successfully');
                 return true;
-            } catch (error) {
-                console.error('Error exporting transactions:', error);
+            } catch {
                 showExpensicaNotice('Error exporting transactions');
                 return false;
             }
@@ -1977,8 +1994,8 @@ export default class ExpensicaPlugin extends Plugin {
                 try {
                     await this.refreshExpensicaViews();
                     this.showTransactionSummary(`Imported ${transactions.length} ${transactions.length === 1 ? 'transaction' : 'transactions'}. Changes saved.`, imported.corrections);
-                } catch (error) {
-                    console.error('Expensica: Could not display the completed import', error);
+                } catch {
+                    showExpensicaNotice('Import completed, but the dashboard could not refresh.');
                 }
             }
             return true;
@@ -2085,7 +2102,7 @@ export default class ExpensicaPlugin extends Plugin {
                 this.showTransactionSummary('Account references updated. Changes saved.', prepared.corrections);
             });
             try { await this.refreshExpensicaViews(); }
-            catch (error) { console.error('Expensica: Could not display reconciled transactions', error); }
+            catch { showExpensicaNotice('Account references were updated, but the dashboard could not refresh.'); }
             onComplete?.();
         });
         if (!this.isExpensicaFocused()) {
@@ -2105,8 +2122,8 @@ export default class ExpensicaPlugin extends Plugin {
             const lines = formatTransactionCorrections(corrections);
             showExpensicaNotice(`${summary}${lines.length ? ` ${lines.join('; ')}.` : ''}`);
             new TransactionSummaryModal(this.app, summary, lines).open();
-        } catch (error) {
-            console.error('Expensica: Could not display the completed migration', error);
+        } catch {
+            showExpensicaNotice('Changes were saved, but the migration summary could not be displayed.');
         }
     }
 
@@ -2177,17 +2194,17 @@ export default class ExpensicaPlugin extends Plugin {
     async openBudgetView() {
         // Activate existing leaf if it exists
         const leaves = this.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE);
-        if (leaves.length > 0 && leaves[0].view instanceof ExpensicaDashboardView) {
-            const dashboardView = leaves[0].view as ExpensicaDashboardView;
+        const currentView = leaves[0]?.view;
+        if (currentView instanceof ExpensicaDashboardView) {
+            const dashboardView = currentView;
             dashboardView.showBudgetTab();
             this.app.workspace.revealLeaf(leaves[0]);
         } else {
             // Open the dashboard first, then switch to the budget tab
             await this.openDashboard();
-            setTimeout(() => {
-                const newLeaves = this.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE);
-                if (newLeaves.length > 0 && newLeaves[0].view instanceof ExpensicaDashboardView) {
-                    const dashboardView = newLeaves[0].view as ExpensicaDashboardView;
+            window.setTimeout(() => {
+                const dashboardView = this.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE)[0]?.view;
+                if (dashboardView instanceof ExpensicaDashboardView) {
                     dashboardView.showBudgetTab();
                 }
             }, 300); // Give some time for the view to initialize
@@ -2341,14 +2358,13 @@ export default class ExpensicaPlugin extends Plugin {
             if (existingNote) {
                 await this.app.vault.modify(existingNote, noteContent);
                 showExpensicaNotice(`Updated note: ${noteTitle}`);
-                this.app.workspace.getLeaf().openFile(existingNote);
+                await this.app.workspace.getLeaf().openFile(existingNote);
             } else {
                 const newNote = await this.app.vault.create(notePath, noteContent);
                 showExpensicaNotice(`Created note: ${noteTitle}`);
-                this.app.workspace.getLeaf().openFile(newNote);
+                await this.app.workspace.getLeaf().openFile(newNote);
             }
-        } catch (error) {
-            console.error('Failed to create daily finance review:', error);
+        } catch {
             showExpensicaNotice('Failed to create daily finance review');
         }
     }
@@ -2474,16 +2490,15 @@ export default class ExpensicaPlugin extends Plugin {
                 if (existingNote) {
                     await this.app.vault.modify(existingNote, noteContent);
                     showExpensicaNotice(`Updated note: ${noteTitle}`);
-                    this.app.workspace.getLeaf().openFile(existingNote);
+                    await this.app.workspace.getLeaf().openFile(existingNote);
                 } else {
                     const newNote = await this.app.vault.create(notePath, noteContent);
                     showExpensicaNotice(`Created note: ${noteTitle}`);
-                    this.app.workspace.getLeaf().openFile(newNote);
+                    await this.app.workspace.getLeaf().openFile(newNote);
                 }
             });
             modal.open();
-        } catch (error) {
-            console.error('Failed to create daily finance review:', error);
+        } catch {
             showExpensicaNotice('Failed to create daily finance review');
         }
     }
@@ -2533,13 +2548,20 @@ class ExpensicaSettingTab extends PluginSettingTab {
         this.cleanupCallbacks = [];
     }
 
+    private async saveSettings(): Promise<void> {
+        try {
+            await this.plugin.saveSettings();
+        } catch {
+            showExpensicaNotice('Could not save settings.');
+        }
+    }
+
     private registerOutsideClick(
         owner: HTMLElement,
         onOutsideClick: () => void
     ) {
         const documentClickHandler = (event: MouseEvent) => {
-            const target = event.target as Node | null;
-            if (target && !owner.contains(target)) {
+            if (event.target instanceof Node && !owner.contains(event.target)) {
                 onOutsideClick();
             }
         };
@@ -2559,20 +2581,27 @@ class ExpensicaSettingTab extends PluginSettingTab {
 
         // Add links card at the top
         const linksCard = containerEl.createDiv('expensica-links-card');
-        linksCard.createEl('h2', { text: 'Support & Resources' });
+        new Setting(linksCard).setName('Support & Resources').setHeading();
 
         // Buy Me a Coffee section
         const coffeeSection = linksCard.createDiv('expensica-links-section');
-        coffeeSection.createEl('h3', { text: 'Support the Developer' });
+        new Setting(coffeeSection).setName('Support the Developer').setHeading();
         const coffeeLink = coffeeSection.createEl('a', {
             href: 'https://ko-fi.com/X8X71DLZHF',
             attr: { target: '_blank' }
         });
-        coffeeLink.innerHTML = '<img class="coffee-link-img" src="https://storage.ko-fi.com/cdn/kofi6.png?v=6" border="0" alt="Buy Me a Coffee at ko-fi.com" />';
+        coffeeLink.createEl('img', {
+            cls: 'coffee-link-img',
+            attr: {
+                src: 'https://storage.ko-fi.com/cdn/kofi6.png?v=6',
+                border: '0',
+                alt: 'Buy Me a Coffee at ko-fi.com'
+            }
+        });
 
         // Website and Social Links
         const socialSection = linksCard.createDiv('expensica-links-section');
-        socialSection.createEl('h3', { text: 'Connect with Expensica' });
+        new Setting(socialSection).setName('Connect with Expensica').setHeading();
         
         socialSection.createEl('a', {
             href: 'https://expensica.com/',
@@ -2582,11 +2611,15 @@ class ExpensicaSettingTab extends PluginSettingTab {
         });
         
         const linkedinLink = socialSection.createDiv('external-link-display-block');
-        linkedinLink.innerHTML = '<a href="https://www.linkedin.com/company/expensica/" target="_blank">💼 Follow on LinkedIn</a>';
+        linkedinLink.createEl('a', {
+            href: 'https://www.linkedin.com/company/expensica/',
+            text: '💼 Follow on LinkedIn',
+            attr: { target: '_blank' }
+        });
 
         // GitHub Issues
         const githubSection = linksCard.createDiv('expensica-links-section');
-        githubSection.createEl('h3', { text: 'Report Issues & Request Features' });
+        new Setting(githubSection).setName('Report Issues & Request Features').setHeading();
         githubSection.createEl('a', {
             href: 'https://github.com/dhruvir-zala/obsidian-expensica/issues',
             text: '🐛 GitHub Issues & Feature Requests',
@@ -2598,7 +2631,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
         containerEl.createEl('hr', { cls: 'expensica-settings-separator' });
 
         // General settings
-        containerEl.createEl('h2', { text: 'General Settings' });
+        new Setting(containerEl).setName('General Settings').setHeading();
 
         // Currency setting
         new Setting(containerEl)
@@ -2611,7 +2644,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
                     this.plugin.settings.defaultCurrency,
                     async (value) => {
                         this.plugin.settings.defaultCurrency = value;
-                        await this.plugin.saveSettings();
+                        await this.saveSettings();
                     }
                 );
             });
@@ -2626,7 +2659,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
                     this.plugin.settings.timeFormat,
                     async (value) => {
                         this.plugin.settings.timeFormat = value;
-                        await this.plugin.saveSettings();
+                        await this.saveSettings();
 
                         this.plugin.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE).forEach((leaf) => {
                             if (leaf.view instanceof ExpensicaDashboardView) {
@@ -2651,13 +2684,13 @@ class ExpensicaSettingTab extends PluginSettingTab {
                 });
                 const previewColor = this.getColorPreview(this.plugin.settings.calendarColorScheme);
                 const colorPreview = selectDisplay.createDiv('color-preview color-preview-bg');
-                colorPreview.setAttribute('style', `--color-preview: ${previewColor}`);
+                colorPreview.setCssProps({ '--color-preview': previewColor });
 
                 const selectText = selectDisplay.createSpan({ cls: 'expensica-select-display-text' });
                 selectText.textContent = this.plugin.settings.calendarColorScheme.charAt(0).toUpperCase() + this.plugin.settings.calendarColorScheme.slice(1);
                 
                 const selectArrow = selectDisplay.createSpan({ cls: 'expensica-select-arrow' });
-                selectArrow.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+                createChevronIcon(selectArrow, 14);
                 
                 const optionsContainer = container.createDiv('expensica-select-options expensica-select-hidden expensica-settings-select-options');
                 
@@ -2679,7 +2712,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
                         attr: { type: 'button' }
                     });
                     const optionColorPreview = optionEl.createDiv('color-preview');
-                    optionColorPreview.setAttribute('style', `background-color: ${this.getColorPreview(option.value)}`);
+                    optionColorPreview.setCssStyles({ backgroundColor: this.getColorPreview(option.value) });
                     optionEl.createSpan({ text: option.text });
                     
                     if (this.plugin.settings.calendarColorScheme === option.value) {
@@ -2688,10 +2721,10 @@ class ExpensicaSettingTab extends PluginSettingTab {
                     
                     optionEl.addEventListener('click', async () => {
                         this.plugin.settings.calendarColorScheme = option.value;
-                        await this.plugin.saveSettings();
+                        await this.saveSettings();
                         
                         // Update the display
-                        colorPreview.setAttribute('style', `--color-preview: ${this.getColorPreview(option.value)}`);
+                        colorPreview.setCssProps({ '--color-preview': this.getColorPreview(option.value) });
                         selectText.textContent = option.text;
                         
                         // Hide the options
@@ -2736,7 +2769,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
         
         colorInput.addEventListener('change', async () => {
             this.plugin.settings.customCalendarColor = colorInput.value;
-            await this.plugin.saveSettings();
+            await this.saveSettings();
         });
         
         // Method to update custom color visibility
@@ -2758,7 +2791,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.showWeekNumbers)
                 .onChange(async (value) => {
                     this.plugin.settings.showWeekNumbers = value;
-                    await this.plugin.saveSettings();
+                    await this.saveSettings();
                 }));
 
         new Setting(containerEl)
@@ -2768,7 +2801,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.showChartAxes)
                 .onChange(async (value) => {
                     this.plugin.settings.showChartAxes = value;
-                    await this.plugin.saveSettings();
+                    await this.saveSettings();
 
                     this.plugin.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE).forEach((leaf) => {
                         if (leaf.view instanceof ExpensicaDashboardView) {
@@ -2784,7 +2817,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.showChartGrid)
                 .onChange(async (value) => {
                     this.plugin.settings.showChartGrid = value;
-                    await this.plugin.saveSettings();
+                    await this.saveSettings();
 
                     this.plugin.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE).forEach((leaf) => {
                         if (leaf.view instanceof ExpensicaDashboardView) {
@@ -2800,7 +2833,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.showTransactionCategoryLabels)
                 .onChange(async (value) => {
                     this.plugin.settings.showTransactionCategoryLabels = value;
-                    await this.plugin.saveSettings();
+                    await this.saveSettings();
 
                     this.plugin.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE).forEach((leaf) => {
                         if (leaf.view instanceof ExpensicaDashboardView) {
@@ -2817,7 +2850,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.enableAccounts)
                 .onChange(async (value) => {
                     this.plugin.settings.enableAccounts = value;
-                    await this.plugin.saveSettings();
+                    await this.saveSettings();
 
                     this.plugin.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE).forEach((leaf) => {
                         if (leaf.view instanceof ExpensicaDashboardView) {
@@ -2834,12 +2867,12 @@ class ExpensicaSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.enableBudgeting)
                 .onChange(async (value) => {
                     this.plugin.settings.enableBudgeting = value;
-                    await this.plugin.saveSettings();
+                    await this.saveSettings();
                     
                     // Refresh dashboard if it's open
                     const leaves = this.plugin.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE);
-                    if (leaves.length > 0 && leaves[0].view instanceof ExpensicaDashboardView) {
-                        const dashboardView = leaves[0].view as ExpensicaDashboardView;
+                    const dashboardView = leaves[0]?.view;
+                    if (dashboardView instanceof ExpensicaDashboardView) {
                         dashboardView.renderDashboard();
                     }
                 }));
@@ -2852,7 +2885,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.enableDailyFinanceReview)
                 .onChange(async (value) => {
                     this.plugin.settings.enableDailyFinanceReview = value;
-                    await this.plugin.saveSettings();
+                    await this.saveSettings();
                 }));
 
         // Enable daily finance review for any date feature
@@ -2863,7 +2896,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.enableDailyFinanceReviewForAnyDate)
                 .onChange(async (value) => {
                     this.plugin.settings.enableDailyFinanceReviewForAnyDate = value;
-                    await this.plugin.saveSettings();
+                    await this.saveSettings();
                 }));
 
         // Daily review folder setting
@@ -2875,21 +2908,21 @@ class ExpensicaSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.dailyReviewFolder)
                 .onChange(async (value) => {
                     this.plugin.settings.dailyReviewFolder = value;
-                    await this.plugin.saveSettings();
+                    await this.saveSettings();
                 }))
             .addButton(button => button
                 .setButtonText('Browse')
                 .onClick(async () => {
                     new FolderSuggestionModal(this.app, this.plugin, async (folder) => {
                         this.plugin.settings.dailyReviewFolder = folder;
-                        await this.plugin.saveSettings();
+                        await this.saveSettings();
                         this.display(); // Refresh the settings display
                     }).open();
                 }));
 
         // Data management section
         const dataSectionEl = containerEl.createDiv('expensica-settings-section');
-        dataSectionEl.createEl('h3', {text: 'Data Management'});
+        new Setting(dataSectionEl).setName('Data Management').setHeading();
 
         // Export data with advanced options
         new Setting(dataSectionEl)
@@ -2920,7 +2953,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
     renderCurrencyDropdown(
         container: HTMLElement,
         selectedCode: string,
-        onChange: (currencyCode: string) => void
+        onChange: (currencyCode: string) => void | Promise<void>
     ): void {
         // Create the main container
         const currencySelectContainer = container.createDiv('currency-select-container');
@@ -2939,19 +2972,13 @@ class ExpensicaSettingTab extends PluginSettingTab {
         
         // Create the arrow icon
         const arrowIcon = currencyDisplay.createDiv('expensica-select-arrow');
-        arrowIcon.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
+        createChevronIcon(arrowIcon, 12);
         
         // Create the options container
         const currencyOptions = currencySelectContainer.createDiv('expensica-select-options expensica-select-hidden');
         
         // Add search input
         const searchContainer = currencyOptions.createDiv('currency-search-container');
-        const searchInput = searchContainer.createEl('input', {
-            type: 'text',
-            placeholder: 'Search currencies...',
-            cls: 'currency-search-input'
-        });
-        
         // Create options
         const optionsContainer = currencyOptions.createDiv('currency-options-container');
         
@@ -2974,7 +3001,9 @@ class ExpensicaSettingTab extends PluginSettingTab {
                 }
                 
                 optionItem.addEventListener('click', () => {
-                    onChange(currency.code);
+                    void Promise.resolve(onChange(currency.code)).catch(() => {
+                        showExpensicaNotice('Could not save the selected currency.');
+                    });
                     currencyDisplayText.textContent = `${currency.code} ${currency.symbol} - ${currency.name}`;
                     currencyOptions.addClass('expensica-select-hidden');
                     arrowIcon.removeClass('expensica-select-arrow-open');
@@ -2985,11 +3014,15 @@ class ExpensicaSettingTab extends PluginSettingTab {
         // Initial render
         renderFilteredOptions();
         
-        // Handle search input
-        searchInput.addEventListener('input', (e) => {
-            const searchTerm = (e.target as HTMLInputElement).value;
-            renderFilteredOptions(searchTerm);
-        });
+        let searchInput: HTMLInputElement | null = null;
+        new Setting(searchContainer)
+            .setClass('currency-search-setting')
+            .addSearch(search => {
+                search.setPlaceholder('Search currencies...')
+                    .onChange(searchTerm => renderFilteredOptions(searchTerm));
+                search.inputEl.addClass('currency-search-input');
+                searchInput = search.inputEl;
+            });
         
         // Toggle dropdown
         currencyDisplay.addEventListener('click', () => {
@@ -2997,7 +3030,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
             currencyOptions.toggleClass('expensica-select-hidden', !isHidden);
             arrowIcon.toggleClass('expensica-select-arrow-open', !isHidden);
             if (!isHidden) {
-                searchInput.focus();
+                searchInput?.focus();
             }
         });
 
@@ -3010,7 +3043,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
     renderTimeFormatDropdown(
         container: HTMLElement,
         selectedFormat: '12' | '24',
-        onChange: (timeFormat: '12' | '24') => void
+        onChange: (timeFormat: '12' | '24') => void | Promise<void>
     ): void {
         const selectContainer = container.createDiv('currency-select-container');
         const selectDisplay = selectContainer.createDiv('expensica-select-display');
@@ -3028,7 +3061,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
         };
 
         updateSelectedText(selectedFormat);
-        arrowIcon.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
+        createChevronIcon(arrowIcon, 12);
 
         options.forEach((option) => {
             const optionItem = optionsContainer.createDiv('expensica-select-option');
@@ -3039,7 +3072,9 @@ class ExpensicaSettingTab extends PluginSettingTab {
             }
 
             optionItem.addEventListener('click', () => {
-                onChange(option.value);
+                void Promise.resolve(onChange(option.value)).catch(() => {
+                    showExpensicaNotice('Could not save the selected time format.');
+                });
                 updateSelectedText(option.value);
                 optionsContainer.addClass('expensica-select-hidden');
                 arrowIcon.removeClass('expensica-select-arrow-open');
@@ -3248,7 +3283,7 @@ class AccountResolutionStepModal extends Modal {
                 const items = contentEl.createEl('ul');
                 for (const account of list) items.createEl('li', {
                     text: getAccountEmoji(account.type) + ' ' + this.fullAccountName(account)
-                }).style.color = getAccountColor(account);
+                }).setCssStyles({ color: getAccountColor(account) });
             }
         } else {
             const groups = this.owner.validation.missingAccounts;
@@ -3273,7 +3308,7 @@ class AccountResolutionStepModal extends Modal {
                     const option = row.createEl('button', { text: this.accountLabel(account), cls: 'expensica-select-option',
                         attr: { type: 'button', role: 'menuitemradio', 'data-account-id': account.id,
                             'aria-checked': String(this.selectedId === account.id) } });
-                    option.style.color = getAccountColor(account);
+                    option.setCssStyles({ color: getAccountColor(account) });
                     option.addEventListener('click', () => {
                         if (this.owner.saving) return;
                         this.selectedId = account.id;
@@ -3298,7 +3333,8 @@ class AccountResolutionStepModal extends Modal {
                     } else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
                         event.preventDefault();
                         const options = Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'));
-                        const current = options.indexOf(event.target as HTMLButtonElement);
+                        const currentTarget = event.target;
+                        const current = currentTarget instanceof HTMLButtonElement ? options.indexOf(currentTarget) : -1;
                         const next = event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1
                             : event.key === 'ArrowDown' ? (current + 1) % options.length
                             : current <= 0 ? options.length - 1 : current - 1;
@@ -3307,7 +3343,8 @@ class AccountResolutionStepModal extends Modal {
                 });
             }
             const selected = accounts.get(this.selectedId || '');
-            if (selected) contentEl.createEl('p', { text: 'Selected: ' + this.accountLabel(selected) }).style.color = getAccountColor(selected);
+            if (selected) contentEl.createEl('p', { text: 'Selected: ' + this.accountLabel(selected) })
+                .setCssStyles({ color: getAccountColor(selected) });
         }
         this.errorEl = contentEl.createEl('p', { cls: 'expensica-reconcile-error' });
         const buttons = contentEl.createDiv('modal-button-container');
@@ -3419,7 +3456,7 @@ class ImportModal extends Modal {
         this.messageEl.setAttribute('aria-live', 'polite');
         this.errorsEl = contentEl.createDiv();
         this.errorsEl.hidden = true;
-        this.errorsEl.style.color = 'var(--text-error)';
+        this.errorsEl.setCssStyles({ color: 'var(--text-error)' });
         this.actionEl = contentEl.createEl('p');
         this.actionEl.hidden = true;
         this.fileInput = contentEl.createEl('input', {
@@ -3459,7 +3496,7 @@ class ImportModal extends Modal {
                 } catch (error) {
                     if (error instanceof TransactionValidationError) {
                         this.messageEl.textContent = 'Import errors';
-                        this.messageEl.style.color = 'var(--text-error)';
+                        this.messageEl.setCssStyles({ color: 'var(--text-error)' });
                         this.errorsEl.empty();
                         this.errorsEl.hidden = false;
                         const list = this.errorsEl.createEl('ul');
@@ -3490,14 +3527,14 @@ class ImportModal extends Modal {
                 }
             });
         });
-        void this.browse();
+        this.browse();
     }
 
     private selectSource(source: string | TransactionImportSource, retryWithPicker = false) {
         this.source = source;
         this.retryWithPicker = retryWithPicker;
         this.messageEl.textContent = typeof source === 'string' ? source.split(/[\\/]/).pop() || '' : source.name;
-        this.messageEl.style.color = '';
+        this.messageEl.setCssStyles({ color: '' });
         this.actionEl.hidden = true;
         this.errorsEl.empty();
         this.errorsEl.hidden = true;
@@ -3506,45 +3543,14 @@ class ImportModal extends Modal {
         this.importButton.disabled = false;
     }
 
-    private async browse() {
+    private browse(): void {
         if (this.choosing || this.dismissed) return;
         this.choosing = true;
         this.chooseButton.disabled = true;
         try {
-            if (Platform?.isDesktopApp && this.app.vault.adapter instanceof FileSystemAdapter) {
-                let dialog: ImportFileDialog | undefined;
-                try {
-                    // Use Obsidian's host bridge when available; add no plugin dependency.
-                    const hostModule = '@electron/remote';
-                    dialog = (await import(hostModule) as { dialog?: ImportFileDialog }).dialog;
-                } catch {
-                    try {
-                        const hostModule = 'electron';
-                        dialog = (await import(hostModule) as { remote?: { dialog?: ImportFileDialog } }).remote?.dialog;
-                    } catch { /* Use the system file input below. */ }
-                }
-                if (this.dismissed) return;
-                if (dialog) {
-                    const paths = await import('path');
-                    if (this.dismissed) return;
-                    const selected = await dialog.showOpenDialog({
-                        title: 'Import transactions',
-                        defaultPath: paths.join(this.app.vault.adapter.getBasePath(), this.plugin.dataFolderPath),
-                        filters: [{ name: 'JSON', extensions: ['json'] }], properties: ['openFile']
-                    });
-                    const selectedPath = selected.filePaths[0];
-                    if (!selected.canceled && selectedPath && !this.dismissed) {
-                        this.selectSource({ name: paths.basename(selectedPath),
-                            text: async () => (await import('fs')).promises.readFile(selectedPath, 'utf8') });
-                    }
-                    return;
-                }
-            }
-            // Mobile/WebView pickers choose their own starting location.
             this.fileInput.value = '';
             this.fileInput.click();
-        } catch (error) {
-            console.error('Expensica: Could not open the JSON picker', error);
+        } catch {
             if (!this.dismissed) this.messageEl.textContent = 'Could not open the file picker. Choose JSON to try again.';
         } finally {
             this.choosing = false;
@@ -3564,12 +3570,21 @@ class ImportModal extends Modal {
 // Folder suggestion modal for selecting folder
 class FolderSuggestionModal extends Modal {
     plugin: ExpensicaPlugin;
-    onSelect: (folder: string) => void;
+    onSelect: (folder: string) => void | Promise<void>;
     
-    constructor(app: App, plugin: ExpensicaPlugin, onSelect: (folder: string) => void) {
+    constructor(app: App, plugin: ExpensicaPlugin, onSelect: (folder: string) => void | Promise<void>) {
         super(app);
         this.plugin = plugin;
         this.onSelect = onSelect;
+    }
+
+    private async selectFolder(folder: string): Promise<void> {
+        try {
+            await this.onSelect(folder);
+            this.close();
+        } catch {
+            showExpensicaNotice('Could not save the daily review folder setting.');
+        }
     }
     
     onOpen() {
@@ -3579,7 +3594,8 @@ class FolderSuggestionModal extends Modal {
         
         // Create title
         const modalTitle = contentEl.createEl('h2', { cls: 'expensica-modal-title' });
-        modalTitle.innerHTML = '<span class="expensica-modal-title-icon">📁</span> Select Folder for Daily Reviews';
+        modalTitle.createSpan({ cls: 'expensica-modal-title-icon', text: '📁' });
+        modalTitle.append(document.createTextNode(' Select Folder for Daily Reviews'));
         
         contentEl.createEl('p', {text: 'Choose where to store your daily finance review notes:'});
         
@@ -3592,8 +3608,7 @@ class FolderSuggestionModal extends Modal {
         const rootOption = folderContainer.createDiv('folder-option');
         rootOption.setText('Root folder');
         rootOption.addEventListener('click', () => {
-            this.onSelect('');
-            this.close();
+            void this.selectFolder('');
         });
         
         // Add all folders
@@ -3601,8 +3616,7 @@ class FolderSuggestionModal extends Modal {
             const folderOption = folderContainer.createDiv('folder-option');
             folderOption.setText(folder);
             folderOption.addEventListener('click', () => {
-                this.onSelect(folder);
-                this.close();
+                void this.selectFolder(folder);
             });
         });
         
@@ -3649,10 +3663,10 @@ class FolderSuggestionModal extends Modal {
                         // Create the folder
                         await this.plugin.app.vault.createFolder(folderName);
                         showExpensicaNotice(`Created folder: ${folderName}`);
-                        this.onSelect(folderName);
-                        this.close();
+                        await this.selectFolder(folderName);
                     } catch (error) {
-                        showExpensicaNotice(`Error creating folder: ${error.message}`);
+                        const message = error instanceof Error ? error.message : String(error);
+                        showExpensicaNotice(`Error creating folder: ${message}`);
                     }
                 } else {
                     showExpensicaNotice('Please enter a folder name');
@@ -3716,9 +3730,9 @@ class FolderSuggestionModal extends Modal {
 
 // Date picker modal class
 class DatePickerModal extends Modal {
-    onSelect: (date: Date) => void;
+    onSelect: (date: Date) => void | Promise<void>;
     
-    constructor(app: App, onSelect: (date: Date) => void) {
+    constructor(app: App, onSelect: (date: Date) => void | Promise<void>) {
         super(app);
         this.onSelect = onSelect;
     }
@@ -3749,8 +3763,10 @@ class DatePickerModal extends Modal {
         // Handle submit
         submitButton.addEventListener('click', () => {
             const selectedDate = parseLocalDate(dateInput.value);
-            this.onSelect(selectedDate);
             this.close();
+            void Promise.resolve(this.onSelect(selectedDate)).catch(() => {
+                showExpensicaNotice('Failed to create daily finance review');
+            });
         });
     }
     

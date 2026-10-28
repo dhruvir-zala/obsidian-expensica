@@ -101,34 +101,42 @@ export class DataRecoveryModal extends Modal {
         }
         const buttons = contentEl.createDiv('modal-button-container');
         if (reconciliation) buttons.createEl('button', { text: 'Resolve accounts', cls: 'mod-cta' })
-            .addEventListener('click', async () => {
-                try { await reconciliation.resolve(); }
-                catch { this.retryError = 'Accounts could not be resolved. Check the files, then Retry.'; this.refresh(); }
+            .addEventListener('click', () => {
+                void (async () => {
+                    try { await reconciliation.resolve(); }
+                    catch (error) {
+                        console.error('Expensica: Account resolution could not complete', error);
+                        this.retryError = 'Accounts could not be resolved. Check the files, then Retry.';
+                        this.refresh();
+                    }
+                })();
             });
         const retryButton = buttons.createEl('button', { text: 'Retry', cls: reconciliation ? '' : 'mod-cta' });
         retryButton.disabled = this.retrying;
-        retryButton.addEventListener('click', async () => {
-            if (this.retrying) return;
-            this.retrying = true;
-            this.retryError = null;
-            retryButton.disabled = true;
-            backButton.disabled = !!this.getSaveFailure;
-            try {
-                if (await this.retry() && !this.dismissed) {
-                    this.retrying = false;
-                    this.close();
-                }
-            } catch (error) {
-                console.error('Expensica: Data recovery could not complete', error);
-                this.retryError = 'The file is still unavailable. Check file access and available storage, then retry. Your unsaved input has been kept.';
-            } finally {
-                this.retrying = false;
-                this.refresh();
-            }
-        });
+        retryButton.addEventListener('click', () => { void this.handleRetry(retryButton, backButton); });
         const backButton = buttons.createEl('button', { text: reconciliation ? 'Not now' : this.getSaveFailure && !importFailure ? 'Back to Editor' : 'Close' });
         backButton.disabled = !!this.getSaveFailure && this.retrying;
         backButton.addEventListener('click', () => this.close());
+    }
+
+    private async handleRetry(retryButton: HTMLButtonElement, backButton: HTMLButtonElement): Promise<void> {
+        if (this.retrying) return;
+        this.retrying = true;
+        this.retryError = null;
+        retryButton.disabled = true;
+        backButton.disabled = !!this.getSaveFailure;
+        try {
+            if (await this.retry() && !this.dismissed) {
+                this.retrying = false;
+                this.close();
+            }
+        } catch (error) {
+            console.error('Expensica: Data recovery could not complete', error);
+            this.retryError = 'The file is still unavailable. Check file access and available storage, then retry. Your unsaved input has been kept.';
+        } finally {
+            this.retrying = false;
+            this.refresh();
+        }
     }
 
     onClose() {
