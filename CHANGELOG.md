@@ -17,5 +17,5 @@ All notable changes to Expensica will be documented in this file.
 - Simple JSON data structure for easy backup and portability
 
 ### Notes
-- Compatible with Obsidian v0.15.0 and above
+- Compatible with Obsidian v1.7.2 and above
 - MIT Licensed

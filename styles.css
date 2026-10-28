@@ -7268,47 +7268,6 @@ button.expensica-category-card-edit-button:active {
     transform: translateY(-2px);
 }
 
-/* Settings Links Card Styles */
-.expensica-links-card {
-    background-color: var(--background-secondary);
-    border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 20px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    border: 1px solid var(--background-modifier-border);
-}
-
-.expensica-links-card h2 {
-    margin-top: 0;
-    margin-bottom: 16px;
-    color: var(--text-normal);
-    font-size: 1.5em;
-    border-bottom: 1px solid var(--background-modifier-border);
-    padding-bottom: 8px;
-}
-
-.expensica-links-section {
-    margin-bottom: 16px;
-}
-
-.expensica-links-section h3 {
-    margin-top: 0;
-    margin-bottom: 8px;
-    color: var(--text-normal);
-    font-size: 1.1em;
-}
-
-.expensica-links-section a {
-    color: var(--text-accent);
-    text-decoration: none;
-    transition: color 0.2s ease;
-}
-
-.expensica-links-section a:hover {
-    color: var(--text-accent-hover);
-    text-decoration: underline;
-}
-
 .expensica-settings-separator {
     border: none;
     border-top: 1px solid var(--background-modifier-border);
@@ -8767,18 +8726,6 @@ h4.expensica-transactions-title {
 /* Transaction animation delay */
 .transaction-animate-delay {
   animation-delay: var(--transaction-delay, 0ms);
-}
-
-/* Link styles for external content */
-.coffee-link-img {
-  border: 0px;
-  height: 36px;
-}
-
-/* External link styles */
-.external-link-display-block {
-  display: block;
-  margin-bottom: 8px;
 }
 
 /* Color preview styles */

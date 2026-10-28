@@ -434,7 +434,7 @@ class BulkRenameTransactionsModal extends Modal {
 
         form.addEventListener('submit', (event) => {
             event.preventDefault();
-            void this.plugin.runSaveOperation(this, 'Rename transactions', async () => {
+            return this.plugin.runSaveOperation(this, 'Rename transactions', async () => {
                 if (!form.reportValidity()) return false;
                 const nextName = input.value.trim();
                 if (!nextName) {
@@ -1436,7 +1436,7 @@ export class ExpensicaDashboardView extends ItemView {
     }
 
     private cancelDoughnutLabelAnimation() {
-        if (this.doughnutLabelAnimationFrame !== null) {
+        if (this.doughnutLabelAnimationFrame != null) {
             window.cancelAnimationFrame(this.doughnutLabelAnimationFrame);
             this.doughnutLabelAnimationFrame = null;
         }
@@ -1965,18 +1965,16 @@ export class ExpensicaDashboardView extends ItemView {
             this.app,
             'Delete Transaction?',
             `Are you sure you want to delete this ${transaction.type.toLowerCase()} transaction? This action cannot be undone.`,
-            (confirmed) => {
+            async (confirmed) => {
                 if (confirmed) {
-                    handleDashboardAsync('Delete transaction', async () => {
-                        await this.plugin.deleteTransaction(id, this);
-                        onConfirmDelete?.();
-                        this.selectedTransactionIds.delete(id);
-                        await this.loadTransactionsData();
-                        this.requestAllChartAnimations();
-                        this.renderDashboard();
-                        showExpensicaNotice('Transaction deleted successfully');
-                        onDeleted?.();
-                    });
+                    await this.plugin.deleteTransaction(id, this);
+                    onConfirmDelete?.();
+                    this.selectedTransactionIds.delete(id);
+                    await this.loadTransactionsData();
+                    this.requestAllChartAnimations();
+                    this.renderDashboard();
+                    showExpensicaNotice('Transaction deleted successfully');
+                    onDeleted?.();
                 }
             }, 'Delete', this.plugin
         ).open();
@@ -1993,16 +1991,14 @@ export class ExpensicaDashboardView extends ItemView {
             this.app,
             'Delete Budget?',
             `Are you sure you want to delete the budget for ${categoryName}? This action cannot be undone.`,
-            (confirmed) => {
+            async (confirmed) => {
                 if (!confirmed) {
                     return;
                 }
 
-                handleDashboardAsync('Delete budget', async () => {
-                    await this.plugin.deleteBudget(id);
-                    showExpensicaNotice('Budget deleted successfully');
-                    onDeleted?.();
-                });
+                await this.plugin.deleteBudget(id);
+                showExpensicaNotice('Budget deleted successfully');
+                onDeleted?.();
             }, 'Delete', this.plugin
         ).open();
     }
@@ -2016,19 +2012,17 @@ export class ExpensicaDashboardView extends ItemView {
             this.app,
             'Delete Transactions?',
             `Are you sure you want to delete ${selectedTransactions.length} selected transactions? This action cannot be undone.`,
-            (confirmed) => {
+            async (confirmed) => {
                 if (!confirmed) {
                     return;
                 }
 
-                handleDashboardAsync('Delete transactions', async () => {
-                    await this.plugin.deleteTransactions(selectedTransactions.map(transaction => transaction.id), this);
-                    this.selectedTransactionIds.clear();
-                    await this.loadTransactionsData();
-                    this.requestAllChartAnimations();
-                    this.renderDashboard();
-                    showExpensicaNotice('Transactions deleted successfully');
-                });
+                await this.plugin.deleteTransactions(selectedTransactions.map(transaction => transaction.id), this);
+                this.selectedTransactionIds.clear();
+                await this.loadTransactionsData();
+                this.requestAllChartAnimations();
+                this.renderDashboard();
+                showExpensicaNotice('Transactions deleted successfully');
             }, 'Delete', this.plugin
         ).open();
     }
@@ -3738,7 +3732,7 @@ export class ExpensicaDashboardView extends ItemView {
         }
 
         const canvas = canvasContainer.createEl('canvas', { attr: { id: 'cumulative-expenses-chart' } });
-        window.setTimeout(() => {
+        setTimeout(() => {
             if (canvas.isConnected === false) return;
             this.createCumulativeExpensesChart(canvas, legendContainer);
         }, 50);
@@ -6733,13 +6727,13 @@ export class TransactionModal extends Modal {
         deleteBtn?.addEventListener('click', () => {
             if (!this.transaction) return;
             const closeEditor = () => this.close();
-            void this.dashboardView.deleteTransaction(this.transaction.id, closeEditor, closeEditor);
+            return this.dashboardView.deleteTransaction(this.transaction.id, closeEditor, closeEditor);
         });
 
         let saving = false;
         form.addEventListener('submit', (e) => {
             e.preventDefault();
-            void this.plugin.runSaveOperation(this, this.transaction ? 'Edit transaction' : 'Add transaction', async () => {
+            return this.plugin.runSaveOperation(this, this.transaction ? 'Edit transaction' : 'Add transaction', async () => {
                 if (!form.reportValidity()) return false;
                 if (saving) return false;
                 saving = true;
@@ -7059,7 +7053,7 @@ export class AccountModal extends Modal {
 
         form.addEventListener('submit', (event) => {
             event.preventDefault();
-            void this.plugin.runSaveOperation(this, 'Add account', async () => {
+            return this.plugin.runSaveOperation(this, 'Add account', async () => {
                 if (!form.reportValidity()) return false;
 
                 if (saveAccountButton.disabled) return false;
@@ -7535,7 +7529,7 @@ export class AccountEditorModal extends Modal {
                         return;
                     }
 
-                    void this.plugin.runSaveOperation(this, 'Edit account', () => submitAccount(event, true));
+                    return this.plugin.runSaveOperation(this, 'Edit account', () => submitAccount(event, true));
                 }).open();
                 return false;
             }
@@ -7544,7 +7538,7 @@ export class AccountEditorModal extends Modal {
         };
         form.addEventListener('submit', (event) => {
             event.preventDefault();
-            void this.plugin.runSaveOperation(this, this.account ? 'Edit account' : 'Add account', () => submitAccount(event));
+            return this.plugin.runSaveOperation(this, this.account ? 'Edit account' : 'Add account', () => submitAccount(event));
         });
     }
 
@@ -7915,7 +7909,7 @@ class BudgetModal extends Modal {
                 return;
             }
 
-            void this.dashboard.deleteBudget(this.budget.id, () => {
+            return this.dashboard.deleteBudget(this.budget.id, () => {
                 this.close();
             });
         });
@@ -7923,7 +7917,7 @@ class BudgetModal extends Modal {
         let saving = false;
         form.addEventListener('submit', (e) => {
             e.preventDefault();
-            void this.plugin.runSaveOperation(this, this.budget ? 'Edit budget' : 'Add budget', async () => {
+            return this.plugin.runSaveOperation(this, this.budget ? 'Edit budget' : 'Add budget', async () => {
                 if (!form.reportValidity()) return false;
                 if (this.isRollover && this.needsRolloverStart() && !this.rolloverStartInput?.value) {
                     this.rolloverStartButton?.click();

@@ -113,7 +113,7 @@ export class DataRecoveryModal extends Modal {
             });
         const retryButton = buttons.createEl('button', { text: 'Retry', cls: reconciliation ? '' : 'mod-cta' });
         retryButton.disabled = this.retrying;
-        retryButton.addEventListener('click', () => { void this.handleRetry(retryButton, backButton); });
+        retryButton.addEventListener('click', () => this.handleRetry(retryButton, backButton));
         const backButton = buttons.createEl('button', { text: reconciliation ? 'Not now' : this.getSaveFailure && !importFailure ? 'Back to Editor' : 'Close' });
         backButton.disabled = !!this.getSaveFailure && this.retrying;
         backButton.addEventListener('click', () => this.close());

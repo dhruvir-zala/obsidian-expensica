@@ -71,7 +71,7 @@ export class ConfirmationModal extends Modal {
             if (this.resolved) this.close();
         };
         confirmBtn.addEventListener('click', () => {
-            void (this.plugin
+            return (this.plugin
                 ? this.plugin.runSaveOperation(this, this.title.replace(/\?$/, ''), submit)
                 : submit());
         });

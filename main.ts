@@ -1,5 +1,7 @@
-import { App, Modal, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { App, FileSystemAdapter, Modal, Platform, Plugin, PluginSettingTab, Setting } from 'obsidian';
 import type { SettingDefinitionItem, TextComponent } from 'obsidian';
+import * as fs from 'fs';
+import * as path from 'path';
 
 import { AccountEditorModal, ExpensicaDashboardView, EXPENSICA_VIEW_TYPE, TransactionModal, DateRangeType, DashboardTab } from './src/dashboard-view';
 import { ExpensicaTransactionsView } from './src/transactions-view';
@@ -58,6 +60,19 @@ interface TransactionImportSource {
     text(): Promise<string>;
 }
 
+interface NativeFileDialog {
+    showOpenDialog(options: {
+        defaultPath: string;
+        filters: { name: string; extensions: string[] }[];
+        properties: string[];
+    }): Promise<{ canceled: boolean; filePaths: string[] }>;
+}
+
+interface ElectronRemote {
+    dialog?: NativeFileDialog;
+    remote?: { dialog?: NativeFileDialog };
+}
+
 // Import visualizations for bundling
 import './src/dashboard-integration';
 import './src/visualizations/calendar-view';
@@ -86,18 +101,7 @@ function createChevronIcon(parent: HTMLElement, size: number): void {
 }
 
 function createWarningIcon(parent: HTMLElement): void {
-    const svg = parent.createSvg('svg', {
-        attr: {
-            viewBox: '0 0 24 24',
-            fill: 'none',
-            stroke: 'currentColor',
-            'stroke-width': '2',
-            'stroke-linecap': 'round',
-            'stroke-linejoin': 'round'
-        }
-    });
-    svg.createSvg('circle', { attr: { cx: '12', cy: '12', r: '10' } });
-    svg.createSvg('path', { attr: { d: 'M12 8v4m0 4h.01' } });
+    parent.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4m0 4h.01"></path></svg>';
 }
 
 // Define the global window interface to include jspdf
@@ -735,8 +739,8 @@ export default class ExpensicaPlugin extends Plugin {
 
     private isExpensicaFocused(): boolean {
         const { workspace } = this.app;
-        const view = workspace.getActiveViewOfType(ExpensicaDashboardView);
-        return !this.unloaded && workspace.layoutReady && !!view
+        const view = workspace.getActiveViewOfType?.(ExpensicaDashboardView);
+        return !this.unloaded && workspace.layoutReady && !!view && view.getViewType() === EXPENSICA_VIEW_TYPE
             && (view.containerEl.ownerDocument?.hasFocus() ?? true);
     }
 
@@ -971,7 +975,7 @@ export default class ExpensicaPlugin extends Plugin {
                 this.datasetPath(dataset));
             const retry = actions.createEl('button', { text: missingAccounts ? 'More' : 'Retry', cls: 'expensica-standard-button' });
             retry.disabled = !missingAccounts && this.retryingDataRecovery;
-            retry.addEventListener('click', voidAsync(async () => {
+            retry.addEventListener('click', async () => {
                 if (missingAccounts) {
                     this.openDataRecovery();
                     return;
@@ -983,7 +987,7 @@ export default class ExpensicaPlugin extends Plugin {
                     this.refreshDataRecoveryWarnings();
                 }
                 if (this.protectedDatasets.has(dataset)) this.openDataRecovery();
-            }));
+            });
         }
         const visibleFailures = new Map<string, { owner: object; failure: SaveFailure }>();
         for (const [owner, failure] of this.saveFailures) {
@@ -998,13 +1002,13 @@ export default class ExpensicaPlugin extends Plugin {
                 ' could not be accessed. Check file permissions and if the vault has free space.', failure.path);
             const retry = actions.createEl('button', { text: 'Retry', cls: 'expensica-standard-button' });
             retry.disabled = this.savingOwners.has(owner) || this.retryingSaveOwners.has(owner);
-            retry.addEventListener('click', voidAsync(async () => {
+            retry.addEventListener('click', async () => {
                 if (this.retryingSaveOwners.has(owner) || this.savingOwners.has(owner)) return;
                 if (!await this.retrySaveRecovery(owner) && this.saveFailures.has(owner)) {
                     if (Array.from(this.protectedDatasets).some(dataset => this.datasetPath(dataset) === failure.path)) this.openDataRecovery();
                     else this.openSaveRecovery(owner);
                 }
-            }));
+            });
         }
     }
 
@@ -1027,8 +1031,8 @@ export default class ExpensicaPlugin extends Plugin {
 
     private refreshDataRecoveryWarnings(): void {
         for (const leaf of this.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE)) {
-            const container = leaf.view.containerEl.children[1];
-            if (container?.instanceOf(HTMLElement)) this.renderDataRecoveryWarning(container);
+            const container = leaf.view.containerEl.children[1] as HTMLElement | undefined;
+            if (container && typeof container.createDiv === 'function') this.renderDataRecoveryWarning(container);
         }
     }
 
@@ -2627,7 +2631,6 @@ class ExpensicaSettingTab extends PluginSettingTab {
             control: { type: 'toggle', key }
         });
         return [
-            { name: 'Support & Resources', searchable: false, render: (setting: Setting) => this.renderLinksSetting(setting) },
             {
                 name: 'Default Currency',
                 desc: 'Select the currency to use for all transactions.',
@@ -2690,56 +2693,6 @@ class ExpensicaSettingTab extends PluginSettingTab {
                 }
             });
         }
-    }
-
-    private renderLinksSetting(setting: Setting): void {
-        setting.setHeading();
-        const linksCard = setting.settingEl.createDiv('expensica-links-card');
-        new Setting(linksCard).setName('Support & Resources').setHeading();
-
-        // Buy Me a Coffee section
-        const coffeeSection = linksCard.createDiv('expensica-links-section');
-        new Setting(coffeeSection).setName('Support the Developer').setHeading();
-        const coffeeLink = coffeeSection.createEl('a', {
-            href: 'https://ko-fi.com/X8X71DLZHF',
-            attr: { target: '_blank' }
-        });
-        coffeeLink.createEl('img', {
-            cls: 'coffee-link-img',
-            attr: {
-                src: 'https://storage.ko-fi.com/cdn/kofi6.png?v=6',
-                border: '0',
-                alt: 'Buy Me a Coffee at ko-fi.com'
-            }
-        });
-
-        // Website and Social Links
-        const socialSection = linksCard.createDiv('expensica-links-section');
-        new Setting(socialSection).setName('Connect with us').setHeading();
-        
-        socialSection.createEl('a', {
-            href: 'https://expensica.com/',
-            text: '🌐 Visit Expensica Website',
-            attr: { target: '_blank' },
-            cls: 'external-link-display-block'
-        });
-        
-        const linkedinLink = socialSection.createDiv('external-link-display-block');
-        linkedinLink.createEl('a', {
-            href: 'https://www.linkedin.com/company/expensica/',
-            text: '💼 Follow on LinkedIn',
-            attr: { target: '_blank' }
-        });
-
-        // GitHub Issues
-        const githubSection = linksCard.createDiv('expensica-links-section');
-        new Setting(githubSection).setName('Report Issues & Request Features').setHeading();
-        githubSection.createEl('a', {
-            href: 'https://github.com/dhruvir-zala/obsidian-expensica/issues',
-            text: '🐛 GitHub Issues & Feature Requests',
-            attr: { target: '_blank' },
-            cls: 'external-link-display-block'
-        });
     }
 
     private renderCurrencySetting(setting: Setting): void {
@@ -3323,8 +3276,7 @@ class AccountResolutionStepModal extends Modal {
                     } else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
                         event.preventDefault();
                         const options = Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'));
-                        const currentTarget = event.target;
-                        const current = currentTarget instanceof HTMLButtonElement ? options.indexOf(currentTarget) : -1;
+                        const current = options.findIndex(option => option === event.target);
                         const next = event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1
                             : event.key === 'ArrowDown' ? (current + 1) % options.length
                             : current <= 0 ? options.length - 1 : current - 1;
@@ -3343,15 +3295,15 @@ class AccountResolutionStepModal extends Modal {
         confirm.disabled = this.summary
             ? this.owner.validation.missingAccounts.some(group => !accounts.has(this.owner.choices.get(group.reference) || ''))
             : !this.selectedId;
-        confirm.addEventListener('click', () => {
+        confirm.addEventListener('click', async () => {
             if (this.owner.saving || confirm.disabled) return;
-            if (this.summary) { void this.owner.confirm(); return; }
+            if (this.summary) { await this.owner.confirm(); return; }
             const selectedId = this.selectedId;
             if (!selectedId) return;
             if (this.mode === 'all') {
                 this.owner.bulkSelection = this.selectedId;
                 for (const group of this.owner.validation.missingAccounts) this.owner.choices.set(group.reference, selectedId);
-                void this.owner.confirm();
+                await this.owner.confirm();
                 return;
             }
             this.owner.choices.set(this.owner.validation.missingAccounts[this.index].reference, selectedId);
@@ -3474,8 +3426,8 @@ class ImportModal extends Modal {
         closeButton.addEventListener('click', () => this.close());
         this.chooseButton.addEventListener('click', () => this.browse());
         this.importButton.addEventListener('click', () => {
-            if (this.retryWithPicker && this.importButton.textContent === 'Retry') { this.browse(); return; }
-            void this.plugin.runSaveOperation(this, 'Import transactions', async () => {
+            if (this.retryWithPicker && this.importButton.textContent === 'Retry') return this.browse();
+            return this.plugin.runSaveOperation(this, 'Import transactions', async () => {
                 if (!this.source || this.importButton.disabled) return false;
                 const source = this.source;
                 this.importButton.disabled = true;
@@ -3502,10 +3454,10 @@ class ImportModal extends Modal {
                         this.actionEl.hidden = false;
                         if (error.canReconcileAccounts) {
                             this.actionEl.createEl('button', { text: 'Resolve accounts', cls: 'mod-cta' })
-                                .addEventListener('click', voidAsync(async () => {
+                                .addEventListener('click', async () => {
                                     try { await this.plugin.openAccountReconciliation(source, () => { if (!this.dismissed) this.close(); }); }
                                     catch { this.messageEl.textContent = 'Could not open account reconciliation. Check the file, then Retry.'; }
-                                }));
+                                });
                         }
                         this.chooseButton.hidden = true;
                         this.importButton.textContent = 'Retry';
@@ -3534,12 +3486,41 @@ class ImportModal extends Modal {
         this.importButton.disabled = false;
     }
 
-    private browse(): void {
+    private async browse(): Promise<void> {
         if (this.choosing || this.dismissed) return;
         this.choosing = true;
         this.chooseButton.disabled = true;
         try {
             this.fileInput.value = '';
+            if (typeof Platform !== 'undefined' && Platform.isDesktopApp
+                && typeof FileSystemAdapter !== 'undefined' && this.app.vault.adapter instanceof FileSystemAdapter) {
+                let dialog: NativeFileDialog | undefined;
+                try {
+                    dialog = (require('@electron/remote') as ElectronRemote).dialog;
+                } catch {
+                    try {
+                        dialog = (require('electron') as ElectronRemote).remote?.dialog;
+                    } catch {
+                        dialog = undefined;
+                    }
+                }
+
+                if (dialog) {
+                    const result = await dialog.showOpenDialog({
+                        defaultPath: path.join(this.app.vault.adapter.getBasePath(), this.plugin.dataFolderPath),
+                        filters: [{ name: 'JSON files', extensions: ['json'] }],
+                        properties: ['openFile']
+                    });
+                    if (this.dismissed || result.canceled || !result.filePaths[0]) return;
+                    const filePath = result.filePaths[0];
+                    this.selectSource({
+                        name: path.basename(filePath),
+                        text: async () => fs.promises.readFile(filePath, 'utf8')
+                    });
+                    return;
+                }
+            }
+
             this.fileInput.click();
         } catch {
             if (!this.dismissed) this.messageEl.textContent = 'Could not open the file picker. Choose JSON to try again.';

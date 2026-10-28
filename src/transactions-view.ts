@@ -191,7 +191,7 @@ class BulkRenameTransactionsModal extends Modal {
 
         form.addEventListener('submit', (event) => {
             event.preventDefault();
-            void this.plugin.runSaveOperation(this, 'Rename transactions', async () => {
+            return this.plugin.runSaveOperation(this, 'Rename transactions', async () => {
                 if (!form.reportValidity()) return false;
                 const nextName = input.value.trim();
                 if (!nextName) {
@@ -852,7 +852,7 @@ export class ExpensicaTransactionsView implements TransactionView {
     }
 
     applyNavigationFilter(filter: TransactionNavigationFilter) {
-        if (this._debounceTimeout !== null) {
+        if (this._debounceTimeout != null) {
             window.clearTimeout(this._debounceTimeout);
             this._debounceTimeout = null;
         }
