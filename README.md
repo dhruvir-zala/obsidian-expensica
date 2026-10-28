@@ -1,7 +1,5 @@
 # Expensica
 
-![Expensica Dashboard](/assets/Expensica%20Dashboard.png)
-
 Expensica tracks income and expenses inside Obsidian. Add a transaction, check where the money went, then get back to whatever you were doing. Your data lives in your vault, not in another finance app asking you to make an account.
 
 ## Install
@@ -52,7 +50,6 @@ MIT. See [LICENSE](LICENSE).
 
 Expensica is made by [Dhruvir Zala](https://dhruvirzala.com/).
 
-- [Website](https://expensica.com/)
 - [LinkedIn](https://www.linkedin.com/in/dhruvir-zala/)
 - [Twitter](https://twitter.com/DhruvirZala)
 - [Buy me a coffee](https://ko-fi.com/X8X71DLZHF)
