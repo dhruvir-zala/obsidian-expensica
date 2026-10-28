@@ -83,11 +83,6 @@ function getNativeFileDialog(module: unknown): NativeFileDialog | undefined {
     return undefined;
 }
 
-async function importOptionalModule(moduleName: string): Promise<unknown> {
-    const imported: unknown = await import(moduleName);
-    return imported;
-}
-
 // Import visualizations for bundling
 import './src/dashboard-integration';
 import './src/visualizations/calendar-view';
@@ -3536,10 +3531,10 @@ class ImportModal extends Modal {
             if (Platform.isDesktopApp && this.app.vault.adapter instanceof FileSystemAdapter) {
                 let dialog: NativeFileDialog | undefined;
                 try {
-                    dialog = getNativeFileDialog(await importOptionalModule('@electron/remote'));
+                    dialog = getNativeFileDialog(await import('@electron/remote'));
                 } catch {
                     try {
-                        dialog = getNativeFileDialog(await importOptionalModule('electron'));
+                        dialog = getNativeFileDialog(await import('electron'));
                     } catch {
                         dialog = undefined;
                     }
