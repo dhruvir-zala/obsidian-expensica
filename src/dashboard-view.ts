@@ -1492,10 +1492,7 @@ export class ExpensicaDashboardView extends ItemView {
                 const activePercentage = this.getActiveDoughnutPercentageValue(chart);
                 if (!activePercentage) {
                     this.cancelDoughnutLabelAnimation();
-                    return;
-                }
-
-                if (
+                } else if (
                     this.doughnutLabelAnimationIndex !== activePercentage.index
                     || Math.abs(this.doughnutLabelAnimationTarget - activePercentage.percentage) > 0.001
                     || Math.abs(this.doughnutAmountAnimationTarget - activePercentage.amount) > 0.001
@@ -1505,11 +1502,11 @@ export class ExpensicaDashboardView extends ItemView {
 
                 const meta = chart.getDatasetMeta(0);
                 const firstArc = meta.data[0] as ArcElement | undefined;
-                if (!firstArc) {
-                    return;
-                }
-
-                const label = this.formatDoughnutPercentageLabel(this.doughnutLabelAnimationValue, true);
+                const amountValue = activePercentage
+                    ? this.doughnutAmountAnimationValue : this.getDoughnutVisibleDoughnutTotal(chart);
+                const percentageValue = activePercentage
+                    ? this.doughnutLabelAnimationValue : amountValue > 0 ? 100 : 0;
+                const label = this.formatDoughnutPercentageLabel(percentageValue, true);
 
                 const ctx = chart.ctx;
                 const styles = getComputedStyle(chart.canvas);
@@ -1519,13 +1516,13 @@ export class ExpensicaDashboardView extends ItemView {
                 const amountFontSize = styles.getPropertyValue('--expensica-font-size-donut-amount-current').trim()
                     || styles.getPropertyValue('--expensica-font-size-donut-amount').trim()
                     || '20px';
-                const amount = formatCurrency(this.doughnutAmountAnimationValue, this.plugin.settings.defaultCurrency);
+                const amount = formatCurrency(amountValue, this.plugin.settings.defaultCurrency);
                 const fontFamily = styles.fontFamily || getComputedStyle(document.body).fontFamily || 'sans-serif';
                 const x = chart.chartArea.left + (chart.chartArea.right - chart.chartArea.left) / 2;
                 const y = chart.chartArea.top + (chart.chartArea.bottom - chart.chartArea.top) / 2;
                 const gap = parseFloat(styles.getPropertyValue('--expensica-donut-label-gap')) || 8;
                 const amountY = y + (parseFloat(fontSize) + parseFloat(amountFontSize)) / 2 + gap;
-                const textWidth = Math.max(0, firstArc.innerRadius * 2 - 8);
+                const textWidth = Math.max(0, firstArc ? firstArc.innerRadius * 2 - 8 : chart.chartArea.width);
 
                 ctx.save();
                 ctx.textAlign = 'center';
