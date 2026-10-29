@@ -101,7 +101,7 @@ class Chart {
 }
 const animationFrames = [];
 const chartTimers = [];
-const { ExpensicaDashboardView, TransactionModal, DateRangeType, BudgetModal, AccountEditorModal, AccountModal } = load('src/dashboard-view.ts', {
+const { ExpensicaDashboardView, TransactionModal, DateRangePickerModal, DateRangeType, BudgetModal, AccountEditorModal, AccountModal } = load('src/dashboard-view.ts', {
     obsidian: { Component, Modal, ItemView: Component, setIcon() {} }, './models': models,
     'chart.js/auto': { default: Chart }, 'chart.js': { Tooltip: { positioners: {} } },
     './date-selector-modal': { DateSelectorModal, formatDateForDisplay: value => value },
@@ -2378,6 +2378,105 @@ test('real persistence failures keep P0 recovery and retry the selected file exa
     assert.equal(h.p.getAllTransactions().length, 2);
     assert.equal(h.storage.writes, 2, 'one failed and one successful write');
     assert.equal(editor.closed, true);
+});
+
+test('Range start and end fields open the existing custom calendar and retain confirmed dates', () => {
+    const modal = new DateRangePickerModal({}, models.parseLocalDate('2026-03-07'), models.parseLocalDate('2026-03-09'), () => {});
+    modal.open();
+    assert.equal(modal.contentEl.querySelectorAll('input').some(input => input.attrs.type === 'date'), false);
+    for (const [id, initial, selected] of [
+        ['start-date', '2026-03-07', '2026-03-08'], ['end-date', '2026-03-09', '2026-11-01']
+    ]) {
+        const button = modal.contentEl.querySelector('#' + id);
+        const input = modal.contentEl.querySelector(`input[name="${id}"]`);
+        assert.equal(button.tag, 'button');
+        assert.equal(button.attrs['aria-haspopup'], 'dialog');
+        assert.equal(input.attrs.type, 'hidden');
+        button.isConnected = true;
+        button.click();
+        const picker = shownModals.at(-1);
+        assert.ok(picker instanceof DateSelectorModal);
+        assert.equal(picker.initialDate, initial);
+        assert.equal(button.attrs['aria-expanded'], 'true');
+        const count = shownModals.length;
+        button.click();
+        assert.equal(shownModals.length, count);
+        picker.confirm(selected);
+        assert.equal(input.value, selected);
+        assert.equal(button.querySelector('.expensica-date-field-label').textContent, selected);
+        assert.equal(button.attrs['aria-expanded'], 'false');
+        assert.equal(button.focused, true);
+        button.click();
+        assert.equal(shownModals.at(-1).initialDate, selected);
+        shownModals.at(-1).close();
+    }
+    modal.close();
+});
+
+test('cancelling a Range calendar preserves dates and closing Range closes its child picker', () => {
+    const selected = [];
+    const modal = new DateRangePickerModal({}, models.parseLocalDate('2026-10-01'), models.parseLocalDate('2026-10-15'),
+        (...dates) => selected.push(dates));
+    modal.open();
+    const button = modal.contentEl.querySelector('#start-date');
+    const input = modal.contentEl.querySelector('input[name="start-date"]');
+    button.click();
+    shownModals.at(-1).close();
+    assert.equal(input.value, '2026-10-01');
+    assert.equal(button.attrs['aria-expanded'], 'false');
+    button.click();
+    const picker = shownModals.at(-1);
+    modal.contentEl.querySelectorAll('button').find(button => button.textContent === 'Cancel').click();
+    assert.equal(picker.closed, true);
+    picker.onConfirm('2026-10-05');
+    assert.equal(input.value, '2026-10-01', 'a stale child callback must not change a dismissed range');
+    assert.deepEqual(selected, []);
+});
+
+test('Range retains date ordering validation and accepts a single local calendar day', () => {
+    const selected = [];
+    const modal = new DateRangePickerModal({}, models.parseLocalDate('2026-03-09'), models.parseLocalDate('2026-03-07'),
+        (...dates) => selected.push(dates));
+    modal.open();
+    const apply = modal.contentEl.querySelectorAll('button').find(button => button.textContent === 'Apply');
+    apply.click();
+    assert.equal(selected.length, 0);
+    assert.equal(notices.at(-1), 'Start date cannot be after end date');
+    assert.ok(!modal.closed);
+    modal.contentEl.querySelector('#start-date').click();
+    shownModals.at(-1).confirm('2026-03-07');
+    apply.click();
+    assert.equal(selected.length, 1);
+    assert.equal(modal.closed, true);
+    for (const date of selected[0]) {
+        assert.equal(models.formatDate(date), '2026-03-07');
+        assert.equal(date.getHours(), 0);
+    }
+});
+
+test('Range selections update the shared dashboard filter and preserve inclusive end-of-day bounds', async () => {
+    const effects = [];
+    const view = Object.assign(Object.create(ExpensicaDashboardView.prototype), {
+        app: {}, customStartDate: models.parseLocalDate('2026-03-01'), customEndDate: models.parseLocalDate('2026-03-31'),
+        updateSharedDateRange: async () => effects.push('share'), loadTransactionsData: async () => effects.push('load'),
+        persistDashboardState: () => effects.push('persist'), requestAllChartAnimations: () => effects.push('animate'),
+        renderDashboard: () => effects.push('render')
+    });
+    await view.applyDateRangeSelection(DateRangeType.CUSTOM);
+    const modal = shownModals.at(-1);
+    assert.ok(modal instanceof DateRangePickerModal);
+    for (const [id, date] of [['start-date', '2026-03-07'], ['end-date', '2026-03-09']]) {
+        modal.contentEl.querySelector('#' + id).click();
+        shownModals.at(-1).confirm(date);
+    }
+    modal.contentEl.querySelectorAll('button').find(button => button.textContent === 'Apply').click();
+    await new Promise(setImmediate);
+    assert.deepEqual(effects, ['share', 'load', 'persist', 'animate', 'render']);
+    assert.equal(view.dateRange.type, DateRangeType.CUSTOM);
+    assert.equal(models.formatDate(view.dateRange.startDate), '2026-03-07');
+    assert.equal(models.formatDate(view.dateRange.endDate), '2026-03-09');
+    assert.equal(view.dateRange.endDate.getHours(), 23);
+    assert.equal(view.dateRange.endDate.getMilliseconds(), 999);
 });
 
 test('dashboard Import follows Export and invokes the shared picker entry point', async () => {
