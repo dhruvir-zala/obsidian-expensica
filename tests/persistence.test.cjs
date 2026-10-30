@@ -127,7 +127,7 @@ test('unrelated saves retain historical self-transfers while valid endpoint edit
         account: undefined, fromAccount: 'saving-cash', toAccount: 'saving-cash', time: '12:00:00', metadata: { keep: true } };
     h.p.transactionsData.transactions.push(historical);
     await h.p.addTransaction({ ...transaction, id: 'new' });
-    assert.equal(JSON.stringify(h.p.getAllTransactions()[1]), JSON.stringify(historical));
+    assert.deepEqual(JSON.parse(JSON.stringify(h.p.getAllTransactions()[1])), JSON.parse(JSON.stringify(historical)));
     const before = h.memory();
     const files = [...h.files];
     h.failures.add(h.p.transactionsFilePath);
@@ -192,7 +192,7 @@ test('editing dates, times, amounts, and other fields never regenerates transact
     }
 });
 
-test('writer removes legacyId during safe edits with protected accounts and preserves it on failed writes', async () => {
+test('writer preserves legacyId during safe edits with protected accounts and failed writes', async () => {
     const h = setup();
     const original = { ...h.p.getAllTransactions()[0], legacyId: 'old-source', notes: 'Keep until saved' };
     h.p.transactionsData.transactions = [original];
@@ -206,12 +206,46 @@ test('writer removes legacyId during safe edits with protected accounts and pres
     h.failures.clear();
     await h.p.updateTransaction({ ...original, notes: 'Saved note' });
     const saved = JSON.parse(h.files.get(h.p.transactionsFilePath)).transactions[0];
-    assert.equal(Object.hasOwn(saved, 'legacyId'), false);
-    assert.equal(Object.hasOwn(h.p.getAllTransactions()[0], 'legacyId'), false);
+    assert.equal(saved.legacyId, original.legacyId);
+    assert.equal(h.p.getAllTransactions()[0].legacyId, original.legacyId);
     assert.equal(saved.id, original.id);
     assert.equal(saved.notes, 'Saved note');
     assert.equal(saved.amount, original.amount);
     assert.equal(h.p.isAccountDataProtected(), true);
+});
+
+test('ordinary and bulk writes order all transaction rows without changing custom fields, values or source order', async () => {
+    const h = setup();
+    const metadata = { notes: ' Child notes\n ', id: 'child', children: [{ time: 'keep', notes: ['a', 'b'] }] };
+    const original = { customZ: metadata, ...transaction, time: '12:34:56', notes: ' Top notes\n ', legacyId: { source: ['keep'] }, categoryId: 'custom-category' };
+    const before = JSON.stringify(original);
+    h.p.transactionsData.transactions = [Object.freeze(original)];
+    await h.p.addTransaction({ ...transaction, id: 'second' });
+    let rows = JSON.parse(h.files.get(h.p.transactionsFilePath)).transactions;
+    assert.deepEqual(rows.map(row => row.id), [original.id, 'second']);
+    assert.deepEqual(rows[0], original);
+    assert.deepEqual(Object.keys(rows[0]), ['id', 'description', 'amount', 'type', 'date', 'time', 'category', 'account', 'notes',
+        'customZ', 'legacyId', 'categoryId']);
+    await h.p.updateTransactions([original.id, 'second'], { description: 'BULK EDIT' });
+    rows = JSON.parse(h.files.get(h.p.transactionsFilePath)).transactions;
+    assert.deepEqual(rows[0], { ...original, description: 'BULK EDIT' });
+    assert.equal(JSON.stringify(rows[0].customZ), JSON.stringify(metadata));
+    assert.deepEqual(Object.keys(rows[1]), ['id', 'description', 'amount', 'type', 'date', 'category', 'account']);
+    assert.equal(JSON.stringify(original), before);
+});
+
+test('legacy JSON export uses canonical top-level order without modifying the ledger', async () => {
+    const h = setup();
+    const original = { extra: { notes: 'keep', id: 'child' }, ...transaction, legacyId: 'keep' };
+    h.p.transactionsData.transactions = [original];
+    const memory = h.memory();
+    const disk = h.files.get(h.p.transactionsFilePath);
+    assert.equal(await h.p.exportTransactionsToJSON('export.json'), true);
+    const output = JSON.parse(h.files.get('export.json'));
+    assert.deepEqual(output, [original]);
+    assert.deepEqual(Object.keys(output[0]), ['id', 'description', 'amount', 'type', 'date', 'category', 'account', 'extra', 'legacyId']);
+    assert.equal(h.memory(), memory);
+    assert.equal(h.files.get(h.p.transactionsFilePath), disk);
 });
 
 test('pending transaction writes do not publish an unsaved row', async () => {

@@ -34,7 +34,7 @@ const legacyId = (instant = '2026-04-10T17:35:14.123Z', suffix = 'abcde') => new
 const plain = value => JSON.parse(JSON.stringify(value));
 const qaExample = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/import-qa-envelope.json'), 'utf8'));
 
-test('normalization strips obsolete legacyId values without changing valid IDs, fields, or nested metadata', () => {
+test('normalization preserves existing legacyId values without changing valid IDs, fields, or nested metadata', () => {
     const base = { id: row().id, date: row().date, time: '11:35:14', type: 'expense', amount: 0.001,
         description: 'KEEP', category: 'food', account: 'other-default', notes: ' Keep exact notes ',
         metadata: { legacyId: 'Keep nested metadata', values: [1, 2] } };
@@ -42,10 +42,10 @@ test('normalization strips obsolete legacyId values without changing valid IDs, 
         const input = Object.freeze({ ...base, legacyId });
         const before = JSON.stringify(input);
         const result = importer.prepareTransactions([input], [], NOW);
-        assert.deepEqual(plain(result.transactions[0]), base);
-        assert.equal(Object.hasOwn(result.transactions[0], 'legacyId'), false);
+        assert.deepEqual(plain(result.transactions[0]), input);
+        assert.deepEqual(result.transactions[0].legacyId, legacyId);
         assert.equal(JSON.stringify(input), before);
-        assert.equal(result.changed, 1);
+        assert.equal(result.changed, 0);
         assert.equal(importer.formatTransactionCorrections(result.corrections).length, 0);
         const restart = importer.prepareTransactions(plain(result.transactions), [], new Date('2027-01-01T00:00:00Z'));
         assert.equal(restart.changed, 0);
@@ -53,14 +53,14 @@ test('normalization strips obsolete legacyId values without changing valid IDs, 
     }
 });
 
-test('discarded legacyId aliases do not conflict with actual IDs or change modern IDs', () => {
+test('preserved legacyId metadata does not conflict with actual IDs or change duplicate validation', () => {
     const first = '20260410-113514-00000001';
     const second = '20260410-113514-00000002';
     const input = [row({ id: first, time: '11:35:14', legacyId: second }),
         row({ id: second, time: '11:35:14', amount: 20, legacyId: second })];
     const result = importer.prepareTransactions(input, [], NOW, undefined, true);
     assert.deepEqual(Array.from(result.transactions, transaction => transaction.id), [first, second]);
-    assert.ok(result.transactions.every(transaction => !Object.hasOwn(transaction, 'legacyId')));
+    assert.ok(result.transactions.every(transaction => transaction.legacyId === second));
     assert.equal(result.corrections.duplicateIdsRegenerated, 0);
     const existing = row({ id: first, time: '11:35:14', legacyId: second });
     assert.throws(() => importer.prepareTransactions([{ ...existing, legacyId: 'different metadata' }], [existing], NOW, undefined, true), /identical data/);
@@ -68,7 +68,7 @@ test('discarded legacyId aliases do not conflict with actual IDs or change moder
     assert.equal(allowed.transactions[0].id, second);
 });
 
-test('identical copies differing only in obsolete metadata are rejected before any ID allocation', () => {
+test('identical copies differing only in legacyId metadata are rejected before any ID allocation', () => {
     const guarded = load('src/transaction-import.ts', { './models': { ...models,
         generateId() { throw Error('must detect duplicate records before migration'); } } });
     for (const id of [row().id, legacyId(), 'alien-id']) {
@@ -82,7 +82,7 @@ test('identical copies differing only in obsolete metadata are rejected before a
     }
 });
 
-test('import strips legacyId from current-ID records and keeps current-ID duplicate protection', async () => {
+test('import preserves legacyId on current-ID records and keeps current-ID duplicate protection', async () => {
     for (const envelope of [false, true]) {
         const h = harness();
         const input = { id: '20260410-113514-87654321', date: row().date, time: '11:35:14', type: 'expense', amount: 0.001,
@@ -90,8 +90,7 @@ test('import strips legacyId from current-ID records and keeps current-ID duplic
         const source = JSON.stringify(envelope ? { transactions: [input] } : [input]);
         h.files.set('source.json', source);
         await h.p.importTransactionsFromJSON('source.json');
-        const { legacyId: discarded, ...expected } = input;
-        assert.deepEqual(JSON.parse(h.files.get(h.p.transactionsFilePath)).transactions.at(-1), expected);
+        assert.deepEqual(JSON.parse(h.files.get(h.p.transactionsFilePath)).transactions.at(-1), input);
         assert.equal(h.files.get('source.json'), source);
         assert.equal(h.writes.length, 1);
         await assert.rejects(h.p.importTransactionsFromJSON('source.json'), /duplicate transaction ID/);
@@ -136,8 +135,8 @@ test('envelope and array imports persist uppercase descriptions once without rep
         assert.deepEqual(saved.at(-1), { ...input[0], description: '  KEEP\tSPACING  ' });
         assert.equal(h.files.get('source.json'), source);
         assert.deepEqual(h.writes, [h.p.transactionsFilePath]);
-        assert.equal(h.notices[0], 'Imported 1 transaction. Changes saved.' + (Array.isArray(payload) ? ' Legacy array format converted: 1.' : ''));
-        assert.equal(h.dialogs[0].contentEl.children.some(child => child.tag === 'ul'), Array.isArray(payload));
+        assert.equal(h.notices[0], 'Imported 1 transaction. Changes saved. ' + (Array.isArray(payload) ? 'Legacy array format converted: 1; ' : '') + 'transaction fields reordered: 2.');
+        assert.equal(h.dialogs[0].contentEl.children.some(child => child.tag === 'ul'), true);
         assert.equal(importer.prepareTransactions([saved.at(-1)], [], NOW, h.p.getAccounts()).changed, 0);
     }
 });
@@ -403,11 +402,11 @@ test('external selected files use the same atomic validation and never invent ac
     assert.equal(h.writes.length, 1);
 });
 
-test('migrated time immediately follows date while retaining unknown fields and stable restarts', () => {
+test('serialization orders migrated time after date while retaining unknown fields and stable restarts', () => {
     const input = row({ id: legacyId(), metadata: { keep: true } });
     const first = importer.prepareTransactions([input], [], NOW);
     const migrated = plain(first.transactions)[0];
-    const keys = Object.keys(migrated);
+    const keys = Object.keys(models.orderTransactionFields(migrated));
     assert.equal(keys[keys.indexOf('date') + 1], 'time');
     assert.deepEqual(migrated.metadata, input.metadata);
     const second = importer.prepareTransactions([migrated], [], new Date('2027-01-01T00:00:00Z'));
@@ -424,21 +423,21 @@ test('opaque legacy IDs upgrade once without metadata, preserve valid fields, an
     assert.equal(first.corrections.alienIdsRegenerated, 2);
     assert.equal(first.corrections.timestampsGenerated, 1);
     assert.deepEqual(Array.from(importer.formatTransactionCorrections(first.corrections)), [
-        'Alien IDs regenerated: 2', 'Time stamps generated: 1', 'Field order corrected: 1'
+        'Alien IDs regenerated: 2', 'Time stamps generated: 1'
     ]);
     const output = plain(first.transactions);
     output.forEach((transaction, index) => {
         assert.match(transaction.id, /^\d{8}-\d{6}-[a-z0-9]{8}$/);
         assert.notEqual(transaction.id, input[index].id);
         for (const [field, value] of Object.entries(input[index])) {
-            if (field !== 'id' && field !== 'legacyId') assert.deepEqual(transaction[field], value);
+            if (field !== 'id') assert.deepEqual(transaction[field], value);
         }
-        const fields = Object.keys(transaction);
+        const fields = Object.keys(models.orderTransactionFields(transaction));
         assert.equal(fields[fields.indexOf('date') + 1], 'time');
     });
     assert.equal(output[0].time, models.formatTime(NOW));
     assert.equal(output[0].legacyId, undefined);
-    assert.equal(output[1].legacyId, undefined);
+    assert.equal(output[1].legacyId, input[1].legacyId);
     const restart = importer.prepareTransactions(output, [], new Date('2027-01-01T00:00:00Z'));
     assert.equal(restart.changed, 0);
     assert.equal(restart.corrections.alienIdsRegenerated + restart.corrections.timestampsGenerated + restart.corrections.fieldOrderCorrected, 0);
@@ -448,7 +447,7 @@ test('opaque legacy IDs upgrade once without metadata, preserve valid fields, an
     assert.equal(reimported.legacyId, undefined);
 });
 
-test('existing valid time moves immediately after date without a timestamp or ID migration', () => {
+test('existing valid time in any property position never triggers a startup migration', () => {
     for (const input of [
         { time: '23:59:58', ...row({ notes: 'Keep spacing ', metadata: { keep: true } }) },
         { ...row({ notes: 'Keep spacing ', metadata: { keep: true } }), time: '23:59:58' }
@@ -458,10 +457,9 @@ test('existing valid time moves immediately after date without a timestamp or ID
         const output = plain(result.transactions)[0];
         assert.deepEqual(output, input);
         assert.equal(JSON.stringify(input), original);
-        const keys = Object.keys(output);
-        assert.equal(keys[keys.indexOf('date') + 1], 'time');
-        assert.equal(result.changed, 1);
-        assert.deepEqual(Array.from(importer.formatTransactionCorrections(result.corrections)), ['Field order corrected: 1']);
+        assert.equal(JSON.stringify(output), original);
+        assert.equal(result.changed, 0);
+        assert.deepEqual(Array.from(importer.formatTransactionCorrections(result.corrections)), []);
         assert.equal(importer.prepareTransactions([output], [], NOW).changed, 0);
     }
 });
@@ -616,8 +614,8 @@ test('imports omit missing and empty notes without notes reports, preserving non
         assert.deepEqual(output.map(transaction => transaction.date), input.map(transaction => transaction.date));
         assert.equal(h.files.get('source.json'), source);
         assert.equal(h.writes.length, 1);
-        assert.equal(h.dialogs[0].contentEl.children.some(child => child.tag === 'ul'), Array.isArray(payload));
-        assert.equal(h.notices[0], 'Imported 5 transactions. Changes saved.' + (Array.isArray(payload) ? ' Legacy array format converted: 1.' : ''));
+        assert.equal(h.dialogs[0].contentEl.children.some(child => child.tag === 'ul'), true);
+        assert.equal(h.notices[0], 'Imported 5 transactions. Changes saved. ' + (Array.isArray(payload) ? 'Legacy array format converted: 1; ' : '') + 'transaction fields reordered: 6.');
     }
 });
 
@@ -781,7 +779,7 @@ test('imports allow identical transaction data under different IDs', async () =>
     await h.p.importTransactionsFromJSON('source.json');
     assert.deepEqual(JSON.parse(h.files.get(h.p.transactionsFilePath)).transactions.slice(1), input);
     assert.equal(h.writes.length, 1);
-    assert.equal(h.notices[0], 'Imported 2 transactions. Changes saved. Legacy array format converted: 1.');
+    assert.equal(h.notices[0], 'Imported 2 transactions. Changes saved. Legacy array format converted: 1; transaction fields reordered: 3.');
 });
 
 test('ID allocation reserves later rows and existing IDs, even with a repeated RNG result', () => {
@@ -910,7 +908,7 @@ test('import persists one normalized batch, preserves references, and shows the 
     const corrections = report.children.find(child => child.tag === 'ul').children.map(child => child.text);
     assert.equal(report.children.find(child => child.tag === 'h2').text, 'Transaction data update');
     assert.deepEqual(corrections, ['Legacy array format converted: 1', 'Base36 legacy IDs regenerated: 1', 'Alien IDs regenerated: 1',
-        'Time stamps recovered from IDs: 2', 'Time stamps generated: 1', 'Accounts assigned: 1']);
+        'Time stamps recovered from IDs: 2', 'Time stamps generated: 1', 'Accounts assigned: 1', 'transaction fields reordered: 4']);
     assert.equal(h.notices[0], `${summary} ${corrections.join('; ')}.`);
 });
 
@@ -944,8 +942,7 @@ test('import reports precise ID, account, category, notes, and field-order corre
     h.files.set('source.json', JSON.stringify({ transactions: input }));
     await h.p.importTransactionsFromJSON('source.json');
     const expected = ['Base36 legacy IDs regenerated: 1', 'Alien IDs regenerated: 1', 'Time stamps recovered from IDs: 1',
-        'Accounts assigned: 1', 'Account references formatted: 1', 'Categories assigned: 1',
-        'Field order corrected: 1'];
+        'Accounts assigned: 1', 'Account references formatted: 1', 'Categories assigned: 1', 'transaction fields reordered: 3'];
     const report = h.dialogs[0].contentEl;
     assert.equal(report.children[0].text, 'Transaction data update');
     assert.deepEqual(report.children.find(child => child.tag === 'ul').children.map(child => child.text), expected);
@@ -958,10 +955,43 @@ test('import reports precise ID, account, category, notes, and field-order corre
     assert.deepEqual(output.map(transaction => transaction.date), input.map(transaction => transaction.date));
 });
 
+test('sorting reports count changed top-level rows once, ignore nested order, and appear only after a successful write', async () => {
+    const h = harness();
+    const canonical = id => ({ id, description: 'KEEP', amount: 0.001, type: 'expense', date: '2026-02-01',
+        time: '12:34:56', category: 'food', account: 'other-default', children: { time: 'child', notes: ' Keep exact text\n ', id: 'child' } });
+    const first = canonical('20260410-113514-00000001');
+    const second = canonical('20260410-113514-00000002');
+    const third = { ...row({ id: '20260410-113514-00000003', time: '12:34:56', account: 'other-default' }),
+        metadata: { notes: ['child', { amount: 0.001, id: 'child' }], legacyId: 'keep' } };
+    const source = JSON.stringify({ transactions: [first, second, third] });
+    h.files.set('source.json', source);
+    const disk = h.files.get(h.p.transactionsFilePath);
+    const memory = JSON.stringify(h.p.getAllTransactions());
+    h.fail(true);
+    await assert.rejects(h.p.importTransactionsFromJSON('source.json'), /disk full/);
+    assert.equal(h.files.get(h.p.transactionsFilePath), disk);
+    assert.equal(JSON.stringify(h.p.getAllTransactions()), memory);
+    assert.equal(h.dialogs.length + h.notices.length, 0);
+    h.fail(false);
+    await h.p.importTransactionsFromJSON('source.json');
+    const report = h.dialogs[0].contentEl.children.find(child => child.tag === 'ul');
+    assert.deepEqual(report.children.map(child => child.text), ['transaction fields reordered: 2']);
+    assert.equal(h.notices[0], 'Imported 3 transactions. Changes saved. transaction fields reordered: 2.');
+    const saved = JSON.parse(h.files.get(h.p.transactionsFilePath)).transactions;
+    assert.deepEqual(saved.slice(1), [first, second, third]);
+    assert.equal(JSON.stringify(saved[1].children), JSON.stringify(first.children));
+    assert.equal(h.files.get('source.json'), source);
+    h.files.set('canonical.json', JSON.stringify({ transactions: [canonical('20260410-113514-00000004')] }));
+    await h.p.importTransactionsFromJSON('canonical.json');
+    assert.equal(h.notices[1], 'Imported 1 transaction. Changes saved.');
+    assert.equal(h.dialogs[1].contentEl.children.some(child => child.tag === 'ul'), false);
+});
+
 test('normalized imports report inserted records without inventing migrations; empty imports show no update report', async () => {
     const h = harness();
-    const input = { id: row().id, date: row().date, time: '12:34:56', type: 'expense', amount: 10,
-        description: 'UNCHANGED DETAILS', category: 'food', account: 'other-default' };
+    h.p.transactionsData.transactions = h.p.getAllTransactions().map(models.orderTransactionFields);
+    const input = { id: row().id, description: 'UNCHANGED DETAILS', amount: 10, type: 'expense', date: row().date,
+        time: '12:34:56', category: 'food', account: 'other-default' };
     h.files.set('source.json', JSON.stringify({ transactions: [input] }));
     await h.p.importTransactionsFromJSON('source.json');
     assert.deepEqual(JSON.parse(h.files.get(h.p.transactionsFilePath)).transactions[1], input);

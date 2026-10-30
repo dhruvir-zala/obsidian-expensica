@@ -273,6 +273,29 @@ test('JSON exports retain original data and order; empty CSV retains its header'
         [['Date', 'Type', 'Category', 'Description', 'Amount', 'Notes']]);
 });
 
+test('JSON serialization orders only top-level fields and preserves custom schema names, legacyId and nested data', () => {
+    const notes = ' Keep spaces\r\nChild notes: {"date":1,"id":2} ';
+    const nested = Object.freeze({ time: 'unchanged', notes, id: 'child', values: Object.freeze([3, { notes, amount: 0.001 }]) });
+    const entry = JSON.parse('{"customZ":1,"notes":"top note","account":"saving-cash","categoryId":"custom-category","time":"12:34:56","category":"food","date":"2026-10-15","type":"expense","amount":0.001,"description":"KEEP","id":"first","legacyId":{"original":true},"accountId":"custom-account","__proto__":{"notes":"keep"}}');
+    entry.children = nested;
+    Object.freeze(entry);
+    const source = Object.freeze([entry, Object.freeze(row('second'))]);
+    const before = JSON.stringify(source);
+    const ordered = models.orderTransactionFields(entry);
+    assert.equal(ordered.children, nested, 'ordering is shallow');
+    assert.equal(ordered.children.values, nested.values);
+    assert.equal({}.notes, undefined);
+    const output = JSON.parse(service().generateJSON(source));
+    assert.deepEqual(output, source);
+    assert.deepEqual(Object.keys(output[0]), ['id', 'description', 'amount', 'type', 'date', 'time', 'category', 'account', 'notes',
+        'customZ', 'categoryId', 'legacyId', 'accountId', '__proto__', 'children']);
+    assert.deepEqual(Object.keys(output[0].children), ['time', 'notes', 'id', 'values']);
+    assert.equal(JSON.stringify(output[0].children), JSON.stringify(nested));
+    assert.deepEqual(Object.keys(output[1]), ['id', 'description', 'amount', 'type', 'date', 'category']);
+    assert.equal(Object.hasOwn(output[1], 'legacyId'), false);
+    assert.equal(JSON.stringify(source), before);
+});
+
 test('PDF groups accepted ISO dates by stored local day across year boundaries', () => {
     const fixture = pdfFixture();
     const rows = [row('old', { date: '2025-12-31T23:59:59-12:00' }),
