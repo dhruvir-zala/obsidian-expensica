@@ -7,6 +7,7 @@ interface AccountCardOptions {
     currencyCode: string;
     color?: string;
     creditLimitLabel?: string;
+    creditLimitExceeded?: boolean;
     onClick?: (account: Account) => void;
 }
 
@@ -18,7 +19,7 @@ interface CreateAccountCardOptions {
 }
 
 export function renderAccountCard(container: HTMLElement, options: AccountCardOptions): HTMLElement {
-    const { account, runningBalance, lastTransactionDateLabel, currencyCode, color, creditLimitLabel, onClick } = options;
+    const { account, runningBalance, lastTransactionDateLabel, currencyCode, color, creditLimitLabel, creditLimitExceeded, onClick } = options;
     const card = container.createDiv('expensica-account-card');
     card.setAttribute('data-account-type', account.type);
 
@@ -66,6 +67,10 @@ export function renderAccountCard(container: HTMLElement, options: AccountCardOp
             text: creditLimitLabel,
             cls: 'expensica-account-card-credit-limit'
         });
+    }
+
+    if (creditLimitExceeded) {
+        balanceWrap.createDiv({ text: 'Credit limit exceeded', cls: 'expensica-account-card-warning' });
     }
 
     return card;

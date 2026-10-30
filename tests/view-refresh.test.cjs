@@ -12,7 +12,7 @@ function load(filename, dependencies = {}) {
     }).outputText;
     vm.runInNewContext(compiled, { exports, Date, Intl, crypto: require('node:crypto').webcrypto,
         console: { log() {}, error() {}, warn() {} }, window: { requestAnimationFrame() {} },
-        require: name => dependencies[name] || {}
+        require: name => dependencies[name] || (name.endsWith('/account-calculations') ? load('src/account-calculations.ts', { './models': dependencies['./models'] || dependencies['../models'] }) : undefined) || {}
     });
     return exports;
 }
@@ -39,6 +39,7 @@ class Element {
     get classList() { return { contains: cls => cls === this.cls }; }
     getBoundingClientRect() { return { width: this.visible ? 100 : 0, height: this.visible ? 100 : 0 }; }
     removeClass() {} toggleClass() {}
+    querySelector(selector) { return this.children.find(child => `.${child.cls}` === selector) || null; }
     remove() { this.parent.children = this.parent.children.filter(child => child !== this); }
     createDiv(cls) { const child = new Element(cls); child.parent = this; this.children.push(child); return child; }
 }

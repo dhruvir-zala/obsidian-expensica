@@ -53,11 +53,14 @@ class Element {
     }
     querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
     get options() { return this.children.filter(child => child.tag === 'option'); }
+    get childElementCount() { return this.children.length; }
     focus() { this.focused = true; }
     reportValidity() { return true; }
     setText(text) { this.textContent = text; }
     closest() { return null; }
-    appendChild(child) { this.children.push(child); child.parentElement = this; return child; }
+    appendChild(child) { child.remove(); this.children.push(child); child.parentElement = this; return child; }
+    insertBefore(child, reference) { child.remove(); this.children.splice(this.children.indexOf(reference), 0, child); child.parentElement = this; return child; }
+    contains(child) { return this === child || this.children.some(element => element.contains(child)); }
     remove() { if (this.parentElement) this.parentElement.children = this.parentElement.children.filter(child => child !== this); }
 }
 
@@ -67,7 +70,7 @@ function load(filename, dependencies = {}, globals = {}, extraSource = '') {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
     }).outputText;
     vm.runInNewContext(compiled, { exports, Date, Intl, Event, console: { log() {}, error() {}, warn() {} }, ...globals,
-        require(name) { return dependencies[name] || (name.endsWith('/modal-utils') ? load('src/modal-utils.ts') : {}); }
+        require(name) { return dependencies[name] || (name.endsWith('/account-calculations') ? load('src/account-calculations.ts', { './models': dependencies['./models'] || dependencies['../models'] }) : undefined) || (name.endsWith('/modal-utils') ? load('src/modal-utils.ts') : {}); }
     });
     return exports;
 }
@@ -78,8 +81,8 @@ const shownModals = [];
 const notices = [];
 class Modal {
     constructor(app) { this.app = app; this.contentEl = new Element(); this.modalEl = new Element(); this.containerEl = new Element(); }
-    open() { shownModals.push(this); this.onOpen?.(); }
-    close() { this.closed = true; this.onClose?.(); }
+    open() { this.containerEl.isConnected = true; shownModals.push(this); this.onOpen?.(); }
+    close() { this.containerEl.isConnected = false; this.closed = true; this.onClose?.(); }
 }
 class DateSelectorModal extends Modal {
     constructor(app, initialDate, onConfirm, onDismiss) {
@@ -883,31 +886,410 @@ function creditEditHarness(type = 'income', debt = 150) {
     return { ...h, original };
 }
 
+function creditWarningDashboard(h, tab = 'overview') {
+    const root = new Element();
+    const counts = { content: 0, summaries: 0, layouts: 0 };
+    const view = Object.assign(Object.create(ExpensicaDashboardView.prototype), {
+        plugin: h.p, app: h.p.app, containerEl: { children: [null, root] }, currentTab: tab, scrollTop: 0,
+        renderDashboard: ExpensicaDashboardView.prototype.renderDashboard,
+        consumeChartAnimationRequest() {}, clearSelectorListeners() {}, destroyCharts() {},
+        persistDashboardState() { counts.layouts++; },
+        isDashboardVisible: () => true, loadTransactionsData: async () => {},
+        renderHeader(container) { container.createDiv('shadcn-header'); },
+        renderTabNavigation(container) {
+            const tabs = container.createDiv('expensica-tabs');
+            for (const name of ['overview', 'accounts', 'transactions', 'categories', 'budget']) {
+                tabs.createEl('button', { cls: 'expensica-tab', attr: { 'data-expensica-tab': name } });
+            }
+            this.updateActiveTabButtons(container);
+        },
+        renderOverviewTab() { counts.content++; }, renderTransactionsTab() { counts.content++; },
+        renderBudgetTab() { counts.content++; }, renderCategoriesTab() { counts.content++; },
+        renderAccountsTab(...args) { counts.content++; return ExpensicaDashboardView.prototype.renderAccountsTab.apply(this, args); },
+        getAccountSummaries(...args) { counts.summaries++; return ExpensicaDashboardView.prototype.getAccountSummaries.apply(this, args); }
+    });
+    view.renderDashboard();
+    return { view, root, counts };
+}
+
+test('Dashboard warnings use P1 cards and amounts while account cards retain only the warning label', () => {
+    const h = creditEditHarness('expense', 900);
+    h.p.settings.defaultCurrency = 'CAD';
+    h.p.getAccounts().find(account => account.id === 'visa').creditLimit = 750;
+    h.p.transactionsData.transactions.push({ ...h.original, id: 'master-debt', account: 'credit-master', amount: 125 });
+    const bytes = [...h.files], memory = JSON.stringify(h.p.transactionsData);
+    const { root, counts } = creditWarningDashboard(h, 'accounts');
+    const group = root.querySelector('.expensica-credit-limit-warnings');
+    assert.ok(root.children.indexOf(group) < root.children.indexOf(root.querySelector('.shadcn-header')));
+    const warnings = group.querySelectorAll('.expensica-credit-limit-warning');
+    assert.equal(warnings.length, 2);
+    const visa = warnings.find(warning => modalText(warning).includes('Visa'));
+    assert.ok(visa.hasClass('expensica-recovery-card'));
+    assert.ok(visa.hasClass('expensica-recovery-card-warning'));
+    assert.equal(visa.querySelector('.expensica-recovery-card-icon').getAttribute('aria-hidden'), 'true');
+    const details = `Outstanding debt: ${models.formatCurrency(950, 'CAD')}. Credit limit: ${models.formatCurrency(750, 'CAD')}. Exceeded by: ${models.formatCurrency(200, 'CAD')}.`;
+    assert.ok(modalText(visa).includes(details));
+    assert.equal(visa.getAttribute('role'), 'button');
+    assert.equal(visa.getAttribute('tabindex'), '0');
+    assert.ok(visa.getAttribute('aria-label').startsWith('Edit Visa'));
+    assert.ok(visa.getAttribute('aria-label').includes(details));
+    assert.equal(visa.querySelectorAll('button').length, 0);
+    assert.equal(visa.getAttribute('data-recovery-kind'), undefined);
+    const labels = root.querySelectorAll('.expensica-account-card-warning');
+    assert.equal(labels.length, 2);
+    for (const label of labels) {
+        assert.equal(modalText(label), 'Credit limit exceeded');
+        assert.equal(label.children.length, 0);
+        assert.ok(!label.hasClass('expensica-recovery-card'));
+    }
+    for (const card of root.querySelectorAll('.expensica-account-card')) {
+        assert.doesNotMatch(modalText(card), /Outstanding debt:|Exceeded by:/);
+    }
+    assert.equal(counts.summaries, 1, 'warnings and cards share one balance pass');
+    assert.equal(counts.content, 1);
+    assert.deepEqual([...h.files], bytes);
+    assert.equal(JSON.stringify(h.p.transactionsData), memory);
+    assert.equal(h.storage.writes, 0);
+});
+
+for (const action of ['click', 'Enter', ' ']) {
+    test(`Dashboard warning ${JSON.stringify(action)} opens its exact account in the same dashboard without duplicate modals`, () => {
+        const h = creditEditHarness('expense', 150);
+        h.p.transactionsData.transactions.push({ ...h.original, id: 'master-debt', account: 'credit-master', amount: 175 });
+        const a = creditWarningDashboard(h), b = creditWarningDashboard(h, 'transactions');
+        const start = shownModals.length;
+        a.root.querySelector('.expensica-credit-limit-warning').dispatchEvent({ type: 'keydown', key: 'Escape' });
+        assert.equal(shownModals.length, start);
+        for (const [index, name] of ['Master', 'Visa'].entries()) {
+            const card = a.root.querySelectorAll('.expensica-credit-limit-warning').find(card => modalText(card).includes(name));
+            let prevented = false;
+            if (action === 'click') card.click();
+            else card.dispatchEvent({ type: 'keydown', key: action, preventDefault() { prevented = true; } });
+            assert.equal(prevented, action !== 'click');
+            const modal = shownModals.at(-1);
+            assert.equal(shownModals.length, start + index + 1);
+            assert.ok(modal instanceof AccountEditorModal);
+            assert.equal(modal.account.id, name.toLowerCase());
+            assert.equal(modal.contentEl.querySelector('#account-name').value, name);
+            assert.equal(modal.dashboardView, a.view);
+            assert.equal(a.view.currentTab, 'accounts');
+            assert.equal(b.view.currentTab, 'transactions');
+            assert.ok(a.root.querySelector('[data-expensica-tab="accounts"]').hasClass('active'));
+            card.click(); // A detached warning or a second click cannot create another editor.
+            a.root.querySelectorAll('.expensica-credit-limit-warning')[0].click();
+            a.view.renderDashboard();
+            a.root.querySelectorAll('.expensica-credit-limit-warning')[0].click();
+            assert.equal(shownModals.length, start + index + 1);
+            modal.close();
+        }
+        assert.equal(a.counts.content, 4, 'one initial render, one tab switch, and two requested dashboard renders');
+        assert.equal(a.counts.layouts, 1, 'already-active Accounts needs no navigation or refresh');
+        assert.equal(h.storage.writes, 0);
+    });
+}
+
+test('Dashboard refreshes replace advisories, resolve warnings, and ignore detached or deleted account targets', async () => {
+    const h = creditEditHarness('expense', 150);
+    h.storage.fail = false;
+    const { view, root } = creditWarningDashboard(h);
+    const old = root.querySelector('.expensica-credit-limit-warning');
+    await view.refreshData();
+    assert.equal(root.querySelectorAll('.expensica-credit-limit-warnings').length, 1);
+    assert.equal(root.querySelectorAll('.expensica-credit-limit-warning').length, 1);
+    const start = shownModals.length;
+    old.click();
+    assert.equal(shownModals.length, start);
+    const current = root.querySelector('.expensica-credit-limit-warning');
+    const visa = h.p.getAccounts().find(account => account.id === 'visa');
+    await h.p.updateAccount('credit-visa', { ...visa, name: 'Renamed Visa' });
+    current.click();
+    assert.equal(shownModals.at(-1).account.name, 'Renamed Visa', 'resolve the current account by ID');
+    shownModals.at(-1).close();
+    await view.refreshData();
+    assert.match(modalText(root.querySelector('.expensica-credit-limit-warning')), /Renamed Visa/);
+    await h.p.addTransaction({ ...h.original, id: '20261015-120000-00000009', account: models.formatAccountReference('credit', 'Renamed Visa'), type: 'income', category: 'salary', amount: 100 });
+    await view.refreshData();
+    assert.equal(root.querySelector('.expensica-credit-limit-warnings'), null, 'payment reaches the configured limit');
+    await h.p.updateTransaction({ ...h.p.getAllTransactions().at(-1), amount: 50 });
+    await view.refreshData();
+    assert.equal(root.querySelectorAll('.expensica-credit-limit-warning').length, 1);
+    const deleted = root.querySelector('.expensica-credit-limit-warning');
+    await h.p.deleteAccount(models.formatAccountReference('credit', 'Renamed Visa'));
+    const modalCount = shownModals.length;
+    deleted.click();
+    assert.equal(shownModals.length, modalCount);
+    await view.refreshData();
+    assert.equal(root.querySelector('.expensica-credit-limit-warnings'), null);
+});
+
+test('credit-limit descriptions follow the selected account type using existing accessible field styles', () => {
+    const p = plugin();
+    const modal = new AccountEditorModal({}, p, null);
+    modal.open();
+    assert.equal(modal.contentEl.querySelector('#credit-limit-description'), null);
+    modal.contentEl.querySelector('[data-account-type="credit"]').click();
+    const description = modal.contentEl.querySelector('#credit-limit-description');
+    const input = modal.contentEl.querySelector('#credit-limit');
+    assert.equal(input.getAttribute('aria-describedby'), description.getAttribute('id'));
+    assert.ok(description.hasClass('expensica-form-description'));
+    assert.ok(description.hasClass('setting-item-description'));
+    assert.equal(description.textContent, 'Transactions above this limit are still recorded. Expensica displays a warning.');
+    modal.contentEl.querySelector('[data-account-type="saving"]').click();
+    assert.equal(modal.contentEl.querySelector('#credit-limit-description'), null);
+    modal.contentEl.querySelector('[data-account-type="credit"]').click();
+    assert.equal(modal.contentEl.querySelectorAll('#credit-limit-description').length, 1);
+    modal.close();
+});
+
+for (const [limit, debt, expected] of [[100, 99, 0], [100, 100, 0], [100, 100.001, 1],
+    [undefined, 200, 0], [0, 0.001, 1], [100, -25, 0]]) {
+    test(`Dashboard advisory count ${expected} for limit ${limit} and debt ${debt}, with other account types excluded`, () => {
+        const h = creditEditHarness('expense', debt);
+        h.p.transactionsData.transactions = [{ ...h.original, amount: Math.abs(debt), type: debt < 0 ? 'income' : 'expense' },
+            { ...h.original, id: 'cash-debt', account: 'chequing-cash', amount: 500 }];
+        h.p.getAccounts().find(account => account.id === 'visa').creditLimit = limit;
+        h.p.getAccounts().find(account => account.id === 'cash').creditLimit = 1;
+        const { root, view, counts } = creditWarningDashboard(h);
+        assert.equal(root.querySelectorAll('.expensica-credit-limit-warning').length, expected);
+        view.switchDashboardTab('categories');
+        assert.equal(root.querySelectorAll('.expensica-credit-limit-warning').length, expected);
+        h.p.settings.enableAccounts = false;
+        view.renderDashboard();
+        assert.equal(root.querySelector('.expensica-credit-limit-warnings'), null);
+        assert.equal(counts.content, 3);
+        assert.equal(h.storage.writes, 0);
+    });
+}
+
+for (const concurrent of [false, true]) {
+    test(`credit-limit policy records two real purchases ${concurrent ? 'concurrently' : 'sequentially'} and shows actual excess debt`, async () => {
+        const h = creditEditHarness('expense', 900);
+        h.p.transactionsData.transactions = h.p.getAllTransactions().slice(0, 1);
+        h.p.getAccounts().find(account => account.id === 'visa').creditLimit = 1000;
+        h.storage.fail = false;
+        const editors = [1, 2].map(index => {
+            const editor = new TransactionModal(h.p.app, h.p, h.view);
+            editor.open();
+            editor.contentEl.querySelector('#description').value = `PURCHASE ${index}`;
+            editor.contentEl.querySelector('#amount').value = '60';
+            editor.contentEl.querySelector('[data-account-reference="credit-visa"]').click();
+            return { editor, form: editor.contentEl.querySelector('form') };
+        });
+        const submit = ({ form }) => form.listeners.submit[0]({ preventDefault() {}, target: form });
+        const noticeStart = notices.length;
+        if (concurrent) {
+            const write = h.p.app.vault.adapter.write;
+            let release, entered;
+            const writing = new Promise(resolve => { entered = resolve; });
+            h.p.app.vault.adapter.write = async (file, content) => {
+                if (!release) await new Promise(resolve => { release = resolve; entered(); });
+                await write(file, content);
+            };
+            const first = submit(editors[0]);
+            await writing;
+            const second = submit(editors[1]);
+            release();
+            await Promise.all([first, second]);
+        } else {
+            await submit(editors[0]);
+            await submit(editors[1]);
+        }
+        assert.ok(editors.every(({ editor }) => editor.closed));
+        assert.equal(h.storage.writes, 2);
+        const rows = JSON.parse(h.files.get(h.p.transactionsFilePath)).transactions;
+        assert.equal(rows.length, 3);
+        assert.equal(rows.reduce((sum, row) => sum + row.amount, 0), 1020);
+        assert.equal(new Set(rows.map(row => row.id)).size, 3);
+        assert.equal(h.view.getAccountBalanceThroughDateTime('credit-visa', new Date(2100, 0, 1)), 1020);
+        const root = new Element();
+        h.view.renderAccountsTab(root);
+        h.view.renderCreditLimitWarnings(root);
+        const warnings = root.querySelectorAll('.expensica-credit-limit-warning');
+        assert.equal(warnings.length, 1);
+        assert.match(modalText(warnings[0]), /Credit limit exceeded/);
+        assert.match(modalText(warnings[0]), /Outstanding debt: \$1,020\.00/);
+        assert.match(modalText(warnings[0]), /Credit limit: \$1,000\.00/);
+        assert.match(modalText(warnings[0]), /Exceeded by: \$20\.00/);
+        assert.equal(warnings[0].querySelectorAll('button').length, 0);
+        assert.equal(warnings[0].getAttribute('data-recovery-kind'), undefined);
+        assert.ok(editors.every(({ editor }) => !h.p.hasSaveFailure(editor)));
+        h.p.renderDataRecoveryWarning(root);
+        assert.equal(root.querySelector('.expensica-data-recovery-warning').hidden, true);
+        assert.ok(!notices.slice(noticeStart).some(message => /exceeds the credit limit/.test(message)));
+    });
+}
+
+for (const adding of [false, true]) {
+    test(`concurrent credit ${adding ? 'addition and reassignment' : 'edits'} retain original and destination account effects`, async () => {
+        const h = creditEditHarness('income', 950);
+        const expense = { ...h.original, id: '20261015-120000-00000004', type: 'expense', category: 'food', amount: 60 };
+        h.p.transactionsData.transactions.push({ ...expense, id: '20261015-120000-00000003', account: 'credit-master', amount: 990 });
+        if (!adding) h.p.transactionsData.transactions.push(expense);
+        h.p.getAccounts().filter(account => account.type === 'credit').forEach(account => { account.creditLimit = 1000; });
+        h.files.set(h.p.transactionsFilePath, JSON.stringify({ transactions: h.p.getAllTransactions(), lastUpdated: 'initial' }));
+        h.storage.fail = false;
+        const memory = JSON.stringify(h.p.getAllTransactions()), bytes = h.files.get(h.p.transactionsFilePath);
+        const editors = [h.original, adding ? null : expense].map((transaction, index) => {
+            const editor = new TransactionModal(h.p.app, h.p, h.view, transaction);
+            editor.open();
+            editor.contentEl.querySelector('[data-account-reference="credit-master"]').click();
+            if (index === 1) {
+                editor.contentEl.querySelector('#description').value = 'RECORDED PURCHASE';
+                editor.contentEl.querySelector('#amount').value = '130';
+            }
+            return { editor, form: editor.contentEl.querySelector('form') };
+        });
+        const write = h.p.app.vault.adapter.write;
+        let release, entered;
+        const writing = new Promise(resolve => { entered = resolve; });
+        h.p.app.vault.adapter.write = async (file, content) => {
+            if (!release) await new Promise(resolve => { release = resolve; entered(); });
+            await write(file, content);
+        };
+        const submit = ({ form }) => form.listeners.submit[0]({ preventDefault() {}, target: form });
+        const first = submit(editors[0]);
+        await writing;
+        const second = submit(editors[1]);
+        assert.equal(JSON.stringify(h.p.getAllTransactions()), memory);
+        assert.equal(h.files.get(h.p.transactionsFilePath), bytes);
+        release();
+        await Promise.all([first, second]);
+        const saved = JSON.parse(h.files.get(h.p.transactionsFilePath)).transactions;
+        assert.equal(h.storage.writes, 2);
+        assert.equal(saved.length, 4);
+        assert.equal(saved[1].id, h.original.id);
+        assert.equal(saved[1].account, 'credit-master');
+        assert.equal(saved[1].amount, 50);
+        assert.equal(saved[3].amount, 130);
+        if (!adding) assert.equal(saved[3].id, expense.id);
+        assert.equal(new Set(saved.map(row => row.id)).size, 4);
+        assert.equal(h.view.getAccountBalanceThroughDateTime('credit-visa', new Date(2100, 0, 1)), 950);
+        assert.equal(h.view.getAccountBalanceThroughDateTime('credit-master', new Date(2100, 0, 1)), 1070);
+        assert.ok(editors.every(({ editor }) => editor.closed && !h.p.hasSaveFailure(editor)));
+        const root = new Element();
+        h.view.renderAccountsTab(root);
+        h.view.renderCreditLimitWarnings(root);
+        const warnings = root.querySelectorAll('.expensica-credit-limit-warning');
+        assert.equal(warnings.length, 1);
+        assert.match(modalText(warnings[0]), /Outstanding debt: \$1,070\.00.*Exceeded by: \$70\.00/);
+        h.p.renderDataRecoveryWarning(root);
+        assert.equal(root.querySelector('.expensica-data-recovery-warning').hidden, true);
+    });
+}
+
+test('credit warnings follow imports, edits, transfers and fresh restarts without warning notifications', async () => {
+    const h = creditEditHarness('expense', 900);
+    h.p.transactionsData.transactions = h.p.getAllTransactions().slice(0, 1);
+    h.p.getAccounts().find(account => account.id === 'visa').creditLimit = 1000;
+    h.files.set(h.p.accountsFilePath, JSON.stringify({ accounts: h.p.getAccounts(), lastUpdated: 'initial' }));
+    h.storage.fail = false;
+    const purchase = { ...h.original, id: '20261015-120000-00000003', type: 'expense', category: 'food', account: 'credit-visa', amount: 120 };
+    const check = (state, debt, excess) => {
+        const root = new Element();
+        state.view.renderAccountsTab(root);
+        state.view.renderCreditLimitWarnings(root);
+        const warnings = root.querySelectorAll('.expensica-credit-limit-warning');
+        assert.equal(warnings.length, excess > 0 ? 1 : 0);
+        assert.equal(state.view.getAccountBalanceThroughDateTime('credit-visa', new Date(2100, 0, 1)), debt);
+        if (excess > 0) assert.match(modalText(warnings[0]), new RegExp(`Exceeded by: \\$${excess}\\.00`));
+    };
+    const noticeStart = notices.length;
+    await h.p.addTransaction(purchase);
+    check(h, 1020, 20);
+    const imported = { ...purchase, id: '20261015-120000-00000004', amount: 100, date: '2030-01-01' };
+    await h.p.importTransactionsFromJSON({ name: 'real-purchase.json', text: async () => JSON.stringify({ transactions: [imported] }) });
+    check(h, 1120, 120);
+    await h.p.updateTransaction({ ...purchase, amount: 40 });
+    check(h, 1040, 40);
+    await h.p.addTransaction({ ...purchase, id: '20261015-120000-00000005', type: 'internal', category: 'internal', amount: 50,
+        account: undefined, fromAccount: 'chequing-cash', toAccount: 'credit-visa' });
+    check(h, 990, 0);
+    const restarted = recoveryHarness();
+    restarted.storage.fail = false;
+    for (const [file, content] of h.files) restarted.files.set(file, content);
+    await restarted.p.loadAccountsData();
+    await restarted.p.loadTransactionsData();
+    check(restarted, 990, 0);
+    await restarted.p.addTransaction({ ...purchase, id: '20261015-120000-00000006', amount: 75 });
+    check(restarted, 1065, 65);
+    check(restarted, 1065, 65);
+    const overLimitRestart = recoveryHarness();
+    overLimitRestart.storage.fail = false;
+    for (const [file, content] of restarted.files) overLimitRestart.files.set(file, content);
+    await overLimitRestart.p.loadAccountsData();
+    await overLimitRestart.p.loadTransactionsData();
+    check(overLimitRestart, 1065, 65);
+    const visa = overLimitRestart.p.getAccounts().find(account => account.id === 'visa');
+    await overLimitRestart.p.updateAccount('credit-visa', { ...visa, creditLimit: 1200 });
+    check(overLimitRestart, 1065, 0);
+    assert.ok(!notices.slice(noticeStart).some(message => /exceeds the credit limit|Credit limit exceeded/.test(message)));
+});
+
+test('an over-limit purchase still retains its draft on a genuine write failure and saves on Retry', async () => {
+    const h = creditEditHarness('expense', 200);
+    h.view.renderAccountsTab(h.container);
+    h.view.renderCreditLimitWarnings(h.container);
+    const advisory = h.container.querySelector('.expensica-credit-limit-warning');
+    assert.match(modalText(advisory), /Exceeded by: \$150\.00/);
+    const bytes = [...h.files], memory = JSON.stringify(h.p.getAllTransactions());
+    const editor = new TransactionModal(h.p.app, h.p, h.view);
+    editor.open();
+    editor.contentEl.querySelector('#description').value = 'REAL PURCHASE';
+    editor.contentEl.querySelector('#amount').value = '25';
+    editor.contentEl.querySelector('[data-account-reference="credit-visa"]').click();
+    const form = editor.contentEl.querySelector('form');
+    await form.listeners.submit[0]({ preventDefault() {}, target: form });
+    assert.equal(h.storage.writes, 1);
+    assert.deepEqual([...h.files], bytes);
+    assert.equal(JSON.stringify(h.p.getAllTransactions()), memory);
+    assert.ok(!editor.closed);
+    assert.equal(editor.contentEl.querySelector('#amount').value, '25');
+    assert.equal(h.p.hasSaveFailure(editor), true);
+    assert.equal(h.container.querySelector('.expensica-data-recovery-warning').hidden, false);
+    assert.equal(h.container.querySelectorAll('.expensica-recovery-card-save').length, 1);
+    assert.match(modalText(advisory), /Exceeded by: \$150\.00/);
+    assert.equal(advisory.querySelectorAll('button').length, 0);
+    const recovery = shownModals.at(-1);
+    h.storage.fail = false;
+    await recovery.contentEl.querySelectorAll('button').find(button => button.textContent === 'Retry').listeners.click[0]();
+    assert.equal(editor.closed, true);
+    assert.equal(h.p.hasSaveFailure(editor), false);
+    assert.equal(h.container.querySelector('.expensica-data-recovery-warning').hidden, true);
+    assert.equal(h.storage.writes, 2);
+    assert.equal(h.view.getAccountBalanceThroughDateTime('credit-visa', new Date(2100, 0, 1)), 275);
+    const root = new Element();
+    h.view.renderAccountsTab(root);
+        h.view.renderCreditLimitWarnings(root);
+    assert.match(modalText(root.querySelector('.expensica-credit-limit-warning')), /Exceeded by: \$175\.00/);
+});
+
 for (const [name, type, selector] of [
     ['payment reassignment', 'income', '[data-account-reference="chequing-cash"]'],
     ['transfer endpoint change', 'internal', '[data-to-account-reference="credit-master"]'],
     ['transaction type change', 'income', '[data-transaction-type="expense"]']
 ]) {
-    test(`credit validation rejects ${name} before persistence and retains the editor draft`, async () => {
+    test(`credit-limit warnings allow ${name} to record the actual transaction`, async () => {
         const h = creditEditHarness(type);
         h.storage.fail = false;
-        const bytes = [...h.files];
-        const memory = JSON.stringify(h.p.getAllTransactions());
         const editor = new TransactionModal(h.p.app, h.p, h.view, h.original);
         editor.open();
         editor.contentEl.querySelector(selector).click();
         const form = editor.contentEl.querySelector('form');
         const noticeStart = notices.length;
         await form.listeners.submit[0]({ preventDefault() {}, target: form });
-        assert.ok(!editor.closed);
-        assert.equal(editor.contentEl.querySelector('#amount').value, '50');
-        assert.equal(form.querySelector('[type="submit"]').disabled, false);
-        assert.equal(h.storage.writes, 0);
-        assert.deepEqual([...h.files], bytes);
-        assert.equal(JSON.stringify(h.p.getAllTransactions()), memory);
-        assert.equal(h.effects.renders, 0);
+        assert.equal(editor.closed, true);
+        assert.equal(h.storage.writes, 1);
+        const rows = JSON.parse(h.files.get(h.p.transactionsFilePath)).transactions;
+        assert.deepEqual(rows.map(row => row.id), ['20200101-120000-00000001', h.original.id]);
+        assert.equal(rows[1].amount, 50);
+        assert.equal(h.view.getAccountBalanceThroughDateTime('credit-visa', new Date(2100, 0, 1)), type === 'income' && name === 'transaction type change' ? 200 : 150);
+        const root = new Element();
+        h.view.renderAccountsTab(root);
+        h.view.renderCreditLimitWarnings(root);
+        assert.equal(root.querySelectorAll('.expensica-credit-limit-warning').length, 1);
+        assert.equal(h.effects.renders, 1);
         assert.equal(h.p.hasSaveFailure(editor), false);
-        assert.ok(notices.slice(noticeStart).some(message => /credit limit for Visa/.test(message)));
+        assert.ok(!notices.slice(noticeStart).some(message => /exceeds the credit limit/.test(message)));
     });
 }
 

@@ -13,7 +13,7 @@ function load(file, dependencies = {}, globals = {}) {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
     }).outputText;
     vm.runInNewContext(code, { exports, Date, Intl, console, ...globals,
-        require: name => dependencies[name] || {} });
+        require: name => dependencies[name] || (name.endsWith('/account-calculations') ? load('src/account-calculations.ts', { './models': dependencies['./models'] || dependencies['../models'] }) : undefined) || {} });
     return exports;
 }
 const models = load('src/models.ts');

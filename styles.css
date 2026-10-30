@@ -1,6 +1,7 @@
 /* Premium Expensica styling with Apple/Todoist-inspired design */
 
-.expensica-data-recovery-warning {
+.expensica-data-recovery-warning,
+.expensica-credit-limit-warnings {
   display: grid;
   gap: var(--expensica-gap-md);
   margin-bottom: var(--expensica-gap-lg);
@@ -86,6 +87,15 @@
   color: var(--interactive-accent);
   font-style: italic;
   overflow-wrap: anywhere;
+}
+
+.expensica-credit-limit-warning {
+  cursor: pointer;
+}
+
+.expensica-credit-limit-warning:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
 }
 
 .expensica-reconcile-actions {
@@ -5603,6 +5613,11 @@ to {
     font-size: 0.8rem;
     font-style: italic;
     line-height: 1.2;
+}
+
+.expensica-account-card-warning {
+    color: var(--text-warning);
+    font-size: var(--expensica-font-size-sm);
 }
 
 .expensica-account-default-note {
