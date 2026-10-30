@@ -23,8 +23,8 @@ const { CalendarHeatmap } = load('src/visualizations/calendar-view.ts', { '../mo
 const preparation = load('src/transaction-import.ts', { './models': models });
 const cash = { id: 'cash', name: 'Cash', type: 'chequing', isDefault: true, createdAt: '2025-01-01' };
 const card = { id: 'card', name: 'Card', type: 'credit', creditLimit: 500, createdAt: '2025-01-01' };
-const row = (changes = {}) => ({ id: '20260410-113514-1234abcd', date: '2026-02-01', time: '11:35:14', amount: 10,
-    type: 'expense', description: 'ORIGINAL CASE', category: 'food', account: 'chequing-cash', ...changes });
+const row = (changes = {}) => ({ id: '20260410-113514-1234abcd', description: 'ORIGINAL CASE', amount: 10, type: 'expense',
+    date: '2026-02-01', time: '11:35:14', category: 'food', account: 'chequing-cash', ...changes });
 const legacyId = (suffix = 'abcde') => Date.parse('2026-04-10T17:35:14.123Z').toString(36) + suffix;
 const plain = value => JSON.parse(JSON.stringify(value));
 class Element {
@@ -472,23 +472,25 @@ test('default-account: account read failures defer reference migration until rea
     assert.equal(restart.writes.length + restart.notices.length + restart.dialogs.length, 0);
 });
 
-test('startup removes only transaction legacyId metadata once, retaining IDs and financial data without reports', async () => {
+test('startup preserves legacyId metadata and canonical property order without writes or reports', async () => {
     const h = harness();
-    const input = [row({ legacyId: 'old-source', amount: 0.001, notes: ' Keep notes ', metadata: { legacyId: 'Keep nested metadata' } }),
+    const input = [row({ amount: 0.001, notes: ' Keep notes ', legacyId: 'old-source', metadata: { legacyId: 'Keep nested metadata' } }),
         row({ id: '20260410-113514-00000001', legacyId: { obsolete: true }, amount: 0 })];
     h.seed(input, [cash, card], { metadata: { legacyId: 'Keep envelope metadata' } });
+    const original = h.files.get(h.p.transactionsFilePath);
     h.activate('markdown');
     await h.p.onload();
     const committed = h.files.get(h.p.transactionsFilePath);
     const saved = JSON.parse(committed);
-    assert.deepEqual(saved.transactions, input.map(({ legacyId, ...fields }) => fields));
+    assert.equal(committed, original);
+    assert.deepEqual(saved.transactions, input);
     assert.deepEqual(saved.metadata, { legacyId: 'Keep envelope metadata' });
     assert.deepEqual(plain(h.p.getAllTransactions()), saved.transactions);
-    assert.deepEqual(h.writes.map(write => write.file), [h.p.transactionsFilePath]);
+    assert.equal(h.writes.length, 0);
     h.activate();
     assert.equal(h.notices.length + h.dialogs.length, 0);
     await h.p.loadTransactionsData();
-    assert.equal(h.writes.length, 1);
+    assert.equal(h.writes.length, 0);
     const restart = harness(h.files, '2027-01-01T00:00:00Z');
     await restart.p.onload();
     assert.equal(restart.files.get(restart.p.transactionsFilePath), committed);
@@ -513,9 +515,9 @@ test('modern IDs survive date/time edits, metadata edits, and a fresh startup un
     assert.equal(restart.writes.length + restart.notices.length + restart.dialogs.length, 0);
 });
 
-test('failed metadata cleanup preserves the source and committed memory until P0 recovery succeeds', async () => {
+test('failed description normalization preserves legacyId, source and committed memory until P0 recovery succeeds', async () => {
     const h = harness();
-    const original = row({ legacyId: 'old-source', notes: 'Keep this' });
+    const original = row({ notes: 'Keep this', legacyId: 'old-source', description: 'Mixed case' });
     h.seed([original]);
     const source = h.files.get(h.p.transactionsFilePath);
     await h.p.loadAccountsData();
@@ -529,10 +531,10 @@ test('failed metadata cleanup preserves the source and committed memory until P0
     assert.equal(h.notices.length, 0);
     h.failWrites(false);
     assert.equal(await h.p.retryDataRecovery(), true);
-    const { legacyId: discarded, ...expected } = original;
+    const expected = { ...original, description: original.description.toUpperCase() };
     assert.deepEqual(plain(h.p.getAllTransactions()), [expected]);
     assert.equal(h.notices.length, 0);
-    assert.equal(h.dialogs.length, 1, 'metadata cleanup opens no success report');
+    assert.equal(h.dialogs.length, 1, 'description normalization opens no success report');
     const restart = harness(h.files);
     await restart.p.onload();
     assert.equal(restart.writes.length + restart.notices.length + restart.dialogs.length, 0);
@@ -555,7 +557,8 @@ for (const input of [[], [row({ id: '20260410-113514-00000002', amount: 0.001, n
         assert.deepEqual(plain(h.p.getAllTransactions()), input);
         assert.deepEqual(h.writes.map(write => write.file), [h.p.transactionsFilePath]);
         assert.equal(h.dialogs.length, 1);
-        assert.deepEqual(h.dialogs[0].contentEl.children.find(child => child.tag === 'ul').children.map(child => child.text), ['Legacy array format converted: 1']);
+        assert.deepEqual(h.dialogs[0].contentEl.children.find(child => child.tag === 'ul').children.map(child => child.text),
+            ['Legacy array format converted: 1']);
         assert.match(h.notices[0], /Legacy array format converted: 1/);
         const restart = harness(h.files);
         await restart.p.onload();
@@ -1036,15 +1039,15 @@ test('startup repairs the reported duplicate current ID, preserves distinct deta
     assert.match(output[1].id, /^\d{8}-\d{6}-[a-z0-9]{8}$/);
     assert.notEqual(output[1].id, id);
     output.forEach((transaction, index) => {
-        const { legacyId: discarded, ...original } = input[index];
-        assert.deepEqual({ ...transaction, id }, original);
-        assert.equal(Object.hasOwn(transaction, 'legacyId'), false);
+        assert.deepEqual({ ...transaction, id }, input[index]);
+        assert.equal(transaction.legacyId, input[index].legacyId);
     });
     assert.deepEqual(plain(h.p.getAllTransactions()), output);
     assert.equal(h.dialogs.length, 1);
     const content = h.dialogs[0].contentEl;
     assert.equal(content.children[0].text, 'Transaction data update');
-    assert.deepEqual(content.children.find(element => element.tag === 'ul').children.map(element => element.text), ['Duplicate IDs regenerated: 1']);
+    assert.deepEqual(content.children.find(element => element.tag === 'ul').children.map(element => element.text),
+        ['Duplicate IDs regenerated: 1']);
     assert.ok(content.find('Existing transaction details were preserved. Changes saved.'));
     const buttons = content.children.find(element => element.children.some(child => child.tag === 'button')).children;
     assert.deepEqual(buttons.map(button => button.text), ['OK']);
@@ -1373,9 +1376,9 @@ test('opaque legacy IDs upgrade and report actual corrections once while preserv
     const report = h.dialogs[0].contentEl;
     assert.ok(report.find('Transaction data update'));
     assert.deepEqual(report.children.find(element => element.tag === 'ul').children.map(element => element.text), [
-        'Alien IDs regenerated: 2', 'Time stamps generated: 1', 'Field order corrected: 2'
+        'Alien IDs regenerated: 2', 'Time stamps generated: 1', 'transaction fields reordered: 3'
     ]);
-    assert.match(h.notices[0], /Alien IDs regenerated: 2; Time stamps generated: 1; Field order corrected: 2/);
+    assert.match(h.notices[0], /Alien IDs regenerated: 2; Time stamps generated: 1/);
     const committed = h.files.get(h.p.transactionsFilePath);
     const restart = harness(h.files, '2027-01-01T00:00:00Z');
     await restart.p.onload();
@@ -1384,25 +1387,124 @@ test('opaque legacy IDs upgrade and report actual corrections once while preserv
     assert.equal(restart.writes.length + restart.notices.length + restart.dialogs.length, 0);
 });
 
-test('startup reports field-order-only correction without claiming IDs or timestamps changed', async () => {
+test('startup sorts field-order-only differences once, reports only affected transactions and preserves nested data', async () => {
     const h = harness();
-    const { time, ...rest } = row();
-    const input = { time, ...rest };
-    h.seed([input]);
+    const notes = ' Keep exact notes\r\nnext line ';
+    const { time, ...rest } = row({ notes, legacyId: { keep: ['source'] }, children: { time: 'child', notes, id: 'child' } });
+    const input = [{ time, ...rest }, row({ id: '20260410-113514-00000001', notes }),
+        { customZ: { notes: [notes, { id: 'child', date: 'keep' }] }, ...row({ id: '20260410-113514-00000002' }), customA: [3, 1, 2] }];
+    h.seed(input, [cash, card], { metadata: { notes, id: 'envelope' } });
     await h.p.onload();
-    const migrated = JSON.parse(h.files.get(h.p.transactionsFilePath)).transactions[0];
-    assert.deepEqual(migrated, input);
-    const fields = Object.keys(migrated);
-    assert.equal(fields[fields.indexOf('date') + 1], 'time');
-    const report = h.dialogs[0].contentEl;
-    assert.deepEqual(report.children.find(element => element.tag === 'ul').children.map(element => element.text), ['Field order corrected: 1']);
-    assert.match(h.notices[0], /Field order corrected: 1\./);
+    const saved = JSON.parse(h.files.get(h.p.transactionsFilePath));
+    assert.deepEqual(saved.transactions, input);
+    assert.deepEqual(Object.keys(saved.transactions[0]), ['id', 'description', 'amount', 'type', 'date', 'time', 'category', 'account', 'notes', 'legacyId', 'children']);
+    assert.deepEqual(Object.keys(saved.transactions[2]), ['id', 'description', 'amount', 'type', 'date', 'time', 'category', 'account', 'customZ', 'customA']);
+    assert.equal(JSON.stringify(saved.transactions[0].children), JSON.stringify(input[0].children));
+    assert.deepEqual(saved.metadata, { notes, id: 'envelope' });
     assert.equal(h.writes.length, 1);
+    const report = h.dialogs[0].contentEl.children.find(child => child.tag === 'ul');
+    assert.deepEqual(report.children.map(child => child.text), ['transaction fields reordered: 2']);
+    assert.equal(h.notices[0], 'Existing transaction details were preserved. Changes saved. transaction fields reordered: 2.');
     const committed = h.files.get(h.p.transactionsFilePath);
+    await h.p.loadTransactionsData();
+    assert.equal(h.writes.length, 1);
+    assert.equal(h.dialogs.length, 1);
     const restart = harness(h.files);
     await restart.p.onload();
     assert.equal(restart.files.get(restart.p.transactionsFilePath), committed);
     assert.equal(restart.writes.length + restart.notices.length + restart.dialogs.length, 0);
+});
+
+test('every startup rechecks field order and sorts records that became unsorted again', async () => {
+    const h = harness();
+    const input = row();
+    h.seed([input]);
+    await h.p.onload();
+    assert.equal(h.writes.length + h.notices.length + h.dialogs.length, 0);
+    const changed = { ...JSON.parse(h.files.get(h.p.transactionsFilePath)), transactions: [{ custom: { notes: 'Keep' }, ...input }] };
+    h.files.set(h.p.transactionsFilePath, JSON.stringify(changed));
+    const next = harness(h.files);
+    await next.p.onload();
+    assert.equal(next.writes.length, 1);
+    assert.match(next.notices[0], /transaction fields reordered: 1\./);
+    const sorted = JSON.parse(next.files.get(next.p.transactionsFilePath));
+    assert.deepEqual(Object.keys(sorted.transactions[0]), ['id', 'description', 'amount', 'type', 'date', 'time', 'category', 'account', 'custom']);
+    sorted.transactions[0] = { custom: sorted.transactions[0].custom, ...input };
+    next.files.set(next.p.transactionsFilePath, JSON.stringify(sorted));
+    const later = harness(next.files);
+    await later.p.onload();
+    assert.equal(later.writes.length, 1);
+    assert.match(later.notices[0], /transaction fields reordered: 1\./);
+});
+
+test('startup defers field sorting while accounts are protected and checks again after recovery', async () => {
+    const h = harness();
+    const input = { custom: { notes: 'Keep' }, ...row(), legacyId: 'keep' };
+    h.seed([input]);
+    const source = h.files.get(h.p.transactionsFilePath);
+    const accounts = h.files.get(h.p.accountsFilePath);
+    h.files.set(h.p.accountsFilePath, '{broken');
+    await h.p.onload();
+    assert.equal(h.p.isAccountDataProtected(), true);
+    assert.equal(h.files.get(h.p.transactionsFilePath), source);
+    assert.equal(h.writes.length, 0);
+    assert.equal(h.notices.length, 0);
+    h.files.set(h.p.accountsFilePath, accounts);
+    assert.equal(await h.p.retryDataRecovery(), true);
+    assert.deepEqual(JSON.parse(h.files.get(h.p.transactionsFilePath)).transactions, [input]);
+    assert.equal(Object.keys(h.p.getAllTransactions()[0])[0], 'id');
+    assert.equal(h.writes.length, 1);
+    assert.ok(h.notices.some(notice => notice.includes('transaction fields reordered: 1')));
+});
+
+test('failed startup field sorting preserves bytes and committed memory and reports only after recovery succeeds', async () => {
+    const h = harness();
+    const input = { custom: { notes: ' Keep\n ', values: [3, 1] }, ...row(), legacyId: 'keep' };
+    h.seed([input]);
+    const original = h.files.get(h.p.transactionsFilePath);
+    h.failWrites(true);
+    await h.p.onload();
+    assert.equal(h.files.get(h.p.transactionsFilePath), original);
+    assert.equal(h.p.getAllTransactions().length, 0);
+    assert.equal(h.p.protectedDatasets.has('transactions'), true);
+    assert.equal(h.notices.length, 0);
+    h.failWrites(false);
+    assert.equal(await h.p.retryDataRecovery(), true);
+    const saved = JSON.parse(h.files.get(h.p.transactionsFilePath)).transactions[0];
+    assert.deepEqual(saved, input);
+    assert.equal(Object.keys(saved)[0], 'id');
+    assert.equal(h.notices.length, 1);
+    assert.match(h.notices[0], /transaction fields reordered: 1\./);
+    const restart = harness(h.files);
+    await restart.p.onload();
+    assert.equal(restart.writes.length + restart.notices.length + restart.dialogs.length, 0);
+});
+
+test('pending startup field sorting publishes no sorted records or success report before the write resolves', async () => {
+    const h = harness();
+    const input = { custom: ['keep'], ...row() };
+    h.seed([input]);
+    await h.p.loadAccountsData();
+    const memory = JSON.stringify(h.p.transactionsData);
+    const disk = h.files.get(h.p.transactionsFilePath);
+    const write = h.p.app.vault.adapter.write;
+    let complete, entered;
+    const writing = new Promise(resolve => { entered = resolve; });
+    h.p.app.vault.adapter.write = (file, content) => new Promise(resolve => {
+        complete = async () => { await write(file, content); resolve(); };
+        entered();
+    });
+    const pending = h.p.loadTransactionsData();
+    await writing;
+    assert.equal(JSON.stringify(h.p.transactionsData), memory);
+    assert.equal(h.files.get(h.p.transactionsFilePath), disk);
+    assert.equal(h.notices.length + h.dialogs.length, 0);
+    await complete();
+    await pending;
+    assert.deepEqual(plain(h.p.getAllTransactions()), [input]);
+    assert.equal(Object.keys(h.p.getAllTransactions()[0])[0], 'id');
+    assert.equal(h.writes.length, 1);
+    assert.match(h.notices[0], /transaction fields reordered: 1\./);
 });
 
 test('previously filled old-import-no-time-001 upgrades its ID without reporting another timestamp addition', async () => {
@@ -1415,7 +1517,8 @@ test('previously filled old-import-no-time-001 upgrades its ID without reporting
     assert.equal(output.legacyId, undefined);
     assert.deepEqual({ ...output, id: input.id }, input);
     const report = h.dialogs[0].contentEl;
-    assert.deepEqual(report.children.find(element => element.tag === 'ul').children.map(element => element.text), ['Alien IDs regenerated: 1']);
+    assert.deepEqual(report.children.find(element => element.tag === 'ul').children.map(element => element.text),
+        ['Alien IDs regenerated: 1']);
     assert.equal(h.notices.length, 1);
     assert.match(h.notices[0], /Alien IDs regenerated: 1\./);
     assert.equal(h.writes.length, 1);
@@ -1444,7 +1547,7 @@ test('startup reports exact disjoint ID types and each assigned or formatted JSO
     assert.equal(h.dialogs.length, 1);
     const expected = ['Base36 legacy IDs regenerated: 2', 'Alien IDs regenerated: 2', 'Duplicate IDs regenerated: 2',
         'Time stamps recovered from IDs: 1', 'Time stamps generated: 1', 'Accounts assigned: 2', 'Account references formatted: 1', 'Categories assigned: 1',
-        'Field order corrected: 3'];
+        'transaction fields reordered: 5'];
     const content = h.dialogs[0].contentEl;
     assert.equal(content.children[0].text, 'Transaction data update');
     assert.deepEqual(content.children.find(element => element.tag === 'ul').children.map(element => element.text), expected);

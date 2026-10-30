@@ -6797,6 +6797,7 @@ export class TransactionModal extends Modal {
                         : normalizeTransactionTime(submittedTimeValue);
                     const notes = formData.get('notes') as string || '';
                     const transaction: Transaction = {
+                        ...this.transaction,
                         id: this.transaction ? this.transaction.id : generateId(),
                         date: formData.get('date') as string,
                         time: submittedTime,
@@ -6819,6 +6820,7 @@ export class TransactionModal extends Modal {
                             : undefined
                     };
                     if (notes.trim()) transaction.notes = notes;
+                    else delete transaction.notes;
 
                     if (this.transaction && this.plugin.isAccountDataProtected()) {
                         if (selectedAccountReference === initialAccountReference) transaction.account = this.transaction.account;

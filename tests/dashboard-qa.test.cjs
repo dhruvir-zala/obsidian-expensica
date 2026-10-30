@@ -883,6 +883,66 @@ function creditEditHarness(type = 'income', debt = 150) {
     return { ...h, original };
 }
 
+for (const notes of ['Keep notes', '', ' New notes\nwith exact spacing ']) {
+    test(`transaction editor preserves custom fields and legacyId through failed saves and retry with notes ${JSON.stringify(notes)}`, async () => {
+        const h = creditEditHarness('expense', 0);
+        const metadata = Object.freeze({ notes: ' Child notes\n ', id: 'nested', values: Object.freeze([{ notes: ['keep', 'order'] }, 0.001]) });
+        const original = Object.freeze({ ...h.original, metadata, legacyId: { original: ['keep'] },
+            categoryId: 'custom-category', accountId: 'custom-account' });
+        h.p.transactionsData.transactions[1] = original;
+        h.files.set(h.p.transactionsFilePath, JSON.stringify({ transactions: h.p.getAllTransactions(), lastUpdated: 'initial' }));
+        const memory = JSON.stringify(h.p.getAllTransactions());
+        const bytes = [...h.files];
+        const editor = new TransactionModal(h.p.app, h.p, h.view, original);
+        editor.open();
+        editor.contentEl.querySelector('#description').value = 'EDITED DESCRIPTION';
+        editor.contentEl.querySelector('#notes').value = notes;
+        const form = editor.contentEl.querySelector('form');
+        const submit = () => form.listeners.submit[0]({ preventDefault() {}, target: form });
+        await submit();
+        assert.equal(JSON.stringify(h.p.getAllTransactions()), memory);
+        assert.deepEqual([...h.files], bytes);
+        assert.ok(!editor.closed);
+        h.storage.fail = false;
+        await submit();
+        assert.equal(editor.closed, true);
+        const rows = JSON.parse(h.files.get(h.p.transactionsFilePath)).transactions;
+        const expected = { ...original, description: 'EDITED DESCRIPTION' };
+        if (notes) expected.notes = notes;
+        else delete expected.notes;
+        assert.deepEqual(rows[1], expected);
+        assert.equal(JSON.stringify(rows[1].metadata), JSON.stringify(metadata));
+        assert.deepEqual(rows.map(row => row.id), ['20200101-120000-00000001', original.id]);
+        assert.deepEqual(Object.keys(rows[1]), ['id', 'description', 'amount', 'type', 'date', 'time', 'category', 'account',
+            ...(notes ? ['notes'] : []), 'metadata', 'legacyId', 'categoryId', 'accountId']);
+        assert.equal(original.notes, 'Keep notes');
+        assert.equal(h.storage.writes, 2);
+    });
+}
+
+test('changing a transfer to an expense removes obsolete endpoints while preserving custom child notes', async () => {
+    const h = creditEditHarness('internal', 0);
+    h.storage.fail = false;
+    const original = { ...h.original, children: [{ notes: ' Child text\n ', fromAccount: 'child-source', toAccount: 'child-destination' }], legacyId: 'keep' };
+    h.p.transactionsData.transactions[1] = original;
+    const editor = new TransactionModal(h.p.app, h.p, h.view, original);
+    editor.open();
+    editor.contentEl.querySelector('[data-transaction-type="expense"]').click();
+    const form = editor.contentEl.querySelector('form');
+    await form.listeners.submit[0]({ preventDefault() {}, target: form });
+    assert.equal(editor.closed, true);
+    const saved = JSON.parse(h.files.get(h.p.transactionsFilePath)).transactions[1];
+    assert.equal(saved.type, 'expense');
+    assert.equal(saved.id, original.id);
+    assert.equal(saved.amount, original.amount);
+    assert.equal(saved.legacyId, original.legacyId);
+    assert.equal(Object.hasOwn(saved, 'fromAccount'), false);
+    assert.equal(Object.hasOwn(saved, 'toAccount'), false);
+    assert.deepEqual(saved.children, original.children);
+    assert.equal(original.fromAccount, 'chequing-cash');
+    assert.equal(original.toAccount, 'credit-visa');
+});
+
 for (const [name, type, selector] of [
     ['payment reassignment', 'income', '[data-account-reference="chequing-cash"]'],
     ['transfer endpoint change', 'internal', '[data-to-account-reference="credit-master"]'],
