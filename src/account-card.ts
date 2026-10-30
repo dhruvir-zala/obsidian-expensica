@@ -1,4 +1,4 @@
-import { formatCurrency, type Account, type Transaction, getAccountEmoji, getAccountTypeLabel, getAccountColor } from './models';
+import { AccountType, formatCurrency, type Account, type Transaction, getAccountEmoji, getAccountTypeLabel, getAccountColor } from './models';
 
 interface AccountCardOptions {
     account: Account;
@@ -69,8 +69,11 @@ export function renderAccountCard(container: HTMLElement, options: AccountCardOp
         });
     }
 
-    if (creditLimitExceeded) {
-        balanceWrap.createDiv({ text: 'Credit limit exceeded', cls: 'expensica-account-card-warning' });
+    if (creditLimitExceeded || ((account.type === AccountType.CHEQUING || account.isDefault) && account.type !== AccountType.CREDIT && runningBalance < 0)) {
+        balanceWrap.createDiv({
+            text: creditLimitExceeded ? 'Credit limit exceeded' : 'Overdraft',
+            cls: 'expensica-account-card-warning'
+        });
     }
 
     return card;

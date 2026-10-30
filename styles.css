@@ -1,7 +1,7 @@
 /* Premium Expensica styling with Apple/Todoist-inspired design */
 
 .expensica-data-recovery-warning,
-.expensica-credit-limit-warnings {
+.expensica-account-warnings {
   display: grid;
   gap: var(--expensica-gap-md);
   margin-bottom: var(--expensica-gap-lg);
@@ -89,11 +89,11 @@
   overflow-wrap: anywhere;
 }
 
-.expensica-credit-limit-warning {
+.expensica-account-warning {
   cursor: pointer;
 }
 
-.expensica-credit-limit-warning:focus-visible {
+.expensica-account-warning:focus-visible {
   outline: 2px solid var(--interactive-accent);
   outline-offset: 2px;
 }

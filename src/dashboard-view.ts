@@ -2027,9 +2027,10 @@ export class ExpensicaDashboardView extends ItemView {
 
         const accounts = this.plugin.settings.enableAccounts ? this.plugin.getAccounts() : [];
         const summaryAccounts = this.currentTab === DashboardTab.ACCOUNTS
-            ? accounts : accounts.filter(account => account.type === AccountType.CREDIT && typeof account.creditLimit === 'number');
+            ? accounts : accounts.filter(account => ((account.type === AccountType.CHEQUING || account.isDefault) && account.type !== AccountType.CREDIT)
+                || (account.type === AccountType.CREDIT && typeof account.creditLimit === 'number'));
         const summaries = summaryAccounts.length ? this.getAccountSummaries(summaryAccounts) : [];
-        this.renderCreditLimitWarnings(container, summaries);
+        this.renderAccountWarnings(container, summaries);
 
         switch (this.currentTab) {
             case DashboardTab.OVERVIEW:
@@ -2415,48 +2416,53 @@ export class ExpensicaDashboardView extends ItemView {
         });
     }
 
-    private renderCreditLimitWarnings(container: HTMLElement, summaries = this.getAccountSummaries(this.plugin.getAccounts())) {
-        container.querySelector('.expensica-credit-limit-warnings')?.remove();
-        const exceeded = summaries.filter(({ account, runningBalance }) => account.type === AccountType.CREDIT
-            && typeof account.creditLimit === 'number' && runningBalance > account.creditLimit);
-        if (!exceeded.length) return;
+    private renderAccountWarnings(container: HTMLElement, summaries = this.getAccountSummaries(this.plugin.getAccounts())) {
+        container.querySelector('.expensica-account-warnings')?.remove();
+        const affected = summaries.filter(({ account, runningBalance }) => (account.type === AccountType.CHEQUING || account.isDefault) && account.type !== AccountType.CREDIT
+            ? normalizeBalanceValue(runningBalance) < 0
+            : account.type === AccountType.CREDIT && typeof account.creditLimit === 'number' && runningBalance > account.creditLimit);
+        if (!affected.length) return;
 
-        const warnings = container.createDiv('expensica-credit-limit-warnings');
+        const warnings = container.createDiv('expensica-account-warnings');
         const header = container.querySelector('.shadcn-header');
         if (header) container.insertBefore(warnings, header);
         const currency = this.plugin.settings.defaultCurrency;
-        for (const { account, runningBalance } of exceeded) {
+        for (const { account, runningBalance } of affected) {
+            const negativeBalance = account.type !== AccountType.CREDIT;
+            const title = negativeBalance ? 'Overdraft' : 'Credit limit exceeded';
             const creditLimit = account.creditLimit as number;
-            const details = `Outstanding debt: ${formatCurrency(runningBalance, currency)}. `
-                + `Credit limit: ${formatCurrency(creditLimit, currency)}. `
-                + `Exceeded by: ${formatCurrency(runningBalance - creditLimit, currency)}.`;
-            const card = warnings.createDiv('expensica-recovery-card expensica-recovery-card-warning expensica-credit-limit-warning');
+            const details = negativeBalance
+                ? `Balance: ${formatCurrency(runningBalance, currency)}. Deficit: ${formatCurrency(-runningBalance, currency)}.`
+                : `Outstanding debt: ${formatCurrency(runningBalance, currency)}. `
+                    + `Credit limit: ${formatCurrency(creditLimit, currency)}. `
+                    + `Exceeded by: ${formatCurrency(runningBalance - creditLimit, currency)}.`;
+            const warningClass = negativeBalance ? 'expensica-negative-balance-warning' : 'expensica-credit-limit-warning';
+            const card = warnings.createDiv(`expensica-recovery-card expensica-recovery-card-warning expensica-account-warning ${warningClass}`);
             card.setAttribute('role', 'button');
             card.setAttribute('tabindex', '0');
-            card.setAttribute('aria-label', `Edit ${account.name} account: credit limit exceeded. ${details}`);
+            card.setAttribute('aria-label', `Open Accounts: ${account.name}, ${title.toLowerCase()}. ${details}`);
             const body = card.createDiv('expensica-recovery-card-body');
             const heading = body.createDiv('expensica-recovery-card-heading');
             const icon = heading.createSpan({ cls: 'expensica-recovery-card-icon', attr: { 'aria-hidden': 'true' } });
             setIcon(icon, 'circle-alert');
-            heading.createEl('h3', { text: `Credit limit exceeded: ${account.name}` });
+            heading.createEl('h3', { text: `${title}: ${account.name}` });
             body.createEl('p', { text: details });
-            const edit = () => {
-                if (container.contains(card)) this.openAccountEditor(account.id, true);
+            const showAccounts = () => {
+                if (container.contains(card)) this.switchDashboardTab(DashboardTab.ACCOUNTS);
             };
-            card.addEventListener('click', edit);
+            card.addEventListener('click', showAccounts);
             card.addEventListener('keydown', event => {
                 if (event.key !== 'Enter' && event.key !== ' ') return;
                 event.preventDefault();
-                edit();
+                showAccounts();
             });
         }
     }
 
-    private openAccountEditor(accountId?: string, showAccountsTab = false) {
+    private openAccountEditor(accountId?: string) {
         if (this.accountEditorModal?.containerEl.isConnected) return;
         const account = accountId ? this.plugin.getAccounts().find(account => account.id === accountId) : null;
         if (accountId && !account) return;
-        if (showAccountsTab) this.switchDashboardTab(DashboardTab.ACCOUNTS);
         this.accountEditorModal = new AccountEditorModal(this.app, this.plugin, this, account);
         this.accountEditorModal.open();
     }
@@ -7308,6 +7314,11 @@ export class AccountEditorModal extends Modal {
         appendChevronIcon(typeDisplayArrow, '16');
         const typeOptionsMenu = typeSelectContainer.createDiv('expensica-select-options expensica-select-hidden');
 
+        const overdraftDescription = typeGroup.createEl('p', {
+            text: 'An overdraft means the balance is below zero. Transactions are still recorded; chequing and default accounts display a warning.',
+            cls: 'expensica-form-description setting-item-description',
+            attr: { id: 'account-overdraft-description' }
+        });
         const creditLimitSlot = form.createDiv('expensica-credit-limit-slot');
         let creditLimitGroup: HTMLDivElement | null = null;
         let creditLimitInput: HTMLInputElement | null = null;
@@ -7359,6 +7370,8 @@ export class AccountEditorModal extends Modal {
 
         const updateTypeSelection = (type: AccountType) => {
             hiddenTypeSelect.value = type;
+            overdraftDescription.hidden = type === AccountType.CREDIT;
+            typeDisplay.setAttribute('aria-describedby', type === AccountType.CREDIT ? '' : 'account-overdraft-description');
             typeDisplayText.empty();
             appendCreditCardIcon(typeDisplayText);
             typeDisplayText.createSpan({ text: ` ${getAccountTypeLabel(type)}` });
