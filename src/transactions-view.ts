@@ -1,6 +1,5 @@
 import { App, Modal } from 'obsidian';
 import {
-    AccountType,
     CategoryType,
     Transaction,
     TransactionType,
@@ -12,6 +11,7 @@ import {
     parseLocalDate,
     sortTransactionsByDateTimeDesc
 } from './models';
+import { getRunningBalanceByTransactionIdForAccount } from './account-calculations';
 import ExpensicaPlugin from '../main';
 import type { SharedDateRangeState } from '../main';
 import {
@@ -78,55 +78,6 @@ function getTransactionAccountReferences(plugin: ExpensicaPlugin, transaction: T
     return [transaction.fromAccount, transaction.toAccount]
         .filter((reference): reference is string => !!reference)
         .map(reference => plugin.normalizeTransactionAccountReference(reference));
-}
-
-function getAccountTransactionAmount(plugin: ExpensicaPlugin, transaction: Transaction, accountReference: string,
-    isCredit = plugin.findAccountByReference(accountReference)?.type === AccountType.CREDIT): number {
-    if (transaction.type === TransactionType.INTERNAL) {
-        const fromAccount = transaction.fromAccount ? plugin.normalizeTransactionAccountReference(transaction.fromAccount) : '';
-        const toAccount = transaction.toAccount ? plugin.normalizeTransactionAccountReference(transaction.toAccount) : '';
-        if (fromAccount === toAccount) return 0;
-        if (fromAccount === accountReference) {
-            return isCredit ? transaction.amount : -transaction.amount;
-        }
-        if (toAccount === accountReference) {
-            return isCredit ? -transaction.amount : transaction.amount;
-        }
-        return 0;
-    }
-
-    const transactionAccount = Object.prototype.hasOwnProperty.call(transaction, 'account')
-        ? plugin.normalizeTransactionAccountReference(transaction.account)
-        : plugin.normalizeTransactionAccountReference(undefined);
-
-    if (transactionAccount !== accountReference) {
-        return 0;
-    }
-
-    if (transaction.type === TransactionType.INCOME) {
-        return isCredit ? -transaction.amount : transaction.amount;
-    }
-
-    return transaction.type === TransactionType.EXPENSE
-        ? (isCredit ? transaction.amount : -transaction.amount)
-        : 0;
-}
-
-function getRunningBalanceByTransactionIdForAccount(
-    plugin: ExpensicaPlugin,
-    accountReference: string,
-    transactions: Transaction[],
-    chronologicalTransactions: readonly Transaction[] = sortTransactionsByDateTimeDesc(transactions, plugin.getAllTransactions()).reverse()
-): Record<string, number> {
-    let runningBalance = 0;
-    const isCredit = plugin.findAccountByReference(accountReference)?.type === AccountType.CREDIT;
-
-    return chronologicalTransactions
-        .reduce<Record<string, number>>((balances, transaction) => {
-            runningBalance += getAccountTransactionAmount(plugin, transaction, accountReference, isCredit);
-            balances[transaction.id] = runningBalance;
-            return balances;
-        }, {});
 }
 
 function formatRunningBalanceLabel(plugin: ExpensicaPlugin, balance: number, accountReference?: string): string {
