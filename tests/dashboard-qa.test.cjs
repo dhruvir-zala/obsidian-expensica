@@ -2442,13 +2442,16 @@ test('All Time cumulative charts include migrated historical expenses after reco
     const views = roots.map(root => {
         const view = chartView(h.p);
         Object.assign(view, {
-            currentDate: today, selectedCalendarDate: today, containerEl: { children: [null, root] },
+            currentDate: today, selectedCalendarDate: today,
+            containerEl: { children: [null, root], contains: element => root.contains(element) },
             isDashboardVisible: () => true,
             renderChartDateRangeButtons() {},
             renderDashboard() {
                 root.empty();
                 this.plugin.renderDataRecoveryWarning(root);
                 this.renderCumulativeExpensesChart(root);
+                const canvas = root.querySelector('canvas');
+                if (canvas) canvas.isConnected = true;
             }
         });
         view.dateRange = view.getDateRange(DateRangeType.ALL_TIME);
