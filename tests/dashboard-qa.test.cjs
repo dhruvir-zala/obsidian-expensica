@@ -76,6 +76,7 @@ const models = load('src/models.ts');
 const accountCards = load('src/account-card.ts', { './models': models });
 const shownModals = [];
 const notices = [];
+const presentationErrors = [];
 class Modal {
     constructor(app) { this.app = app; this.contentEl = new Element(); this.modalEl = new Element(); this.containerEl = new Element(); }
     open() { shownModals.push(this); this.onOpen?.(); }
@@ -112,6 +113,7 @@ const { ExpensicaDashboardView, TransactionModal, DateRangePickerModal, DateRang
     './account-card': accountCards
 }, {
     crypto: require('node:crypto').webcrypto,
+    console: { log() {}, warn() {}, error: (...args) => presentationErrors.push(args) },
     setTimeout: callback => { chartTimers.push(callback); return chartTimers.length; },
     document: { addEventListener() {}, removeEventListener() {}, createElement: tag => new Element(tag),
         createElementNS: (namespace, tag) => new Element(tag), createTextNode: text => new Element('text', { text }) },
@@ -811,6 +813,85 @@ function recoveryHarness() {
     p.refreshExpensicaViews = async () => {};
     const { view, effects } = mutationView(p);
     return { p, view, effects, container, files, storage };
+}
+
+for (const editing of [false, true]) {
+    for (const phase of ['loadTransactionsData', 'requestAllChartAnimations', 'renderDashboard']) {
+        test(`committed transaction ${editing ? 'edit' : 'add'} closes the editor when ${phase} throws`, async () => {
+            const h = recoveryHarness();
+            const original = { id: '20261015-120000-00000001', description: 'ORIGINAL', amount: 10, type: 'expense',
+                date: '2026-10-15', time: '12:00:00', category: 'food', account: 'other-default' };
+            if (editing) h.p.transactionsData.transactions = [original];
+            h.storage.fail = false;
+            const error = new Error(`${phase} failed after commit`);
+            h.view[phase] = () => { throw error; };
+            const editor = new TransactionModal(h.p.app, h.p, h.view, editing ? original : null);
+            editor.open();
+            editor.contentEl.querySelector('#description').value = 'SAVED TRANSACTION';
+            editor.contentEl.querySelector('#amount').value = '25';
+            const form = editor.contentEl.querySelector('form');
+            const noticeStart = notices.length, errorStart = presentationErrors.length, modalCount = shownModals.length;
+            await form.listeners.submit[0]({ preventDefault() {}, target: form });
+            const rows = JSON.parse(h.files.get(h.p.transactionsFilePath)).transactions;
+            assert.equal(h.storage.writes, 1);
+            assert.equal(rows.length, 1);
+            assert.equal(rows[0].description, 'SAVED TRANSACTION');
+            assert.equal(rows[0].amount, 25);
+            if (editing) assert.equal(rows[0].id, original.id);
+            assert.equal(editor.closed, true);
+            assert.equal(editor.contentEl.children.length, 0);
+            assert.equal(h.p.hasSaveFailure(editor), false);
+            assert.equal(shownModals.length, modalCount, 'no recovery or discard confirmation after a committed save');
+            assert.ok(presentationErrors.slice(errorStart).some(args => args.includes(error)));
+            assert.ok(!notices.slice(noticeStart).some(message => /could not finish|input has been kept/.test(message)));
+            assert.ok(notices.slice(noticeStart).includes(`Transaction ${editing ? 'updated' : 'added'} successfully`));
+        });
+    }
+
+    test(`failed transaction ${editing ? 'edit' : 'add'} retains its draft and recovery until retry commits despite a render exception`, async () => {
+        const h = recoveryHarness();
+        const original = { id: '20261015-120000-00000001', description: 'ORIGINAL', amount: 10, type: 'expense',
+            date: '2026-10-15', time: '12:00:00', category: 'food', account: 'other-default' };
+        if (editing) h.p.transactionsData.transactions = [original];
+        h.files.set(h.p.transactionsFilePath, JSON.stringify({ transactions: h.p.getAllTransactions(), lastUpdated: 'initial' }));
+        const disk = h.files.get(h.p.transactionsFilePath), memory = JSON.stringify(h.p.getAllTransactions());
+        const error = new Error('render failed after retry committed');
+        let renders = 0;
+        h.view.renderDashboard = () => { renders++; throw error; };
+        const editor = new TransactionModal(h.p.app, h.p, h.view, editing ? original : null);
+        editor.open();
+        editor.contentEl.querySelector('#description').value = 'RETAINED DRAFT';
+        editor.contentEl.querySelector('#amount').value = '25';
+        const form = editor.contentEl.querySelector('form');
+        const submit = () => form.listeners.submit[0]({ preventDefault() {}, target: form });
+        const noticeStart = notices.length, errorStart = presentationErrors.length;
+        await submit();
+        assert.equal(h.files.get(h.p.transactionsFilePath), disk);
+        assert.equal(JSON.stringify(h.p.getAllTransactions()), memory);
+        assert.ok(!editor.closed);
+        assert.equal(editor.contentEl.querySelector('#description').value, 'RETAINED DRAFT');
+        assert.equal(editor.contentEl.querySelector('#amount').value, '25');
+        assert.equal(form.querySelector('[type="submit"]').disabled, false);
+        assert.equal(h.p.hasSaveFailure(editor), true);
+        assert.equal(renders, 0);
+        assert.equal(presentationErrors.length, errorStart);
+        assert.ok(!notices.slice(noticeStart).some(message => /successfully/.test(message)));
+        const recovery = shownModals.at(-1);
+        h.storage.fail = false;
+        await recovery.contentEl.querySelectorAll('button').find(button => button.textContent === 'Retry').listeners.click[0]();
+        const rows = JSON.parse(h.files.get(h.p.transactionsFilePath)).transactions;
+        assert.equal(h.storage.writes, 2);
+        assert.equal(rows.length, 1);
+        assert.equal(rows[0].description, 'RETAINED DRAFT');
+        assert.equal(rows[0].amount, 25);
+        if (editing) assert.equal(rows[0].id, original.id);
+        assert.equal(editor.closed, true);
+        assert.equal(editor.contentEl.children.length, 0);
+        assert.equal(h.p.hasSaveFailure(editor), false);
+        assert.equal(renders, 1);
+        assert.ok(presentationErrors.slice(errorStart).some(args => args.includes(error)));
+        assert.ok(!notices.slice(noticeStart).some(message => /could not finish|input has been kept/.test(message)));
+    });
 }
 
 for (const operation of ['create', 'edit', 'delete']) {

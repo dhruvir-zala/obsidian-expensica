@@ -1939,18 +1939,26 @@ export class ExpensicaDashboardView extends ItemView {
 
     async addTransaction(transaction: Transaction) {
         await this.plugin.addTransaction(transaction, this);
-        await this.loadTransactionsData();
-        this.requestAllChartAnimations();
-        this.renderDashboard();
+        try {
+            await this.loadTransactionsData();
+            this.requestAllChartAnimations();
+            this.renderDashboard();
+        } catch (error) {
+            console.error('Expensica: Could not refresh the dashboard after saving a transaction', error);
+        }
         showExpensicaNotice('Transaction added successfully');
     }
 
     async updateTransaction(transaction: Transaction) {
         await this.plugin.updateTransaction(transaction, this);
         this.selectedTransactionIds.delete(transaction.id);
-        await this.loadTransactionsData();
-        this.requestAllChartAnimations();
-        this.renderDashboard();
+        try {
+            await this.loadTransactionsData();
+            this.requestAllChartAnimations();
+            this.renderDashboard();
+        } catch (error) {
+            console.error('Expensica: Could not refresh the dashboard after saving a transaction', error);
+        }
         showExpensicaNotice('Transaction updated successfully');
     }
 
