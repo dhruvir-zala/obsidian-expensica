@@ -11,7 +11,7 @@ function load(filename, dependencies = {}, globals = {}) {
     const compiled = ts.transpileModule(fs.readFileSync(path.join(__dirname, '..', filename), 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
     }).outputText;
-    vm.runInNewContext(compiled, { exports, Date, Intl, console, ...globals, require: name => dependencies[name] || {} });
+    vm.runInNewContext(compiled, { exports, Date, Intl, console, ...globals, require: name => dependencies[name] || (name.endsWith('/account-calculations') ? load('src/account-calculations.ts', { './models': dependencies['./models'] || dependencies['../models'] }) : undefined) || {} });
     return exports;
 }
 const models = load('src/models.ts');

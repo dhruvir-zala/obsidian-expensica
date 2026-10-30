@@ -11,7 +11,7 @@ function load(file, dependencies = {}, source = fs.readFileSync(path.join(__dirn
     const code = ts.transpileModule(source, { compilerOptions: {
         module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020
     } }).outputText;
-    vm.runInNewContext(code, { exports, Date, Intl, console, require: name => dependencies[name] || {} });
+    vm.runInNewContext(code, { exports, Date, Intl, console, require: name => dependencies[name] || (name.endsWith('/account-calculations') ? load('src/account-calculations.ts', { './models': dependencies['./models'] || dependencies['../models'] }) : undefined) || {} });
     return exports;
 }
 const obsidian = { Plugin: class {}, PluginSettingTab: class {}, Modal: class {}, ItemView: class {} };

@@ -78,7 +78,7 @@ function load(filename, dependencies = {}, globals = {}) {
     }).outputText);
     const exports = {};
     vm.runInNewContext(compiled.get(filename), { exports, Date, Intl, console, ...globals,
-        require: name => dependencies[name] || {}
+        require: name => dependencies[name] || (name.endsWith('/account-calculations') ? load('src/account-calculations.ts', { './models': dependencies['./models'] || dependencies['../models'] }) : undefined) || {}
     });
     return exports;
 }
@@ -100,7 +100,7 @@ function setup() {
         './models': models, obsidian: { Component, ItemView, Modal: class {}, setIcon() {} },
         'chart.js': { Tooltip: { positioners: {} } }
     }, { document: doc, window: { removeEventListener() {}, clearTimeout() {}, cancelAnimationFrame() {} } });
-    const plugin = { settings: { enableAccounts: true, enableBudgeting: true }, renderDataRecoveryWarning() {} };
+    const plugin = { settings: { enableAccounts: true, enableBudgeting: true }, renderDataRecoveryWarning() {}, getAccounts: () => [] };
     function view() {
         const instance = new ExpensicaDashboardView({}, plugin);
         const counts = { saves: 0, changes: 0 };

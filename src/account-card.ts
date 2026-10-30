@@ -1,4 +1,4 @@
-import { formatCurrency, type Account, type Transaction, getAccountEmoji, getAccountTypeLabel, getAccountColor } from './models';
+import { AccountType, formatCurrency, type Account, type Transaction, getAccountEmoji, getAccountTypeLabel, getAccountColor } from './models';
 
 interface AccountCardOptions {
     account: Account;
@@ -7,6 +7,7 @@ interface AccountCardOptions {
     currencyCode: string;
     color?: string;
     creditLimitLabel?: string;
+    creditLimitExceeded?: boolean;
     onClick?: (account: Account) => void;
 }
 
@@ -18,7 +19,7 @@ interface CreateAccountCardOptions {
 }
 
 export function renderAccountCard(container: HTMLElement, options: AccountCardOptions): HTMLElement {
-    const { account, runningBalance, lastTransactionDateLabel, currencyCode, color, creditLimitLabel, onClick } = options;
+    const { account, runningBalance, lastTransactionDateLabel, currencyCode, color, creditLimitLabel, creditLimitExceeded, onClick } = options;
     const card = container.createDiv('expensica-account-card');
     card.setAttribute('data-account-type', account.type);
 
@@ -65,6 +66,13 @@ export function renderAccountCard(container: HTMLElement, options: AccountCardOp
         balanceWrap.createDiv({
             text: creditLimitLabel,
             cls: 'expensica-account-card-credit-limit'
+        });
+    }
+
+    if (creditLimitExceeded || ((account.type === AccountType.CHEQUING || account.isDefault) && account.type !== AccountType.CREDIT && runningBalance < 0)) {
+        balanceWrap.createDiv({
+            text: creditLimitExceeded ? 'Credit limit exceeded' : 'Overdraft',
+            cls: 'expensica-account-card-warning'
         });
     }
 
