@@ -894,6 +894,108 @@ for (const editing of [false, true]) {
     });
 }
 
+for (const editing of [false, true]) {
+    for (const phase of ['loadTransactionsData', 'requestAllChartAnimations', 'renderDashboard']) {
+        test(`committed account ${editing ? 'edit' : 'add'} closes the editor when ${phase} throws`, async () => {
+            const h = recoveryHarness();
+            const original = { id: 'wallet', name: 'Wallet', type: 'saving', createdAt: '2026-01-01' };
+            if (editing) {
+                h.p.transactionsData = h.p.normalizeTransactionsSnapshot({ ...h.p.transactionsData,
+                    accounts: [...h.p.getAccounts(), original], transactions: [{ id: '20261015-120000-00000001', date: '2026-10-15',
+                        time: '12:00:00', type: 'expense', amount: 10, description: 'ENTRY', category: 'food', account: 'saving-wallet' }] });
+            }
+            h.files.set(h.p.accountsFilePath, JSON.stringify({ accounts: h.p.getAccounts(), lastUpdated: 'initial' }));
+            h.files.set(h.p.transactionsFilePath, JSON.stringify({ transactions: h.p.getAllTransactions(), lastUpdated: 'initial' }));
+            h.storage.fail = false;
+            const error = new Error(`${phase} failed after account commit`);
+            h.view[phase] = () => { throw error; };
+            const editor = new AccountEditorModal(h.p.app, h.p, h.view, editing ? original : null);
+            editor.open();
+            editor.contentEl.querySelector('#account-name').value = 'Saved account';
+            const form = editor.contentEl.querySelector('form');
+            const noticeStart = notices.length, errorStart = presentationErrors.length, modalCount = shownModals.length;
+            await form.listeners.submit[0]({ preventDefault() {} });
+            const accounts = JSON.parse(h.files.get(h.p.accountsFilePath)).accounts;
+            assert.equal(h.storage.writes, editing ? 2 : 1);
+            assert.equal(accounts.length, 2);
+            assert.equal(accounts.filter(account => account.name === 'Saved account').length, 1);
+            if (editing) {
+                assert.equal(accounts.find(account => account.name === 'Saved account').id, original.id);
+                const saved = JSON.parse(h.files.get(h.p.transactionsFilePath)).transactions[0];
+                assert.equal(saved.account, models.formatAccountReference('saving', 'Saved account'));
+                assert.equal(saved.id, '20261015-120000-00000001');
+                assert.equal(saved.amount, 10);
+            }
+            assert.equal(editor.closed, true);
+            assert.equal(editor.contentEl.children.length, 0);
+            assert.equal(h.p.hasSaveFailure(editor), false);
+            assert.equal(shownModals.length, modalCount, 'no recovery or warning dialog after a committed account save');
+            assert.ok(presentationErrors.slice(errorStart).some(args => args.includes(error)));
+            assert.ok(!notices.slice(noticeStart).some(message => /could not finish|input has been kept/.test(message)));
+        });
+    }
+}
+
+for (const [editing, failedDataset] of [[false, 'accounts'], [true, 'accounts'], [true, 'transactions']]) {
+    test(`failed account ${editing ? 'edit' : 'add'} ${failedDataset} write retains the draft and Retry closes despite a render exception`, async () => {
+        const h = recoveryHarness();
+        const original = { id: 'wallet', name: 'Wallet', type: 'saving', createdAt: '2026-01-01' };
+        if (editing) {
+            h.p.transactionsData = h.p.normalizeTransactionsSnapshot({ ...h.p.transactionsData,
+                accounts: [...h.p.getAccounts(), original], transactions: [{ id: '20261015-120000-00000001', date: '2026-10-15',
+                    time: '12:00:00', type: 'expense', amount: 10, description: 'ENTRY', category: 'food', account: 'saving-wallet' }] });
+        }
+        h.files.set(h.p.accountsFilePath, JSON.stringify({ accounts: h.p.getAccounts(), lastUpdated: 'initial' }));
+        h.files.set(h.p.transactionsFilePath, JSON.stringify({ transactions: h.p.getAllTransactions(), lastUpdated: 'initial' }));
+        const files = [...h.files], memory = JSON.stringify(h.p.transactionsData);
+        const write = h.p.app.vault.adapter.write;
+        const failedPath = failedDataset === 'accounts' ? h.p.accountsFilePath : h.p.transactionsFilePath;
+        let fail = true, renders = 0;
+        h.storage.fail = false;
+        h.p.app.vault.adapter.write = async (file, content) => {
+            if (fail && file === failedPath) { h.storage.writes++; throw Error('Permission denied'); }
+            await write(file, content);
+        };
+        const error = new Error('render failed after account retry committed');
+        h.view.renderDashboard = () => { renders++; throw error; };
+        const editor = new AccountEditorModal(h.p.app, h.p, h.view, editing ? original : null);
+        editor.open();
+        editor.contentEl.querySelector('#account-name').value = 'Retained draft';
+        const form = editor.contentEl.querySelector('form');
+        const noticeStart = notices.length, errorStart = presentationErrors.length;
+        await form.listeners.submit[0]({ preventDefault() {} });
+        assert.deepEqual([...h.files], files);
+        assert.equal(JSON.stringify(h.p.transactionsData), memory);
+        assert.ok(!editor.closed);
+        assert.equal(editor.contentEl.querySelector('#account-name').value, 'Retained draft');
+        assert.equal(h.p.hasSaveFailure(editor), true);
+        assert.equal(renders, 0);
+        assert.equal(presentationErrors.length, errorStart);
+        const recovery = shownModals.at(-1);
+        editor.contentEl.querySelector('#account-name').value = 'Recovered account';
+        fail = false;
+        await recovery.contentEl.querySelectorAll('button').find(button => button.textContent === 'Retry').listeners.click[0]();
+        const accounts = JSON.parse(h.files.get(h.p.accountsFilePath)).accounts;
+        assert.equal(h.storage.writes, !editing ? 2 : failedDataset === 'accounts' ? 3 : 5);
+        assert.equal(accounts.length, 2);
+        assert.equal(accounts.filter(account => account.name === 'Recovered account').length, 1);
+        assert.equal(accounts.some(account => account.name === 'Retained draft'), false);
+        if (editing) {
+            assert.equal(accounts.find(account => account.name === 'Recovered account').id, original.id);
+            const saved = JSON.parse(h.files.get(h.p.transactionsFilePath)).transactions[0];
+            assert.equal(saved.account, models.formatAccountReference('saving', 'Recovered account'));
+            assert.equal(saved.id, '20261015-120000-00000001');
+            assert.equal(saved.amount, 10);
+        }
+        assert.equal(editor.closed, true);
+        assert.equal(editor.contentEl.children.length, 0);
+        assert.equal(h.p.hasSaveFailure(editor), false);
+        assert.equal(renders, 1);
+        assert.ok(presentationErrors.slice(errorStart).some(args => args.includes(error)));
+        assert.ok(!notices.slice(noticeStart).some(message => /could not finish|input has been kept/.test(message)));
+    });
+}
+
 for (const operation of ['create', 'edit', 'delete']) {
     test(`budget ${operation} UI refreshes two dashboards once through durable persistence`, async () => {
         const h = recoveryHarness();

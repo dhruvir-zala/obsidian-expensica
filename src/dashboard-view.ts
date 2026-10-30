@@ -7222,9 +7222,13 @@ export class AccountEditorModal extends Modal {
             } else {
                 await this.plugin.addAccount(nextAccount, this.dashboardView);
             }
-            await this.dashboardView?.loadTransactionsData();
-            this.dashboardView?.requestAllChartAnimations();
-            this.dashboardView?.renderDashboard();
+            try {
+                await this.dashboardView?.loadTransactionsData();
+                this.dashboardView?.requestAllChartAnimations();
+                this.dashboardView?.renderDashboard();
+            } catch (error) {
+                console.error('Expensica: Could not refresh the dashboard after saving an account', error);
+            }
             this.close();
         } finally {
             this.saving = false;
