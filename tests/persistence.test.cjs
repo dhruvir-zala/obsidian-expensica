@@ -17,7 +17,7 @@ function load(filename, dependencies = {}) {
     vm.runInNewContext(compiled.get(filename), {
         exports, Date, crypto: require('node:crypto').webcrypto,
         console: { log() {}, warn() {}, error() {} },
-        require(name) { return dependencies[name] || (name.endsWith('/modal-utils') ? load('src/modal-utils.ts') : {}); }
+        require(name) { return dependencies[name] || (name.endsWith('/account-calculations') ? load('src/account-calculations.ts', { './models': dependencies['./models'] || dependencies['../models'] }) : undefined) || (name.endsWith('/modal-utils') ? load('src/modal-utils.ts') : {}); }
     });
     return exports;
 }

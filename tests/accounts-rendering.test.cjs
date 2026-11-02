@@ -11,7 +11,7 @@ function load(file, dependencies = {}, source = fs.readFileSync(path.join(__dirn
     const code = ts.transpileModule(source, { compilerOptions: {
         module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020
     } }).outputText;
-    vm.runInNewContext(code, { exports, Date, Intl, console, require: name => dependencies[name] || {} });
+    vm.runInNewContext(code, { exports, Date, Intl, console, require: name => dependencies[name] || (name.endsWith('/account-calculations') ? load('src/account-calculations.ts', { './models': dependencies['./models'] || dependencies['../models'] }) : undefined) || {} });
     return exports;
 }
 class Element {
@@ -215,6 +215,31 @@ test('account and create cards preserve their editor callbacks without writes or
     assert.equal(opened[start].dashboardView, h.view);
     assert.equal(h.counts.writes + h.counts.refreshes + h.counts.layoutSaves, 0);
 });
+
+for (const currency of ['USD', 'CAD', 'JPY', 'KWD']) {
+    for (const [limit, debt] of [[1000, 1020], [750, 875], [1000.25, 2000.75], [100, 100], [100, 99.5],
+        [0, 0], [0, 0.001], [undefined, 2000], [100, -50]]) {
+        test(`${currency} credit warning reflects debt ${debt} and configured limit ${limit}`, () => {
+            const accounts = [{ id: 'cash', name: 'Cash', type: 'chequing', isDefault: true },
+                { id: 'card', name: 'Card', type: 'credit', creditLimit: limit }];
+            const source = [Object.freeze(row('entry', { account: 'credit-card', type: debt < 0 ? 'income' : 'expense', amount: Math.abs(debt) }))];
+            const before = JSON.stringify({ source, accounts });
+            const h = harness(current, source, accounts);
+            h.p.settings.defaultCurrency = currency;
+            const result = h.render();
+            const card = result.output.cards.find(card => card.account.id === 'card');
+            const exceeded = typeof limit === 'number' && debt > limit;
+            assert.equal(card.creditLimitExceeded, exceeded);
+            const markup = JSON.stringify(result.output.tree);
+            assert.equal(markup.includes('Credit limit exceeded'), exceeded);
+            assert.equal(markup.includes('expensica-recovery-card-warning'), false);
+            assert.equal(markup.includes('Outstanding debt:'), false);
+            assert.equal(markup.includes('Exceeded by:'), false);
+            assert.equal(JSON.stringify({ source, accounts }), before);
+            assert.equal(result.counts.writes + result.counts.refreshes + result.counts.layoutSaves, 0);
+        });
+    }
+}
 
 if (process.env.EXPENSICA_ACCOUNTS_BASELINE) {
     test('benchmark old and optimized Accounts tabs with identical output and separately measured operation counts', () => {
