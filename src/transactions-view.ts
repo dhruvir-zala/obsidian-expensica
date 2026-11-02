@@ -16,11 +16,10 @@ import ExpensicaPlugin from '../main';
 import type { SharedDateRangeState } from '../main';
 import {
     TransactionModal,
-    ExpensicaDashboardView,
-    EXPENSICA_VIEW_TYPE,
     DateRangeType,
     DateRange
 } from './dashboard-view';
+import type { TransactionEditorHost } from './transaction-editor-host';
 import { ConfirmationModal } from './confirmation-modal';
 import { showExpensicaNotice } from './notice';
 import { voidAsync } from './modal-utils';
@@ -165,20 +164,13 @@ class BulkRenameTransactionsModal extends Modal {
     }
 }
 
-export interface TransactionView {
-    plugin: ExpensicaPlugin;
-    addTransaction(transaction: Transaction): Promise<void>;
-    updateTransaction(transaction: Transaction): Promise<void>;
-    deleteTransaction(id: string): Promise<void>;
-}
-
 export interface TransactionNavigationFilter {
     type?: TransactionType;
     accountReference?: string;
     categoryId?: string;
 }
 
-export class ExpensicaTransactionsView implements TransactionView {
+export class ExpensicaTransactionsView {
     app: App;
     plugin: ExpensicaPlugin;
     transactions: Transaction[] = [];
@@ -204,7 +196,7 @@ export class ExpensicaTransactionsView implements TransactionView {
     customEndDate: Date | null = null;
     dateRangeUpdatedAt = 0;
 
-    constructor(app: App, plugin: ExpensicaPlugin) {
+    constructor(app: App, plugin: ExpensicaPlugin, private readonly editorHost: TransactionEditorHost) {
         this.app = app;
         this.plugin = plugin;
         this.dateRange = this.getDateRange(DateRangeType.THIS_MONTH);
@@ -1054,11 +1046,7 @@ export class ExpensicaTransactionsView implements TransactionView {
             runningBalanceLabel,
             secondaryRunningBalanceLabel,
             onEdit: (transaction) => {
-                const dashboardView = this.app.workspace.getLeavesOfType(EXPENSICA_VIEW_TYPE)
-                    .map(leaf => leaf.view)
-                    .find((view): view is ExpensicaDashboardView => view instanceof ExpensicaDashboardView);
-                if (!dashboardView) return;
-                const modal = new TransactionModal(this.app, this.plugin, dashboardView, transaction, transaction.type);
+                const modal = new TransactionModal(this.app, this.plugin, this.editorHost, transaction, transaction.type);
                 modal.open();
             },
             onCategoryChange: async (transaction, categoryId) => {
@@ -1504,15 +1492,6 @@ export class ExpensicaTransactionsView implements TransactionView {
         this.restoreScrollPosition();
     }
 
-    async addTransaction(transaction: Transaction) {
-        await this.plugin.addTransaction(transaction, this);
-        
-        // Refresh transactions without resetting the user's current filter/page context.
-        this.loadTransactionsData(false);
-        this.persistTransactionsState();
-        this.refreshTransactionsListOnly();
-    }
-
     async updateTransaction(transaction: Transaction) {
         await this.plugin.updateTransaction(transaction, this);
         
@@ -1520,29 +1499,6 @@ export class ExpensicaTransactionsView implements TransactionView {
         this.loadTransactionsData(false);
         this.persistTransactionsState();
         this.refreshTransactionsListOnly();
-    }
-
-    async deleteTransaction(id: string, onDeleted?: () => void, onConfirmDelete?: () => void) {
-        const transaction = this.transactions.find(t => t.id === id);
-        if (!transaction) return;
-
-        new ConfirmationModal(
-            this.app,
-            'Delete Transaction?',
-            `Are you sure you want to delete this ${transaction.type.toLowerCase()} transaction? This action cannot be undone.`,
-            async (confirmed) => {
-                if (confirmed) {
-                    await this.plugin.deleteTransaction(id, this);
-                    onConfirmDelete?.();
-                    // Refresh transactions without resetting the user's current filter/page context.
-                    this.loadTransactionsData(false);
-                    this.persistTransactionsState();
-                    this.refreshTransactionsListOnly();
-                    showExpensicaNotice('Transaction deleted successfully');
-                    onDeleted?.();
-                }
-            }, 'Delete', this.plugin
-        ).open();
     }
 
     // Helper method to get a date range based on type

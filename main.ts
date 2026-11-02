@@ -1099,7 +1099,7 @@ export default class ExpensicaPlugin extends Plugin {
     renderDashboardTransactionsTab(dashboard: ExpensicaDashboardView, container: HTMLElement) {
         let transactionsView = this.dashboardTransactionsViews.get(dashboard);
         if (!transactionsView) {
-            transactionsView = new ExpensicaTransactionsView(this.app, this);
+            transactionsView = new ExpensicaTransactionsView(this.app, this, dashboard);
             this.dashboardTransactionsViews.set(dashboard, transactionsView);
             dashboard.register(() => transactionsView?.deactivate());
         }

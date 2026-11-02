@@ -20,6 +20,7 @@ import { getAccountTransactionAmount, getAccountRunningBalance, getRunningBalanc
 import ExpensicaPlugin from '../main';
 import type { SharedDateRangeState } from '../main';
 import type { TransactionNavigationFilter } from './transactions-view';
+import type { TransactionEditorHost } from './transaction-editor-host';
 import { PremiumVisualizations } from './dashboard-integration';
 import { ConfirmationModal } from './confirmation-modal';
 import { preventBackdropDismissal, voidAsync } from './modal-utils';
@@ -375,7 +376,7 @@ export enum DashboardTab {
     CATEGORIES = 'categories'
 }
 
-export class ExpensicaDashboardView extends ItemView {
+export class ExpensicaDashboardView extends ItemView implements TransactionEditorHost {
     plugin: ExpensicaPlugin;
     transactions: Transaction[] = [];
     filteredTransactions: Transaction[] = [];
@@ -5868,7 +5869,6 @@ export class DateRangePickerModal extends Modal {
 // Transaction modal base class
 export class TransactionModal extends Modal {
     plugin: ExpensicaPlugin;
-    dashboardView: ExpensicaDashboardView;
     transaction: Transaction | null;
     defaultType: TransactionType;
     private discardConfirmation: ConfirmationModal | null = null;
@@ -5876,10 +5876,9 @@ export class TransactionModal extends Modal {
     private timeSelector: TimeSelectorModal | null = null;
     private hasUnsavedChanges = () => false;
 
-    constructor(app: App, plugin: ExpensicaPlugin, dashboardView: ExpensicaDashboardView, transaction: Transaction | null = null, defaultType: TransactionType = plugin.settings.lastTransactionSelection.type || TransactionType.EXPENSE) {
+    constructor(app: App, plugin: ExpensicaPlugin, private readonly editorHost: TransactionEditorHost, transaction: Transaction | null = null, defaultType: TransactionType = plugin.settings.lastTransactionSelection.type || TransactionType.EXPENSE) {
         super(app);
         this.plugin = plugin;
-        this.dashboardView = dashboardView;
         this.transaction = transaction;
         this.defaultType = transaction?.type || defaultType;
         if (!transaction && this.defaultType === TransactionType.INTERNAL
@@ -6677,7 +6676,7 @@ export class TransactionModal extends Modal {
             notesInput.value = this.transaction.notes || '';
         } else {
             // Set default date to the selected calendar day when available
-            dateInput.value = formatDate(this.dashboardView.getDefaultTransactionDate?.() || new Date());
+            dateInput.value = formatDate(this.editorHost.getDefaultTransactionDate?.() || new Date());
             timeInput.value = formatTime().slice(0, 5);
         }
         updateDateDisplay();
@@ -6698,7 +6697,7 @@ export class TransactionModal extends Modal {
         deleteBtn?.addEventListener('click', voidAsync(async () => {
             if (!this.transaction) return;
             const closeEditor = () => this.close();
-            await this.dashboardView.deleteTransaction(this.transaction.id, closeEditor, closeEditor);
+            await this.editorHost.deleteTransaction(this.transaction.id, closeEditor, closeEditor);
         }));
 
         let saving = false;
@@ -6804,9 +6803,9 @@ export class TransactionModal extends Modal {
                             return false;
                         }
 
-                        await this.dashboardView.updateTransaction(transaction);
+                        await this.editorHost.updateTransaction(transaction);
                     } else {
-                        await this.dashboardView.addTransaction(transaction);
+                        await this.editorHost.addTransaction(transaction);
                     }
 
                     const selection = {
