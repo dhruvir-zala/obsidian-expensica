@@ -1,57 +1,8 @@
-import { AccountType, Transaction, TransactionType, formatCurrency, ColorScheme, parseLocalDate, sortTransactionsByDateTimeDesc } from '../models';
+import { Transaction, TransactionType, formatCurrency, ColorScheme, parseLocalDate, sortTransactionsByDateTimeDesc } from '../models';
+import { getRunningBalanceByTransactionIdForAccount } from '../account-calculations';
 import ExpensicaPlugin from '../../main';
 import * as d3 from 'd3';
 import { renderTransactionCard } from '../transaction-card';
-
-function getAccountTransactionAmount(plugin: ExpensicaPlugin, transaction: Transaction, accountReference: string): number {
-    const account = plugin.findAccountByReference(accountReference);
-    const isCredit = account?.type === AccountType.CREDIT;
-
-    if (transaction.type === TransactionType.INTERNAL) {
-        const fromAccount = transaction.fromAccount ? plugin.normalizeTransactionAccountReference(transaction.fromAccount) : '';
-        const toAccount = transaction.toAccount ? plugin.normalizeTransactionAccountReference(transaction.toAccount) : '';
-        if (fromAccount === toAccount) return 0;
-        if (fromAccount === accountReference) {
-            return isCredit ? transaction.amount : -transaction.amount;
-        }
-        if (toAccount === accountReference) {
-            return isCredit ? -transaction.amount : transaction.amount;
-        }
-        return 0;
-    }
-
-    const transactionAccount = Object.prototype.hasOwnProperty.call(transaction, 'account')
-        ? plugin.normalizeTransactionAccountReference(transaction.account)
-        : plugin.normalizeTransactionAccountReference(undefined);
-
-    if (transactionAccount !== accountReference) {
-        return 0;
-    }
-
-    if (transaction.type === TransactionType.INCOME) {
-        return isCredit ? -transaction.amount : transaction.amount;
-    }
-
-    return transaction.type === TransactionType.EXPENSE
-        ? (isCredit ? transaction.amount : -transaction.amount)
-        : 0;
-}
-
-function getRunningBalanceByTransactionIdForAccount(
-    plugin: ExpensicaPlugin,
-    accountReference: string,
-    transactions: Transaction[]
-): Record<string, number> {
-    let runningBalance = 0;
-
-    return sortTransactionsByDateTimeDesc(transactions, plugin.getAllTransactions())
-        .reverse()
-        .reduce<Record<string, number>>((balances, transaction) => {
-            runningBalance += getAccountTransactionAmount(plugin, transaction, accountReference);
-            balances[transaction.id] = runningBalance;
-            return balances;
-        }, {});
-}
 
 function formatRunningBalanceLabel(plugin: ExpensicaPlugin, balance: number, accountReference?: string): string {
     const amount = formatCurrency(balance, plugin.settings.defaultCurrency);

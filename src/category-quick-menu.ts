@@ -22,8 +22,10 @@ export function showCategoryQuickMenu(
     selectedCategoryId?: string,
     options?: CategoryQuickMenuOptions
 ) {
+    const ownerWindow = target.ownerDocument.defaultView;
+    if (!target.isConnected || !ownerWindow) return;
     activeQuickMenu?.close();
-    activeQuickMenu = new CategoryQuickMenu(target, plugin, categoryType, onCategoryChange, selectedCategoryId, options);
+    activeQuickMenu = new CategoryQuickMenu(target, plugin, categoryType, onCategoryChange, selectedCategoryId, options, ownerWindow);
     activeQuickMenu.open();
 }
 
@@ -41,20 +43,25 @@ class CategoryQuickMenu {
     private readonly autoFocusSearch: boolean;
     private readonly preferredSide: 'bottom' | 'left';
     private readonly hostEl: HTMLElement;
+    private readonly ownerDocument: Document;
     private readonly boundHandleDocumentPointerDown: (event: MouseEvent) => void;
     private readonly boundHandleDocumentKeydown: (event: KeyboardEvent) => void;
     private filteredCategories: Category[] = [];
     private activeIndex = -1;
     private selectedCategoryIds: Set<string>;
     private horizontalAnchorLeft: number | null = null;
+    private originObserver: MutationObserver | null = null;
+    private focusFrame: number | null = null;
+    private closed = false;
 
     constructor(
         target: HTMLElement,
         plugin: ExpensicaPlugin,
         categoryType: CategoryType,
         onCategoryChange: (categoryId: string) => void | Promise<void>,
-        selectedCategoryId?: string,
-        options?: CategoryQuickMenuOptions
+        selectedCategoryId: string | undefined,
+        options: CategoryQuickMenuOptions | undefined,
+        private readonly ownerWindow: NonNullable<Document['defaultView']>
     ) {
         this.target = target;
         this.plugin = plugin;
@@ -67,12 +74,14 @@ class CategoryQuickMenu {
         this.closeOnSelect = options?.closeOnSelect ?? true;
         this.autoFocusSearch = options?.autoFocusSearch ?? true;
         this.preferredSide = options?.preferredSide ?? 'bottom';
-        this.hostEl = (target.closest('.modal-content') ) || document.body;
+        this.ownerDocument = target.ownerDocument;
+        this.hostEl = target.closest('.modal-content') || this.ownerDocument.body;
         this.boundHandleDocumentPointerDown = this.handleDocumentPointerDown.bind(this);
         this.boundHandleDocumentKeydown = this.handleDocumentKeydown.bind(this);
         this.selectedCategoryIds = new Set(options?.selectedCategoryIds ?? (selectedCategoryId ? [selectedCategoryId] : []));
 
-        this.menuEl = createDiv({ cls: 'expensica-category-quick-menu' });
+        this.menuEl = this.ownerDocument.createElement('div');
+        this.menuEl.className = 'expensica-category-quick-menu';
         this.menuEl.setAttribute('role', 'menu');
 
         const searchSection = this.menuEl.createDiv('expensica-category-quick-menu-section');
@@ -104,13 +113,15 @@ class CategoryQuickMenu {
         ]);
         newCategoryButton.createSpan({ cls: 'expensica-category-quick-menu-new-label', text: 'New Category' });
         newCategoryButton.addEventListener('click', () => {
+            if (!this.isOpen()) return;
             this.close();
             new NewCategoryModal(this.plugin.app, this.plugin, this.categoryType, (categoryId) => {
-                return this.onCategoryChange(categoryId);
+                if (this.ownerDocument.contains(this.target)) return this.onCategoryChange(categoryId);
             }).open();
         });
 
         this.searchInputEl.addEventListener('input', () => {
+            if (!this.isOpen()) return;
             this.renderList(this.searchInputEl.value);
         });
     }
@@ -120,40 +131,66 @@ class CategoryQuickMenu {
         this.renderList();
         this.position();
 
+        this.originObserver = new this.ownerWindow.MutationObserver(() => { this.isOpen(); });
+        this.originObserver.observe(this.ownerDocument.body, { childList: true, subtree: true });
+
         if (this.autoFocusSearch) {
-            window.requestAnimationFrame(() => {
+            const frame = this.ownerWindow.requestAnimationFrame(() => {
+                if (this.focusFrame !== frame) return;
+                this.focusFrame = null;
+                if (!this.isOpen()) return;
                 this.searchInputEl.focus();
                 this.searchInputEl.select();
             });
+            this.focusFrame = frame;
         }
 
-        document.addEventListener('mousedown', this.boundHandleDocumentPointerDown, true);
-        document.addEventListener('keydown', this.boundHandleDocumentKeydown, true);
-        window.addEventListener('resize', this.boundReposition, true);
-        document.addEventListener('scroll', this.boundReposition, true);
+        this.ownerDocument.addEventListener('mousedown', this.boundHandleDocumentPointerDown, true);
+        this.ownerDocument.addEventListener('keydown', this.boundHandleDocumentKeydown, true);
+        this.ownerWindow.addEventListener('resize', this.boundReposition, true);
+        this.ownerWindow.addEventListener('unload', this.boundClose);
+        this.ownerDocument.addEventListener('scroll', this.boundReposition, true);
     }
 
     close() {
+        if (this.closed) return;
+        this.closed = true;
+        this.originObserver?.disconnect();
+        this.originObserver = null;
+        if (this.focusFrame !== null) {
+            this.ownerWindow.cancelAnimationFrame(this.focusFrame);
+            this.focusFrame = null;
+        }
         this.plugin.releaseSaveOperation(this);
-        window.removeEventListener('resize', this.boundReposition, true);
-        document.removeEventListener('scroll', this.boundReposition, true);
-        document.removeEventListener('mousedown', this.boundHandleDocumentPointerDown, true);
-        document.removeEventListener('keydown', this.boundHandleDocumentKeydown, true);
+        this.ownerWindow.removeEventListener('resize', this.boundReposition, true);
+        this.ownerWindow.removeEventListener('unload', this.boundClose);
+        this.ownerDocument.removeEventListener('scroll', this.boundReposition, true);
+        this.ownerDocument.removeEventListener('mousedown', this.boundHandleDocumentPointerDown, true);
+        this.ownerDocument.removeEventListener('keydown', this.boundHandleDocumentKeydown, true);
         this.menuEl.remove();
         if (activeQuickMenu === this) {
             activeQuickMenu = null;
         }
     }
 
-    private readonly boundReposition = () => {
-        if (!this.menuEl.isConnected) {
-            return;
+    private isOpen(): boolean {
+        if (this.closed) return false;
+        if (!this.ownerDocument.contains(this.target) || !this.ownerDocument.contains(this.menuEl)) {
+            this.close();
+            return false;
         }
+        return true;
+    }
 
+    private readonly boundClose = () => this.close();
+
+    private readonly boundReposition = () => {
+        if (!this.isOpen()) return;
         this.position();
     };
 
     private handleDocumentPointerDown(event: MouseEvent) {
+        if (!this.isOpen()) return;
         if (this.plugin.hasSaveFailure(this) && (event.target as HTMLElement)?.closest('.modal-container')) return;
         const target = event.target as Node | null;
         if (!target) {
@@ -168,13 +205,11 @@ class CategoryQuickMenu {
     }
 
     private handleDocumentKeydown(event: KeyboardEvent) {
+        if (!this.isOpen()) return;
         if (this.plugin.hasSaveFailure(this) && (event.target as HTMLElement)?.closest('.modal-container')) return;
-        if (!this.menuEl.isConnected) {
-            return;
-        }
 
         const eventTarget = event.target as Node | null;
-        const activeElement = document.activeElement;
+        const activeElement = this.ownerDocument.activeElement;
         const isWithinMenu = !!eventTarget && this.menuEl.contains(eventTarget);
         const isSearchFocused = activeElement === this.searchInputEl;
 
@@ -219,7 +254,7 @@ class CategoryQuickMenu {
         const rect = this.target.getBoundingClientRect();
         const viewportPadding = 12;
         const preferredWidth = 280;
-        const availableWidth = Math.max(220, window.innerWidth - (viewportPadding * 2));
+        const availableWidth = Math.max(220, this.ownerWindow.innerWidth - (viewportPadding * 2));
         const menuWidth = Math.min(preferredWidth, availableWidth);
         const spacing = 8;
         const searchSectionHeight = 49;
@@ -227,7 +262,7 @@ class CategoryQuickMenu {
         const separatorHeight = 2;
         const menuChromeHeight = searchSectionHeight + footerSectionHeight + separatorHeight;
         const maxVisibleListHeight = 360;
-        const availableBelow = window.innerHeight - rect.bottom - viewportPadding - spacing;
+        const availableBelow = this.ownerWindow.innerHeight - rect.bottom - viewportPadding - spacing;
         const availableAbove = rect.top - viewportPadding - spacing;
         const listMaxHeight = Math.max(80, Math.min(maxVisibleListHeight, Math.max(availableBelow, availableAbove) - menuChromeHeight));
         const expectedMenuHeight = menuChromeHeight + listMaxHeight;
@@ -242,30 +277,30 @@ class CategoryQuickMenu {
                     ? preferredLeft
                     : Math.min(
                         Math.max(viewportPadding, fallbackLeft),
-                        Math.max(viewportPadding, window.innerWidth - menuWidth - viewportPadding)
+                        Math.max(viewportPadding, this.ownerWindow.innerWidth - menuWidth - viewportPadding)
                     );
             }
             left = Math.min(
                 Math.max(viewportPadding, this.horizontalAnchorLeft),
-                Math.max(viewportPadding, window.innerWidth - menuWidth - viewportPadding)
+                Math.max(viewportPadding, this.ownerWindow.innerWidth - menuWidth - viewportPadding)
             );
             top = Math.min(
                 Math.max(viewportPadding, rect.top),
-                Math.max(viewportPadding, window.innerHeight - expectedMenuHeight - viewportPadding)
+                Math.max(viewportPadding, this.ownerWindow.innerHeight - expectedMenuHeight - viewportPadding)
             );
         } else {
             left = Math.min(
                 Math.max(viewportPadding, rect.left),
-                Math.max(viewportPadding, window.innerWidth - menuWidth - viewportPadding)
+                Math.max(viewportPadding, this.ownerWindow.innerWidth - menuWidth - viewportPadding)
             );
             const shouldOpenAbove = availableBelow < expectedMenuHeight && availableAbove > availableBelow;
             top = shouldOpenAbove
                 ? Math.max(viewportPadding, rect.top - Math.min(expectedMenuHeight, rect.top - viewportPadding) - spacing)
-                : Math.min(window.innerHeight - viewportPadding - Math.min(expectedMenuHeight, availableBelow + menuChromeHeight), rect.bottom + spacing);
+                : Math.min(this.ownerWindow.innerHeight - viewportPadding - Math.min(expectedMenuHeight, availableBelow + menuChromeHeight), rect.bottom + spacing);
         }
 
         this.menuEl.style.width = `${menuWidth}px`;
-        this.menuEl.style.maxHeight = `${Math.max(140, window.innerHeight - (viewportPadding * 2))}px`;
+        this.menuEl.style.maxHeight = `${Math.max(140, this.ownerWindow.innerHeight - (viewportPadding * 2))}px`;
         this.menuEl.style.left = `${left}px`;
         this.menuEl.style.top = `${top}px`;
         this.listEl.style.maxHeight = `${listMaxHeight}px`;
@@ -326,6 +361,7 @@ class CategoryQuickMenu {
             });
 
             optionButton.addEventListener('click', () => {
+                if (!this.listEl.contains(optionButton)) return;
                 void this.selectCategory(category.id);
             });
         });
@@ -360,11 +396,13 @@ class CategoryQuickMenu {
     private selecting = false;
 
     private async selectCategory(categoryId: string) {
+        if (!this.isOpen()) return;
         if (this.closeOnSelect) {
             if (this.selecting) return;
             this.selecting = true;
             await this.plugin.runSaveOperation(this, 'Change transaction category', async () => {
                 try {
+                    if (!this.isOpen()) return false;
                     await this.onCategoryChange(categoryId);
                     this.close();
                 } finally {
@@ -386,7 +424,7 @@ class CategoryQuickMenu {
             console.error('Expensica: Category change did not complete', error);
             showExpensicaNotice('Category could not be changed. Please try again.');
         } finally {
-            if (this.menuEl.isConnected) {
+            if (this.isOpen()) {
                 this.renderList(this.searchInputEl.value);
                 this.searchInputEl.focus();
             }
@@ -398,6 +436,7 @@ class NewCategoryModal extends Modal {
     private readonly plugin: ExpensicaPlugin;
     private readonly categoryType: CategoryType;
     private readonly onSave: (categoryId: string) => void | Promise<void>;
+    private focusFrame: number | null = null;
 
     constructor(app: App, plugin: ExpensicaPlugin, categoryType: CategoryType, onSave: (categoryId: string) => void | Promise<void>) {
         super(app);
@@ -497,9 +536,15 @@ class NewCategoryModal extends Modal {
             void this.submitForm(nameInput, () => selectedEmoji, () => selectedColor);
         });
 
-        window.requestAnimationFrame(() => {
-            nameInput.focus();
-        });
+        const ownerWindow = contentEl.ownerDocument.defaultView;
+        if (ownerWindow) {
+            const frame = ownerWindow.requestAnimationFrame(() => {
+                if (this.focusFrame !== frame) return;
+                this.focusFrame = null;
+                if (nameInput.isConnected) nameInput.focus();
+            });
+            this.focusFrame = frame;
+        }
     }
 
     private async submitForm(nameInput: HTMLInputElement, getEmoji: () => string, getColor: () => string): Promise<void> {
@@ -541,6 +586,10 @@ class NewCategoryModal extends Modal {
     }
 
     onClose() {
+        if (this.focusFrame !== null) {
+            this.contentEl.ownerDocument.defaultView?.cancelAnimationFrame(this.focusFrame);
+            this.focusFrame = null;
+        }
         this.contentEl.empty();
     }
 }

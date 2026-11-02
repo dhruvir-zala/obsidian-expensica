@@ -10,19 +10,17 @@ function load(filename, dependencies = {}, extraSource = '') {
     const compiled = ts.transpileModule(fs.readFileSync(path.join(__dirname, '..', filename), 'utf8') + extraSource, {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
     }).outputText;
-    vm.runInNewContext(compiled, { exports, Date, Intl, console, require: name => dependencies[name] || {} });
+    vm.runInNewContext(compiled, { exports, Date, Intl, console, require: name => dependencies[name] || (name.endsWith('/account-calculations') ? load('src/account-calculations.ts', { './models': dependencies['./models'] || dependencies['../models'] }) : undefined) || {} });
     return exports;
 }
 const models = load('src/models.ts');
-const { getCreditLimitExceededAccount: exceeded } = load('src/dashboard-view.ts', {
-    './models': models, obsidian: { Modal: class {}, ItemView: class {} },
-    'chart.js': { Tooltip: { positioners: {} } }
-}, '\nexport { getCreditLimitExceededAccount };');
+const accountCalculations = load('src/account-calculations.ts', { './models': models });
 const cash = 'chequing-cash', visa = 'credit-visa', master = 'credit-master';
 const accounts = [{ id: 'cash', type: 'chequing', name: 'Cash', isDefault: true },
     { id: 'visa', type: 'credit', name: 'Visa', creditLimit: 100 },
     { id: 'master', type: 'credit', name: 'Master', creditLimit: 100 }];
-const plugin = (defaultReference = cash, definitions = accounts) => ({
+const plugin = (defaultReference = cash, definitions = accounts, ledger = []) => ({
+    getAllTransactions: () => ledger,
     normalizeTransactionAccountReference: reference => reference ? models.parseAccountReference(reference).reference : defaultReference,
     findAccountByReference: reference => definitions.find(account => models.formatAccountReference(account.type, account.name) === reference) || null
 });
@@ -33,58 +31,64 @@ const transfer = (id, amount, fromAccount = cash, toAccount = visa) => row(id, a
     { type: 'internal', category: 'internal', account: undefined, fromAccount, toAccount });
 
 const cases = [
-    ['payment reassignment checks the original credit account', [row('debt', 150), payment('edit', 50)], payment('edit', 50, cash), 'visa'],
-    ['removing an explicit payment account checks the original credit account', [row('debt', 150), payment('edit', 50)], { ...payment('edit', 50), account: undefined }, 'visa'],
-    ['transfer destination changes check the removed destination', [row('debt', 150), transfer('edit', 50)], transfer('edit', 50, cash, master), 'visa'],
-    ['transfer source changes check new credit debt', [row('debt', 150), row('master-debt', 80, master), transfer('edit', 50)], transfer('edit', 50, master, visa), 'master'],
-    ['transfer source removal checks its old credit effect', [row('debt', 150), transfer('edit', 50, visa, cash)], transfer('edit', 50, master, cash), null],
-    ['changing a payment to an expense accounts for both effects', [row('debt', 150), payment('edit', 50)], row('edit', 50), 'visa'],
-    ['changing a transfer to an ordinary transaction removes the old payment', [row('debt', 150), transfer('edit', 50)], row('edit', 50, cash), 'visa'],
-    ['changing an ordinary payment to a transfer removes its original account effect', [row('debt', 150), payment('edit', 50)], transfer('edit', 50, cash, master), 'visa'],
-    ['reducing an expense is allowed while debt remains over the limit', [row('debt', 150), row('edit', 50)], row('edit', 25), null],
-    ['increasing a payment is allowed while debt remains over the limit', [row('debt', 250), payment('edit', 50)], payment('edit', 75), null],
-    ['reducing a payment worsens existing over-limit debt', [row('debt', 250), payment('edit', 50)], payment('edit', 25), 'visa'],
-    ['unchanged expenses do not worsen existing over-limit debt', [row('debt', 150), row('edit', 50)], row('edit', 50), null],
-    ['metadata-only edits do not worsen existing over-limit debt', [row('debt', 150), row('edit', 50)], row('edit', 50, visa, { description: 'EDITED', date: '2020-01-01' }), null],
-    ['changing an expense to income may bring debt back to the limit', [row('debt', 150), row('edit', 50)], payment('edit', 50), null],
-    ['moving an expense may reduce one over-limit account but exceed another', [row('debt', 150), row('edit', 50), row('master-debt', 90, master)], row('edit', 25, master), 'master'],
-    ['new expenses at the exact limit remain valid', [row('debt', 90)], row('new', 10), null],
-    ['new expenses above the limit remain rejected', [row('debt', 90)], row('new', 10.01), 'visa'],
-    ['new payments may reduce existing over-limit debt', [row('debt', 200)], payment('new', 5), null],
-    ['new transfers may reduce existing over-limit debt', [row('debt', 200)], transfer('new', 5), null],
-    ['new expenses worsening over-limit debt remain rejected', [row('debt', 200)], row('new', 5), 'visa'],
-    ['removing a transfer endpoint still checks the removed account', [row('debt', 150), transfer('edit', 50)], { ...transfer('edit', 50), toAccount: undefined }, 'visa']
+    ['payment reassignment restores the original credit debt', [row('debt', 150), payment('edit', 50)], payment('edit', 50, cash), [150, 0]],
+    ['an implicit default payment account removes the original credit effect', [row('debt', 150), payment('edit', 50)], { ...payment('edit', 50), account: undefined }, [150, 0]],
+    ['transfer destination changes restore the removed destination debt', [row('debt', 150), transfer('edit', 50)], transfer('edit', 50, cash, master), [150, -50]],
+    ['credit-to-credit transfers retain both signs', [row('debt', 150), row('master-debt', 80, master), transfer('edit', 50)], transfer('edit', 50, master, visa), [100, 130]],
+    ['transfer source changes remove its previous effect', [row('debt', 150), transfer('edit', 50, visa, cash)], transfer('edit', 50, master, cash), [150, 50]],
+    ['changing a payment to an expense retains actual debt', [row('debt', 150), payment('edit', 50)], row('edit', 50), [200, 0]],
+    ['changing a transfer to an ordinary transaction removes its old payment', [row('debt', 150), transfer('edit', 50)], row('edit', 50, cash), [150, 0]],
+    ['changing an ordinary payment to a transfer removes its original account effect', [row('debt', 150), payment('edit', 50)], transfer('edit', 50, cash, master), [150, -50]],
+    ['reducing an expense retains remaining over-limit debt', [row('debt', 150), row('edit', 50)], row('edit', 25), [175, 0]],
+    ['increasing a payment reduces over-limit debt', [row('debt', 250), payment('edit', 50)], payment('edit', 75), [175, 0]],
+    ['reducing a payment records increased debt', [row('debt', 250), payment('edit', 50)], payment('edit', 25), [225, 0]],
+    ['unchanged expenses retain debt', [row('debt', 150), row('edit', 50)], row('edit', 50), [200, 0]],
+    ['metadata-only edits retain debt', [row('debt', 150), row('edit', 50)], row('edit', 50, visa, { description: 'EDITED', date: '2020-01-01' }), [200, 0]],
+    ['changing an expense to income can return debt to the limit', [row('debt', 150), row('edit', 50)], payment('edit', 50), [100, 0]],
+    ['moving an expense updates both credit accounts', [row('debt', 150), row('edit', 50), row('master-debt', 90, master)], row('edit', 25, master), [150, 115]],
+    ['new expenses at the limit retain actual debt', [row('debt', 90)], row('new', 10), [100, 0]],
+    ['new expenses above the limit retain actual debt', [row('debt', 90)], row('new', 10.01), [100.01, 0]],
+    ['new payments reduce existing over-limit debt', [row('debt', 200)], payment('new', 5), [195, 0]],
+    ['new transfers reduce existing over-limit debt', [row('debt', 200)], transfer('new', 5), [195, 0]],
+    ['new expenses record debt above the limit', [row('debt', 200)], row('new', 5), [205, 0]],
+    ['partial historical transfers never assign a missing endpoint to the default account', [row('debt', 150), transfer('edit', 50)], { ...transfer('edit', 50), toAccount: undefined }, [150, 0]]
 ];
 
-for (const [name, ledger, updated, rejected] of cases) {
+for (const [name, ledger, updated, expected] of cases) {
     test(name, () => {
         const before = JSON.stringify({ ledger, updated });
         ledger.forEach(Object.freeze);
         Object.freeze(ledger);
         Object.freeze(updated);
+        const projected = ledger.some(row => row.id === updated.id)
+            ? ledger.map(row => row.id === updated.id ? updated : row) : [...ledger, updated];
         for (let attempt = 0; attempt < 3; attempt++) {
-            assert.equal(exceeded(plugin(), updated, ledger)?.id || null, rejected);
+            for (const [index, reference] of [visa, master].entries()) {
+                assert.equal(accountCalculations.getAccountRunningBalance(plugin(cash, accounts, projected), reference, projected), expected[index]);
+            }
         }
         assert.equal(JSON.stringify({ ledger, updated }), before);
     });
 }
 
-test('implicit default credit accounts, normalized references and zero or absent limits use existing account rules', () => {
-    assert.equal(exceeded(plugin(visa), row('new', 1, undefined, { account: undefined }), [row('debt', 100)])?.id, 'visa');
-    assert.equal(exceeded(plugin(), row('new', 1, 'CREDIT-VISA'), [row('debt', 100)])?.id, 'visa');
-    assert.equal(exceeded(plugin(cash, accounts.map(account => ({ ...account, creditLimit: 0 }))), row('new', 1), [])?.id, 'visa');
-    assert.equal(exceeded(plugin(cash, accounts.map(account => ({ ...account, creditLimit: undefined }))), row('new', 999), []), null);
+test('implicit defaults, aliases and zero or absent limits do not alter shared financial calculations', () => {
+    assert.equal(accountCalculations.getAccountTransactionAmount(plugin(visa), row('new', 1, undefined, { account: undefined }), visa), 1);
+    assert.equal(accountCalculations.getAccountTransactionAmount(plugin(), row('new', 1, 'CREDIT-VISA'), visa), 1);
+    for (const creditLimit of [0, 100, undefined]) {
+        const definitions = accounts.map(account => ({ ...account, creditLimit }));
+        assert.equal(accountCalculations.getAccountTransactionAmount(plugin(cash, definitions), row('new', 999), visa), 999);
+    }
 });
 
-test('validation uses all ledger dates and the latest committed original rather than an editor snapshot', () => {
+test('shared account balances include all ledger dates and current payment amounts', () => {
     const ledger = [row('old-debt', 80, visa, { date: '2020-01-01' }), row('future-debt', 70, visa, { date: '2030-01-01' }), payment('edit', 50)];
-    assert.equal(exceeded(plugin(), payment('edit', 50, cash), ledger)?.id, 'visa');
+    assert.equal(accountCalculations.getAccountRunningBalance(plugin(), visa, ledger), 100);
     const latest = [row('debt', 250), payment('edit', 150)];
-    assert.equal(exceeded(plugin(), payment('edit', 100), latest)?.id, 'visa');
+    assert.equal(accountCalculations.getAccountRunningBalance(plugin(), visa, latest), 100);
 });
 
-test('unrelated over-limit credit accounts and stale fields do not block valid debit edits', () => {
+test('unrelated credit accounts and stale transfer fields do not affect ordinary debit transactions', () => {
     const ledger = [row('debt', 200), row('edit', 10, cash, { fromAccount: visa, toAccount: master })];
-    assert.equal(exceeded(plugin(), row('edit', 20, cash, { fromAccount: visa, toAccount: master }), ledger), null);
-    assert.equal(exceeded(plugin(cash, accounts.slice(0, 1)), payment('edit', 10, cash), [payment('edit', 10)]), null);
+    assert.equal(accountCalculations.getAccountRunningBalance(plugin(), cash, ledger), -10);
+    assert.equal(accountCalculations.getAccountTransactionAmount(plugin(cash, accounts.slice(0, 1)), payment('edit', 10, cash), cash), 10);
 });

@@ -10,12 +10,13 @@ function load(filename, dependencies = {}, extraSource = '') {
     const compiled = ts.transpileModule(fs.readFileSync(path.join(__dirname, '..', filename), 'utf8') + extraSource, {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
     }).outputText;
-    vm.runInNewContext(compiled, { exports, Date, Intl, console, require: name => dependencies[name] || {} });
+    vm.runInNewContext(compiled, { exports, Date, Intl, console, require: name => dependencies[name] || (name.endsWith('/account-calculations') ? load('src/account-calculations.ts', { './models': dependencies['./models'] || dependencies['../models'] }) : undefined) || {} });
     return exports;
 }
 const models = load('src/models.ts');
+const accountCalculations = load('src/account-calculations.ts', { './models': models });
 const importer = load('src/transaction-import.ts', { './models': models });
-const exposed = '\nexport { getAccountTransactionAmount, getRunningBalanceByTransactionIdForAccount };';
+const exposed = '\nexport { getRunningBalanceByTransactionIdForAccount };';
 const dashboard = load('src/dashboard-view.ts', { './models': models, obsidian: { Modal: class {}, ItemView: class {} },
     'chart.js': { Tooltip: { positioners: {} } } }, exposed);
 const transactions = load('src/transactions-view.ts', { './models': models, './dashboard-view': dashboard,
@@ -42,7 +43,7 @@ for (const reference of references) {
             const source = Object.freeze([entry]);
             const before = JSON.stringify(source);
             for (const view of [dashboard, transactions, calendar]) for (const target of references) {
-                assert.equal(view.getAccountTransactionAmount(plugin(source), entry, target), 0);
+                assert.equal(accountCalculations.getAccountTransactionAmount(plugin(source), entry, target), 0);
                 assert.equal(view.getRunningBalanceByTransactionIdForAccount(plugin(source), target, source)[entry.id], 0);
             }
             assert.equal(JSON.stringify(source), before);
@@ -57,7 +58,7 @@ test('normal transfers preserve debit, savings and credit account signs across v
     ]) {
         const entry = transfer({ fromAccount, toAccount });
         for (const view of [dashboard, transactions, calendar]) {
-            assert.deepEqual(references.map(target => view.getAccountTransactionAmount(plugin([entry]), entry, target)), effects);
+            assert.deepEqual(references.map(target => accountCalculations.getAccountTransactionAmount(plugin([entry]), entry, target)), effects);
         }
     }
 });
@@ -84,10 +85,10 @@ test('running balances retain historical self-transfer rows without changing inc
 test('missing endpoints never resolve to the default account in transfer balances', () => {
     for (const view of [dashboard, transactions, calendar]) {
         const missing = transfer({ fromAccount: undefined, toAccount: undefined });
-        assert.equal(view.getAccountTransactionAmount(plugin([missing]), missing, cash), 0);
+        assert.equal(accountCalculations.getAccountTransactionAmount(plugin([missing]), missing, cash), 0);
         const partial = transfer({ fromAccount: undefined });
-        assert.equal(view.getAccountTransactionAmount(plugin([partial]), partial, cash), 0);
-        assert.equal(view.getAccountTransactionAmount(plugin([partial]), partial, card), -25);
+        assert.equal(accountCalculations.getAccountTransactionAmount(plugin([partial]), partial, cash), 0);
+        assert.equal(accountCalculations.getAccountTransactionAmount(plugin([partial]), partial, card), -25);
     }
 });
 
