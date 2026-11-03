@@ -262,7 +262,7 @@ export function formatTransactionCorrections(corrections: TransactionCorrections
         ['Account references linked', corrections.accountReferencesLinked],
         ['Account references formatted', corrections.accountReferencesFormatted],
         ['Categories assigned', corrections.categoriesAssigned],
-        ['Field order corrected', corrections.fieldOrderCorrected]
+        ['transaction fields reordered', corrections.fieldOrderCorrected]
     ].filter(([, count]) => Number(count) > 0).map(([label, count]) => `${label}: ${count}`);
 }
 
@@ -301,7 +301,7 @@ export function prepareTransactions(value: unknown, existing: Transaction[], now
         amountsConvertedFromStrings: amountsConverted
     };
     const transactions = normalized.map((transaction, index) => {
-        const row: Transaction & { legacyId?: unknown } = { ...transaction, description: transaction.description.toUpperCase(),
+        const row: Transaction = { ...transaction, description: transaction.description.toUpperCase(),
             category: transaction.category?.trim() ? transaction.category : transaction.type === TransactionType.INCOME ? 'other_income'
                 : transaction.type === TransactionType.INTERNAL ? 'internal' : 'other_expense' };
         if (categories && transaction.type !== TransactionType.INTERNAL
@@ -309,7 +309,6 @@ export function prepareTransactions(value: unknown, existing: Transaction[], now
             row.category = getDefaultTransactionCategory(transaction.type, categories);
         }
         if (!row.notes?.trim()) delete row.notes;
-        delete row.legacyId;
         if (row.category !== value[index].category) corrections.categoriesAssigned++;
         for (const field of ['account', 'fromAccount', 'toAccount'] as const) {
             if (row[field] !== value[index][field]) {
@@ -346,17 +345,8 @@ export function prepareTransactions(value: unknown, existing: Transaction[], now
             else if (legacyDate) corrections.legacyIdsRegenerated++;
             else corrections.alienIdsRegenerated++;
         }
-        const fields = Object.keys(row);
-        if (!missingTime && fields.indexOf('time') === fields.indexOf('date') + 1) return row;
-        if (!missingTime) corrections.fieldOrderCorrected++;
-        // Preserve all field values and their relative order, placing time after date.
-        const ordered: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
-        for (const [field, value] of Object.entries(row)) {
-            if (field === 'time') continue;
-            ordered[field] = value;
-            if (field === 'date') ordered.time = row.time;
-        }
-        return ordered as unknown as Transaction;
+        // Property order is checked separately and applied on serialization.
+        return row;
     });
     validateTransactions(transactions, existing, accounts, false, allowSelfTransfers);
     return {

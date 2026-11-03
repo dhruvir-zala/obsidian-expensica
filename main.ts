@@ -31,6 +31,7 @@ import {
     formatCurrency,
     getBudgetRolloverStartDate,
     sortTransactionsByDateTimeDesc,
+    orderTransactionFields,
     compareAccounts,
     formatAccountReference,
     getAccountColor,
@@ -503,11 +504,14 @@ export default class ExpensicaPlugin extends Plugin {
             }
             const prepared = prepareTransactions(nextData.transactions, [], new Date(), nextData.accounts, true, this.settings.categories, true);
             prepared.corrections.legacyArrayFormatConverted = Number(legacyArray);
+            const fieldsNeedSorting = prepared.transactions.some(transaction =>
+                JSON.stringify(transaction) !== JSON.stringify(orderTransactionFields(transaction)));
             this.resolveSaveFailures(this.transactionsFilePath, false);
             this.clearDatasetProtection('transactions');
-            if (prepared.changed || legacyArray) {
-                await this.writeTransactionsData({ ...nextData, transactions: prepared.transactions }, false);
-                if (Object.values(prepared.corrections).some(count => count > 0)) {
+            if (prepared.changed || legacyArray || fieldsNeedSorting) {
+                const reportCorrections = fieldsNeedSorting || Object.values(prepared.corrections).some(count => count > 0);
+                prepared.corrections.fieldOrderCorrected = await this.writeTransactionsData({ ...nextData, transactions: prepared.transactions }, false);
+                if (reportCorrections) {
                     this.showTransactionSummary('Existing transaction details were preserved. Changes saved.', prepared.corrections);
                 }
             } else {
@@ -532,22 +536,30 @@ export default class ExpensicaPlugin extends Plugin {
         try {
             const snapshot = { ...data, accounts: this.transactionsData.accounts,
                 transactions: data.transactions.map(transaction => {
-                    if (!('legacyId' in transaction) && (!('notes' in transaction) || transaction.notes?.trim())) return transaction;
-                    const normalized: Transaction & { legacyId?: unknown } = { ...transaction };
-                    if (!normalized.notes?.trim()) delete normalized.notes;
-                    delete normalized.legacyId;
+                    if (!('notes' in transaction) || transaction.notes?.trim()) return transaction;
+                    const normalized = { ...transaction };
+                    delete normalized.notes;
                     return normalized;
                 }) };
             const nextData = !normalize || this.protectedDatasets.has('accounts') ? snapshot : this.normalizeTransactionsSnapshot(snapshot);
             nextData.lastUpdated = new Date().toISOString();
-            const persistedData = { ...nextData } as Partial<TransactionsData>;
+            let fieldsSorted = 0;
+            const transactions = nextData.transactions.map(transaction => {
+                const ordered = orderTransactionFields(transaction);
+                const fields = Object.entries(transaction).filter(([, value]) => value !== undefined).map(([field]) => field);
+                const orderedFields = Object.keys(ordered);
+                if (fields.some((field, index) => field !== orderedFields[index])) fieldsSorted++;
+                return ordered;
+            });
+            const persistedData = { ...nextData, transactions } as Partial<TransactionsData>;
             delete persistedData.accounts; // Account definitions live in their own file.
             await this.app.vault.adapter.write(
                 this.transactionsFilePath,
                 JSON.stringify(persistedData, null, 2)
             );
-            this.transactionsData = nextData;
+            this.transactionsData = { ...nextData, transactions };
             this.resolveSaveFailures(this.transactionsFilePath);
+            return fieldsSorted;
         } catch (error) {
             throw this.markSaveError(error, this.transactionsFilePath);
         }
@@ -1988,7 +2000,7 @@ export default class ExpensicaPlugin extends Plugin {
     async exportTransactionsToJSON(filePath: string) {
         return this.enqueuePersistence(async () => {
             try {
-                const jsonData = JSON.stringify(this.transactionsData.transactions, null, 2);
+                const jsonData = JSON.stringify(this.transactionsData.transactions.map(orderTransactionFields), null, 2);
                 await this.app.vault.adapter.write(filePath, jsonData);
                 showExpensicaNotice('Transactions exported successfully');
                 return true;
@@ -2018,7 +2030,7 @@ export default class ExpensicaPlugin extends Plugin {
             const transactions = imported.transactions;
             if (typeof source === 'string') this.resolveSaveFailures(source, false);
             if (transactions.length || parsed.legacyArray) {
-                await this.writeTransactionsData({
+                imported.corrections.fieldOrderCorrected = await this.writeTransactionsData({
                     ...this.transactionsData,
                     transactions: [...this.transactionsData.transactions, ...transactions]
                 }, false);
@@ -2126,7 +2138,7 @@ export default class ExpensicaPlugin extends Plugin {
                     await this.writeAccountsData({ ...this.transactionsData, accounts });
                 }
                 // New accounts deliberately remain saved if this write fails. Old references remain intact.
-                await this.writeTransactionsData({ ...this.transactionsData, ...context.data,
+                prepared.corrections.fieldOrderCorrected = await this.writeTransactionsData({ ...this.transactionsData, ...context.data,
                     accounts: this.transactionsData.accounts,
                     transactions: context.data ? prepared.transactions : [...this.transactionsData.transactions, ...prepared.transactions]
                 }, false, source === undefined);

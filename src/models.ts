@@ -153,6 +153,17 @@ export interface Transaction {
   notes?: string;
 }
 
+export function orderTransactionFields(transaction: Transaction): Transaction {
+  const ordered: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+  const values = transaction as unknown as Record<string, unknown>;
+  for (const field of ['id', 'description', 'amount', 'type', 'date', 'time', 'category', 'account', 'notes', ...Object.keys(transaction)]) {
+    if (Object.prototype.hasOwnProperty.call(transaction, field) && values[field] !== undefined) {
+      ordered[field] = values[field];
+    }
+  }
+  return ordered as unknown as Transaction;
+}
+
 export const INTERNAL_CATEGORY_ID = 'internal';
 
 export const DEFAULT_ACCOUNT_ID = 'default-account';

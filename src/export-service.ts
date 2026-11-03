@@ -1,4 +1,4 @@
-import { Transaction, TransactionType, Category, formatCurrency, formatDate, parseLocalDate, sortTransactionsByDateTimeDesc } from './models';
+import { Transaction, TransactionType, Category, formatCurrency, formatDate, parseLocalDate, sortTransactionsByDateTimeDesc, orderTransactionFields } from './models';
 import { autoTable } from 'jspdf-autotable';
 import type { jsPDF as PDFDocument } from 'jspdf';
 
@@ -118,7 +118,7 @@ export class ExportService {
    * Generate JSON data from transactions
    */
   public static generateJSON(transactions: Transaction[]): string {
-    return JSON.stringify(transactions, null, 2);
+    return JSON.stringify(transactions.map(orderTransactionFields), null, 2);
   }
   
   /**

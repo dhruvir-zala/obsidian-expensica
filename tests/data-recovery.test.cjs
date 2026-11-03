@@ -77,7 +77,7 @@ function setup() {
         failReads(value) { readError = value; }, failExists(value) { existsError = value; } };
 }
 
-const transaction = { id: '20261015-120000-1234abcd', date: '2026-10-15', time: '12:00:00', type: 'expense', amount: 10, description: 'ENTRY', category: 'food', account: 'other-default' };
+const transaction = { id: '20261015-120000-1234abcd', description: 'ENTRY', amount: 10, type: 'expense', date: '2026-10-15', time: '12:00:00', category: 'food', account: 'other-default' };
 const datasets = [
     { name: 'transactions', file: 'transactionsFilePath', load: 'loadTransactionsData', save: 'saveTransactionsData', valid: { transactions: [transaction] } },
     { name: 'accounts', file: 'accountsFilePath', load: 'loadAccountsData', save: 'saveAccountsData', valid: { accounts: [{ name: 'Legacy cash' }] } },
