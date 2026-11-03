@@ -105,6 +105,8 @@ class Chart {
 }
 const animationFrames = [];
 const chartTimers = [];
+const transactionCards = [];
+const calendars = [];
 const { ExpensicaDashboardView, TransactionModal, DateRangePickerModal, DateRangeType, BudgetModal, AccountEditorModal, AccountModal } = load('src/dashboard-view.ts', {
     obsidian: { Component, Modal, ItemView: Component, setIcon() {} }, './models': models,
     'chart.js/auto': { default: Chart }, 'chart.js': { Tooltip: { positioners: {} } },
@@ -113,7 +115,12 @@ const { ExpensicaDashboardView, TransactionModal, DateRangePickerModal, DateRang
     './confirmation-modal': { ConfirmationModal },
     './notice': { showExpensicaNotice: message => notices.push(message) },
     './category-chip': { renderCategoryChip: (container, options) => container.createEl('button', { text: options.text }) },
-    './account-card': accountCards
+    './account-card': accountCards,
+    './transaction-card': { renderTransactionCard: (container, options) => transactionCards.push(options) },
+    './dashboard-integration': { PremiumVisualizations: class {
+        constructor(...args) { this.onEdit = args[6]; calendars.push(this); }
+        render() {}
+    } }
 }, {
     crypto: require('node:crypto').webcrypto,
     console: { log() {}, warn() {}, error: (...args) => presentationErrors.push(args) },
@@ -126,9 +133,25 @@ const { ExpensicaDashboardView, TransactionModal, DateRangePickerModal, DateRang
     },
     window: {
         requestAnimationFrame: fn => { animationFrames.push(fn); return animationFrames.length; },
+        cancelAnimationFrame() {},
         setTimeout: callback => { chartTimers.push(callback); return chartTimers.length; }
     }
 }, '\nexport { BudgetModal, AccountModal };');
+
+const { ExpensicaTransactionsView } = load('src/transactions-view.ts', {
+    obsidian: { Modal }, './models': models,
+    './dashboard-view': { ExpensicaDashboardView, TransactionModal, DateRangeType, EXPENSICA_VIEW_TYPE: 'expensica-dashboard-view' },
+    './transaction-card': { renderTransactionCard: (container, options) => transactionCards.push(options) }
+}, { window: { clearTimeout() {}, cancelAnimationFrame() {},
+    requestAnimationFrame: fn => { animationFrames.push(fn); return animationFrames.length; } } });
+class EmbeddedTransactionsView extends ExpensicaTransactionsView {
+    renderTransactionStatsHeader() {}
+    renderTransactionsBody() { this.restoreScrollPosition(); }
+}
+
+function flushEditorFrames() {
+    for (const frame of animationFrames.splice(0)) frame();
+}
 
 function plugin(accounts = [{ ...models.DEFAULT_ACCOUNT }], enableAccounts = true) {
     const reference = account => models.formatAccountReference(account.type, account.name);
@@ -783,6 +806,7 @@ const { default: PersistencePlugin, ImportModal } = load('main.ts', {
     obsidian: { Plugin: class {}, PluginSettingTab: class {}, Modal },
     './src/models': models, './src/data-recovery-modal': recoveryUI,
     './src/dashboard-view': { ExpensicaDashboardView, AccountEditorModal, EXPENSICA_VIEW_TYPE: 'expensica-dashboard-view' },
+    './src/transactions-view': { ExpensicaTransactionsView: EmbeddedTransactionsView },
     './src/account-card': accountCards,
     './src/transaction-import': transactionPreparation,
     './src/notice': { showExpensicaNotice: message => notices.push(message) }
@@ -3330,4 +3354,219 @@ test('dashboard Import follows Export and invokes the shared picker entry point'
     await new Promise(setImmediate);
     assert.equal(shownModals.length, count + 1);
     assert.equal(h.options.length, 1);
+});
+
+
+async function editorOwnershipHarness(entry = 'transactions') {
+    const h = recoveryHarness();
+    h.storage.fail = false;
+    const original = { id: '20261015-120000-00000001', date: '2026-10-15', time: '12:00:00',
+        type: 'expense', category: 'food', amount: 10, description: 'ORIGINAL', account: 'other-default',
+        notes: 'Keep notes', custom: { preserved: true } };
+    h.p.transactionsData.transactions = [original, ...[2, 3].map(i => ({ ...original,
+        id: `20261015-120000-0000000${i}`, description: `ORIGINAL ${i}` }))];
+    h.files.set(h.p.transactionsFilePath, JSON.stringify({ transactions: h.p.getAllTransactions(), lastUpdated: 'initial' }));
+    await h.p.loadAccountsData();
+    await h.p.loadTransactionsData();
+    await h.p.loadBudgetData();
+    h.storage.writes = 0;
+    h.p.renderDataRecoveryWarning = () => {};
+    h.p.refreshExpensicaViews = PersistencePlugin.prototype.refreshExpensicaViews;
+    h.p.app.workspace.requestSaveLayout = () => {};
+    function makeView(tab, month) {
+        const { view, effects } = mutationView(h.p);
+        Object.assign(view, { app: h.p.app, currentTab: tab,
+            containerEl: { children: [null, new Element()] },
+            currentDate: new Date(2026, month, 15), selectedCalendarDate: new Date(2026, month, 15),
+            dateRange: { type: DateRangeType.CUSTOM, startDate: new Date(2026, month, 1), endDate: new Date(2026, month + 1, 0) },
+            isDashboardVisible: () => true,
+            async loadTransactionsData() {
+                effects.loads++;
+                await ExpensicaDashboardView.prototype.loadTransactionsData.call(this);
+            },
+            renderDashboard() {
+                effects.renders++;
+                if (this.currentTab === 'transactions') h.p.renderDashboardTransactionsTab(this, content());
+            }
+        });
+        view.loadTransactionsForDateRange();
+        return { view, effects };
+    }
+    const other = makeView('overview', 8);
+    const owner = makeView(entry === 'transactions' ? 'transactions' : 'overview', 9);
+    h.p.app.workspace.getLeavesOfType = () => [other, owner].map(({ view }) => ({ view }));
+    function content() { return Object.assign(new Element(), { isConnected: true, scrollTop: 0 }); }
+    h.p.renderDashboardTransactionsTab(owner.view, content());
+    const renderer = h.p.dashboardTransactionsViews.get(owner.view);
+    renderer.dateRange = { ...owner.view.dateRange };
+    renderer.searchQuery = 'original';
+    renderer.selectedTypeFilters = ['expense'];
+    renderer.selectedCategoryIds = ['food'];
+    renderer.selectedAccountReferences = ['other-default'];
+    renderer.pageSize = 1;
+    renderer.currentPage = 2;
+    renderer.selectedTransactionIds.add(original.id);
+    renderer.embeddedContentEl.scrollTop = 144;
+    renderer.loadTransactionsData(false);
+    flushEditorFrames();
+    renderer.embeddedContentEl.scrollTop = 144;
+    const openEditor = () => {
+        if (entry === 'transactions') {
+            renderer.renderTransactionCardWithEditHandler(new Element(), original, '$10');
+            transactionCards.at(-1).onEdit(original);
+        } else if (entry === 'calendar') {
+            owner.view.renderPremiumVisualizations(new Element());
+            calendars.at(-1).onEdit(original);
+        } else {
+            owner.view.renderTransactions(new Element());
+            transactionCards.findLast(card => card.transaction.id === original.id).onEdit(original);
+        }
+        return shownModals.at(-1);
+    };
+    return { ...h, original, other, owner, renderer, openEditor };
+}
+
+for (const entry of ['overview', 'transactions', 'calendar']) {
+    for (const operation of ['add', 'edit', 'delete']) {
+        test(`${entry} transaction ${operation} belongs to its containing dashboard and refreshes each dashboard once`, async () => {
+            const h = await editorOwnershipHarness(entry);
+            const editor = operation === 'add' ? new TransactionModal(h.p.app, h.p, h.owner.view) : h.openEditor();
+            if (operation === 'add') {
+                editor.open();
+                assert.equal(editor.contentEl.querySelector('[name="date"]').value, '2026-10-15');
+            }
+            assert.equal(editor.editorHost || editor.dashboardView, h.owner.view);
+            if (operation === 'delete') {
+                await press(editor, 'Delete');
+                assert.ok(!editor.closed);
+                await press(shownModals.at(-1), 'Delete');
+            } else {
+                editor.contentEl.querySelector('#description').value = 'ORIGINAL EDITED';
+                editor.contentEl.querySelector('#amount').value = '25';
+                await editor.contentEl.querySelector('form').listeners.submit[0]({ preventDefault() {} });
+            }
+            flushEditorFrames();
+            assert.equal(editor.closed, true);
+            assert.equal(h.p.hasSaveFailure(editor), false);
+            assert.equal(h.storage.writes, 1);
+            for (const { effects } of [h.owner, h.other]) assert.deepEqual(effects, { loads: 1, renders: 1 });
+            const rows = JSON.parse(h.files.get(h.p.transactionsFilePath)).transactions;
+            assert.equal(rows.length, operation === 'add' ? 4 : operation === 'delete' ? 2 : 3);
+            if (operation === 'edit') {
+                const saved = rows.find(row => row.id === h.original.id);
+                assert.equal(saved.description, 'ORIGINAL EDITED');
+                assert.equal(saved.notes, 'Keep notes');
+                assert.deepEqual(saved.custom, { preserved: true });
+            }
+            assert.equal(h.owner.view.currentTab, entry === 'transactions' ? 'transactions' : 'overview');
+            assert.equal(h.owner.view.selectedCalendarDate.getDate(), 15);
+            assert.equal(h.other.view.selectedCalendarDate.getMonth(), 8);
+            assert.equal(h.renderer.searchQuery, 'original');
+            assert.deepEqual(Array.from(h.renderer.selectedCategoryIds), ['food']);
+            assert.deepEqual(Array.from(h.renderer.selectedTypeFilters), ['expense']);
+            assert.deepEqual(Array.from(h.renderer.selectedAccountReferences), ['other-default']);
+            assert.equal(h.renderer.currentPage, 2);
+            assert.equal(h.renderer.pageSize, 1);
+            assert.equal(h.renderer.embeddedContentEl.scrollTop, 144);
+            assert.equal(h.p.dashboardTransactionsViews.get(h.owner.view), h.renderer);
+        });
+    }
+}
+
+for (const operation of ['add', 'edit', 'delete']) {
+    test(`transaction ${operation} keeps its editor, P0 recovery and source ownership after a failed save`, async () => {
+        const h = await editorOwnershipHarness();
+        const editor = operation === 'add' ? new TransactionModal(h.p.app, h.p, h.owner.view) : h.openEditor();
+        if (operation === 'add') editor.open();
+        h.storage.fail = true;
+        const before = h.files.get(h.p.transactionsFilePath), memory = JSON.stringify(h.p.getAllTransactions());
+        let saveOwner = editor;
+        if (operation === 'delete') {
+            await press(editor, 'Delete');
+            saveOwner = shownModals.at(-1);
+            await press(saveOwner, 'Delete');
+        } else {
+            editor.contentEl.querySelector('#description').value = 'ORIGINAL DRAFT';
+            editor.contentEl.querySelector('#amount').value = '25';
+            await editor.contentEl.querySelector('form').listeners.submit[0]({ preventDefault() {} });
+        }
+        assert.equal(h.files.get(h.p.transactionsFilePath), before);
+        assert.equal(JSON.stringify(h.p.getAllTransactions()), memory);
+        assert.ok(!editor.closed);
+        assert.equal(h.p.hasSaveFailure(saveOwner), true);
+        for (const { effects } of [h.owner, h.other]) assert.deepEqual(effects, { loads: 0, renders: 0 });
+        if (operation !== 'delete') {
+            assert.equal(editor.contentEl.querySelector('#description').value, 'ORIGINAL DRAFT');
+            assert.equal(editor.contentEl.querySelector('#notes').value, operation === 'edit' ? 'Keep notes' : '');
+            editor.contentEl.querySelector('#description').value = 'ORIGINAL RETRIED';
+        }
+        h.storage.fail = false;
+        await press(shownModals.at(-1), 'Retry');
+        assert.equal(editor.closed, true);
+        assert.equal(h.p.hasSaveFailure(saveOwner), false);
+        for (const { effects } of [h.owner, h.other]) assert.deepEqual(effects, { loads: 1, renders: 1 });
+        const rows = JSON.parse(h.files.get(h.p.transactionsFilePath)).transactions;
+        assert.equal(rows.length, operation === 'add' ? 4 : operation === 'delete' ? 2 : 3);
+        if (operation !== 'delete') assert.ok(rows.some(row => row.description === 'ORIGINAL RETRIED'));
+    });
+}
+
+test('transaction editor accepts a narrow host and keeps delete callbacks in their existing order', async () => {
+    const h = await editorOwnershipHarness();
+    const calls = [];
+    const host = {
+        getDefaultTransactionDate: () => new Date(2026, 9, 22),
+        addTransaction: transaction => h.owner.view.addTransaction(transaction),
+        updateTransaction: transaction => h.owner.view.updateTransaction(transaction),
+        deleteTransaction: (id, onDeleted, onConfirmed) => h.owner.view.deleteTransaction(id,
+            () => { calls.push('deleted'); onDeleted(); },
+            () => { calls.push('confirmed'); onConfirmed(); })
+    };
+    const editor = new TransactionModal(h.p.app, h.p, host, h.original);
+    editor.open();
+    await press(editor, 'Delete');
+    await press(shownModals.at(-1), 'Delete');
+    assert.deepEqual(calls, ['confirmed', 'deleted']);
+    assert.equal(editor.closed, true);
+});
+
+
+test('an open transaction editor retains its owner when dashboards reorder and its source tab changes', async () => {
+    const h = await editorOwnershipHarness();
+    const editor = h.openEditor();
+    h.p.app.workspace.getLeavesOfType = () => [h.owner, h.other].map(({ view }) => ({ view }));
+    h.owner.view.currentTab = 'overview';
+    editor.contentEl.querySelector('#description').value = 'ORIGINAL AFTER NAVIGATION';
+    await editor.contentEl.querySelector('form').listeners.submit[0]({ preventDefault() {} });
+    assert.equal(editor.closed, true);
+    assert.equal(h.owner.view.currentTab, 'overview');
+    for (const { effects } of [h.owner, h.other]) assert.deepEqual(effects, { loads: 1, renders: 1 });
+    assert.equal(h.p.getAllTransactions()[0].description, 'ORIGINAL AFTER NAVIGATION');
+    assert.equal(h.renderer.searchQuery, 'original');
+    assert.equal(h.renderer.currentPage, 2);
+});
+
+test('a sibling dashboard refresh exception does not turn a committed transaction edit into recovery', async () => {
+    const h = await editorOwnershipHarness();
+    const editor = h.openEditor();
+    h.other.view.renderDashboard = () => { throw new Error('Sibling render failed'); };
+    editor.contentEl.querySelector('#description').value = 'ORIGINAL COMMITTED';
+    const count = shownModals.length;
+    await editor.contentEl.querySelector('form').listeners.submit[0]({ preventDefault() {} });
+    assert.equal(editor.closed, true);
+    assert.equal(h.storage.writes, 1);
+    assert.equal(h.p.hasSaveFailure(editor), false);
+    assert.equal(shownModals.length, count);
+    assert.deepEqual(h.owner.effects, { loads: 1, renders: 1 });
+});
+
+test('cancelling transaction deletion keeps its source editor and performs no write or refresh', async () => {
+    const h = await editorOwnershipHarness();
+    const editor = h.openEditor();
+    await press(editor, 'Delete');
+    await press(shownModals.at(-1), 'Cancel');
+    assert.ok(!editor.closed);
+    assert.equal(h.storage.writes, 0);
+    assert.equal(h.p.getAllTransactions().length, 3);
+    for (const { effects } of [h.owner, h.other]) assert.deepEqual(effects, { loads: 0, renders: 0 });
 });
