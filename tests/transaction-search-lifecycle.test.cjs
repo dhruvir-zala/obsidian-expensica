@@ -43,6 +43,9 @@ function setup() {
             this.children = []; this.listeners = {}; this.textContent = options.text || ''; this._scrollTop = 0;
         }
         get isConnected() { return this.root || !!this.parentElement?.isConnected; }
+        get ownerDocument() { return this.parentElement?.ownerDocument || document; }
+        contains(element) { return this === element || this.children.some(child => child.contains(element)); }
+        hasClass(name) { return this.classes.has(name); }
         get childElementCount() { return this.children.length; }
         get classList() { return { contains: name => this.classes.has(name), toggle() {} }; }
         get scrollTop() { return this._scrollTop; }
@@ -68,19 +71,25 @@ function setup() {
         remove() { if (this.parentElement) this.parentElement.children = this.parentElement.children.filter(child => child !== this); this.parentElement = null; }
         empty() { this.check(); for (const child of [...this.children]) child.remove(); }
     }
-    const document = { body: new Element() }; document.body.root = true;
+    const document = { body: new Element(), listeners: new Map(),
+        addEventListener(type, callback) { if (!this.listeners.has(type)) this.listeners.set(type, new Set()); this.listeners.get(type).add(callback); },
+        removeEventListener(type, callback) { this.listeners.get(type)?.delete(callback); },
+        fire(type, target = this.body) { for (const callback of [...(this.listeners.get(type) || [])]) callback({ target }); },
+        count() { return [...this.listeners.values()].reduce((sum, listeners) => sum + listeners.size, 0); }
+    }; document.body.root = true;
     const app = { workspace: { requestSaveLayout() { effects.layout++; } } };
     class ItemView extends Component {
         constructor() { super(); this.app = app; this.containerEl = document.body.createDiv(); this.containerEl.createDiv(); this.containerEl.createDiv(); }
     }
     const obsidian = { Component, ItemView, Modal: class {}, Plugin: class {}, PluginSettingTab: class {} };
-    const globals = { ...clock, window: { ...clock, removeEventListener() {} } };
+    const globals = { ...clock, document, window: { ...clock, removeEventListener() {} } };
     const dashboard = load('src/dashboard-view.ts', { './models': models, obsidian,
         'chart.js': { Tooltip: { positioners: {} } } }, globals);
     const { ExpensicaTransactionsView } = load('src/transactions-view.ts', { './models': models, obsidian,
         './dashboard-view': dashboard }, globals);
+    const renderers = [];
     class Renderer extends ExpensicaTransactionsView {
-        constructor(...args) { super(...args); this.effects = { loads: 0, renders: 0 }; }
+        constructor(...args) { super(...args); this.effects = { loads: 0, renders: 0 }; renderers.push(this); }
         loadTransactionsData(...args) { this.effects.loads++; return super.loadTransactionsData(...args); }
         renderTransactionStatsHeader() {}
         renderCategoryFilter() {}
@@ -101,7 +110,7 @@ function setup() {
     plugin.renderDataRecoveryWarning = () => {};
     function view() {
         const instance = new dashboard.ExpensicaDashboardView({}, plugin);
-        Object.assign(instance, { currentTab: 'transactions', consumeChartAnimationRequest() {}, persistDashboardState() {},
+        Object.assign(instance, { renderCashFlow() {}, currentTab: 'transactions', consumeChartAnimationRequest() {}, persistDashboardState() {},
             rememberScrollPosition() {}, restoreScrollPosition() {},
             renderHeader(container) { container.createDiv('header'); },
             renderTabNavigation(container) { container.createDiv('expensica-tabs'); },
@@ -117,7 +126,64 @@ function setup() {
         input.value = value; input.emit('input');
     }
     const snapshot = view => ({ ...effects, ...renderer(view).effects });
-    return { view, renderer, root, type, clock, timers, frames, effects, snapshot, plugin };
+    return { view, renderer, root, type, clock, timers, frames, effects, snapshot, plugin, document, renderers };
+}
+
+test('daily review disposal releases the actual renderer and cancels pending work without touching another view', () => {
+    const h = setup(), view = h.view(), transactions = h.renderer(view);
+    h.clock.flush();
+    const host = h.root(view).createDiv();
+    const release = h.plugin.renderDailyReviewTransactions(host, new Date(), () => {});
+    const daily = h.renderers.at(-1);
+    assert.notEqual(daily, transactions);
+    assert.equal(daily.embeddedContentEl, host);
+    daily.restoreScrollPosition();
+    assert.equal(h.frames.size, 1);
+    release(); release();
+    assert.equal(daily.embeddedContentEl, null);
+    assert.equal(h.clock.pending(), 0);
+    assert.equal(transactions.embeddedContentEl, h.root(view));
+});
+
+test('page-size menu belongs to its popout document and leaves unrelated listeners intact', () => {
+    const h = setup(), popout = setup(), view = h.view(), renderer = h.renderer(view);
+    h.clock.flush();
+    const host = h.root(view).createDiv();
+    Object.defineProperty(host, 'ownerDocument', { value: popout.document });
+    const unrelated = () => {};
+    popout.document.addEventListener('click', unrelated);
+    renderer.renderPageSizeSelector(host);
+    const trigger = host.querySelector('.expensica-page-size-current');
+    const menu = host.querySelector('.expensica-date-range-options');
+    trigger.emit('click');
+    assert.equal(h.document.count(), 0);
+    assert.equal(popout.document.count(), 2);
+    popout.document.fire('click', trigger);
+    assert.equal(menu.hasClass('expensica-date-range-hidden'), false);
+    renderer.deactivate();
+    assert.equal(popout.document.count(), 1);
+    assert.ok(popout.document.listeners.get('click').has(unrelated));
+});
+
+for (const action of ['outside', 'toggle', 'refresh', 'deactivate']) {
+    test(`page-size menu releases its owner document listener on ${action}`, () => {
+        const h = setup(), view = h.view(), renderer = h.renderer(view);
+        h.clock.flush();
+        const host = h.root(view).createDiv();
+        renderer.renderPageSizeSelector(host);
+        const trigger = host.querySelector('.expensica-page-size-current');
+        const menu = host.querySelector('.expensica-date-range-options');
+        trigger.emit('click'); h.clock.flush();
+        assert.equal(h.document.count(), 1);
+        assert.equal(menu.hasClass('expensica-date-range-hidden'), false);
+        if (action === 'outside') h.document.fire('click');
+        if (action === 'toggle') trigger.emit('click');
+        if (action === 'refresh') renderer.refreshTransactionsListOnly();
+        if (action === 'deactivate') renderer.deactivate();
+        assert.equal(h.document.count(), 0);
+        assert.equal(h.clock.pending(), action === 'refresh' ? 1 : 0);
+        assert.equal(menu.hasClass('expensica-date-range-hidden'), true);
+    });
 }
 
 test('rapid typing debounces once and preserves normal filtering, layout, rendering, and focus', () => {
@@ -174,6 +240,7 @@ test('dashboard close cancels search, delayed focus, and scroll frames, even alr
 for (const method of ['renderDashboard', 'refreshCurrentTabContent']) {
     test(`${method} deactivates search before replacing content in the same container`, () => {
         const h = setup(), view = h.view();
+        const cleanupCount = view.cleanups.length;
         h.clock.flush(); h.type(view, 'coffee');
         const stale = h.clock.callbacks();
         view[method](); h.clock.flush();
@@ -182,7 +249,7 @@ for (const method of ['renderDashboard', 'refreshCurrentTabContent']) {
         assert.deepEqual(h.snapshot(view), before);
         assert.equal(h.renderer(view).searchQuery, 'coffee');
         assert.equal(h.clock.pending(), 0);
-        assert.equal(view.cleanups.length, 1, 'parent cleanup is registered only once per renderer');
+        assert.equal(view.cleanups.length, cleanupCount, 'rerenders register no additional parent cleanup');
     });
 }
 

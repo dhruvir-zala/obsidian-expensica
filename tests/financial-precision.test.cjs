@@ -10,22 +10,22 @@ function load(filename, dependencies = {}, extraSource = '') {
     const compiled = ts.transpileModule(fs.readFileSync(path.join(__dirname, '..', filename), 'utf8') + extraSource, {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
     }).outputText;
-    vm.runInNewContext(compiled, { exports, Date, Intl, console, require: name => dependencies[name] || (name.endsWith('/account-calculations') ? load('src/account-calculations.ts', { './models': dependencies['./models'] || dependencies['../models'] }) : undefined) || {} });
+    vm.runInNewContext(compiled, { exports, Date, Intl, console, require: name => dependencies[name] || (name.endsWith('/calendar-ui') ? load('src/calendar-ui.ts', { './models': dependencies['./models'] || dependencies['../models'], obsidian: { setIcon() {} } }) : undefined) || (name.endsWith('/account-calculations') ? load('src/account-calculations.ts', { './models': dependencies['./models'] || dependencies['../models'] }) : undefined) || {} });
     return exports;
 }
 const models = load('src/models.ts');
 const cards = [];
 const exposed = '\nexport { getRunningBalanceByTransactionIdForAccount, formatRunningBalanceLabel };';
 const dashboard = load('src/dashboard-view.ts', {
-    './models': models, obsidian: { Modal: class {}, ItemView: class {} },
+    './chart-tooltip': { setChartTooltip() {} }, './models': models, obsidian: { Modal: class {}, ItemView: class {} },
     'chart.js': { Tooltip: { positioners: {} } },
-    './account-card': { renderAccountCard(container, options) { cards.push(options); },
+    './account-card': { renderAccountCard(container, options) { cards.push(options); return {}; },
         renderCreateAccountCard() {}, getLastAccountTransaction: rows => rows[0] }
-}, exposed + '\nexport { getAccountRunningBalance };');
+}, '\nexport { getAccountRunningBalance };');
 const transactions = load('src/transactions-view.ts', { './models': models,
     './dashboard-view': dashboard, obsidian: { Modal: class {} } }, exposed);
-const calendar = load('src/visualizations/calendar-view.ts', { '../models': models }, exposed);
-const views = [dashboard, transactions, calendar];
+const calendar = load('src/visualizations/calendar-view.ts', { '../models': models }, '\nexport { getRunningBalanceByTransactionIdForAccount };');
+const views = [transactions, calendar];
 const end = new Date(2026, 9, 31, 23, 59, 59, 999);
 const row = (index, amount, type = 'income', account = 'chequing-cash', date = '2026-10-15') => ({
     id: `20261015-120000-${index.toString(16).padStart(8, '0')}`, date, time: '12:00:00',
@@ -74,7 +74,7 @@ for (const type of ['chequing', 'saving', 'credit']) for (const kind of ['income
             const balances = view.getRunningBalanceByTransactionIdForAccount(p, reference, source);
             assert.equal(balances[source[source.length - 1].id], Math.sign(expected) * 0.0000005);
             assert.equal(balances[source[0].id], expected);
-            assert.equal(view.formatRunningBalanceLabel(p, balances[source[0].id]), expected < 0 ? '-$0.01' : '$0.01');
+            assert.equal(transactions.formatRunningBalanceLabel(p, balances[source[0].id]), expected < 0 ? '-$0.01' : '$0.01');
         }
         const instance = overview(p, source);
         assert.equal(dashboard.getAccountRunningBalance(p, reference, source), expected);
@@ -102,10 +102,10 @@ test('tiny partial balances remain raw and cancellation cleanup happens only whe
     for (const view of views) {
         const balances = view.getRunningBalanceByTransactionIdForAccount(p, 'chequing-cash', source);
         assert.equal(balances[source[0].id], expected);
-        assert.equal(view.formatRunningBalanceLabel(p, expected), '$0.00');
-        assert.equal(view.formatRunningBalanceLabel(p, -0.0000005), '$0.00');
-        assert.equal(view.formatRunningBalanceLabel(p, 0.0000005), '$0.00');
-        assert.equal(view.formatRunningBalanceLabel(p, -0.000001), '-$0.00', 'preserve the existing cleanup threshold');
+        assert.equal(transactions.formatRunningBalanceLabel(p, expected), '$0.00');
+        assert.equal(transactions.formatRunningBalanceLabel(p, -0.0000005), '$0.00');
+        assert.equal(transactions.formatRunningBalanceLabel(p, 0.0000005), '$0.00');
+        assert.equal(transactions.formatRunningBalanceLabel(p, -0.000001), '-$0.00', 'preserve the existing cleanup threshold');
     }
     assert.equal(models.formatCurrency(expected, 'USD'), '$0.00');
     close(overview(p, source).getNetBalanceThrough(end), models.TransactionAggregator.getBalance(source));
@@ -127,7 +127,7 @@ test('long cent sums retain raw values consistently and do not rewrite the ledge
     for (const view of views) {
         const balance = view.getRunningBalanceByTransactionIdForAccount(p, 'chequing-cash', source)[source[0].id];
         assert.equal(balance, expected);
-        assert.equal(view.formatRunningBalanceLabel(p, balance), '$1,000.00');
+        assert.equal(transactions.formatRunningBalanceLabel(p, balance), '$1,000.00');
     }
     assert.equal(dashboard.getAccountRunningBalance(p, 'chequing-cash', source), expected);
     assert.equal(JSON.stringify(source), original);

@@ -74,7 +74,8 @@ for (const width of [240, 320, 400, 800]) for (const accounts of [0, 1, 5]) {
   for (const legend of [categories, income, cumulative]) {
     const context = { mobile, dark, width, accounts, legend: legend.className };
     const style = getComputedStyle(legend), buttons = [...legend.children];
-    check(style.display === 'grid' && parseFloat(style.rowGap) === small && parseFloat(style.columnGap) === medium,
+    const rowGap = legend === cumulative ? medium : small;
+    check(style.display === 'grid' && parseFloat(style.rowGap) === rowGap && parseFloat(style.columnGap) === medium,
       { ...context, rowGap: style.rowGap, columnGap: style.columnGap });
     check(buttons.length === items.length && legend.scrollWidth <= legend.clientWidth + 1, context);
     const rects = buttons.map(button => button.getBoundingClientRect());
@@ -86,7 +87,7 @@ for (const width of [240, 320, 400, 800]) for (const accounts of [0, 1, 5]) {
       if (left) check(Math.abs(rect.left - left.right - medium) < 0.5, { ...context, index: i, gap: rect.left - left.right });
       if (previous) {
         const above = rects.slice(0, i).filter(other => Math.abs(other.left - rect.left) < 0.5).at(-1);
-        check(Math.abs(rect.top - above.bottom - small) < 0.5, { ...context, index: i, gap: rect.top - above.bottom });
+        check(Math.abs(rect.top - above.bottom - rowGap) < 0.5, { ...context, index: i, gap: rect.top - above.bottom });
       }
     }
   }

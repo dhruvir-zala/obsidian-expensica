@@ -94,7 +94,7 @@ test('transfers obey inclusive local date and category filters in every format',
         assert.deepEqual(Array.from(ExportService.filterTransactions(rows, range), entry => entry.id), ['start', 'end', 'expense']);
         assert.deepEqual(Array.from(ExportService.filterTransactions(rows, { ...range, categories: ['internal'] }), entry => entry.id), ['start', 'end']);
         assert.deepEqual(Array.from(ExportService.filterTransactions(rows, { ...range, categories: ['food'] }), entry => entry.id), ['expense']);
-        assert.equal(ExportService.filterTransactions(rows, { ...range, categories: [] }).length, 3);
+        assert.equal(ExportService.filterTransactions(rows, { ...range, categories: [] }).length, 0);
     }
 });
 
@@ -207,13 +207,15 @@ function modalFixture(ExportService, source = ledger()) {
     const notices = [], downloads = [];
     let closes = 0;
     const { ExportModal } = load('src/export-modal.ts', {
-        obsidian: { Modal: class {} }, './models': models, './export-service': { ExportService },
+        obsidian: { Modal: class {} }, './models': models, './category-chip': {},
+        './dashboard-view': { DateRangeType: { ALL_TIME: 'all_time', THIS_MONTH: 'this_month' }, resolveDateRange: () => ({ type: 'this_month', startDate: new Date(2026, 9, 1), endDate: new Date(2026, 9, 31) }) }, './export-service': { ExportService },
         './notice': { showExpensicaNotice: message => notices.push(message) }
     }, { document: { getElementById: () => ({ checked: true }) } });
-    const plugin = { getAllTransactions: () => source, settings: { categories, defaultCurrency: 'USD' } };
+    const plugin = { getSharedDateRangeState: () => null, getAllTransactions: () => source, settings: { categories, defaultCurrency: 'USD' } };
     const modal = new ExportModal({}, plugin);
     modal.contentEl = { querySelector: () => null };
     modal.exportOptions = options();
+    modal.selectedCategories = new Set(categories.map(category => category.id));
     modal.downloadFile = (...args) => downloads.push(args);
     modal.close = () => { closes++; };
     return { modal, notices, downloads, closes: () => closes };

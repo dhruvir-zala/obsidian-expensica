@@ -44,6 +44,7 @@ export interface ExportOptions {
   dateTo: string | null;
   includeExpenses: boolean;
   includeIncome: boolean;
+  includeInternal?: boolean;
   categories: string[] | null; // Array of category IDs or null for all
   filename: string; // Filename with extension
 }
@@ -64,6 +65,7 @@ export class ExportService {
       if (options.dateTo) {
         const toDate = parseLocalDate(options.dateTo);
         const transactionDate = parseLocalDate(transaction.date);
+        toDate.setHours(23, 59, 59, 999);
         if (transactionDate > toDate) return false;
       }
       
@@ -76,14 +78,14 @@ export class ExportService {
           if (!options.includeIncome) return false;
           break;
         case TransactionType.INTERNAL:
-          // Transfers remain independent of the income/expense toggles.
+          if (options.includeInternal === false) return false;
           break;
         default:
           return false;
       }
       
       // Filter by categories
-      if (options.categories && options.categories.length > 0) {
+      if (options.categories) {
         return options.categories.includes(transaction.category);
       }
       

@@ -24,13 +24,54 @@ models.sortTransactionsByDateTimeDesc = (...args) => {
 };
 const obsidian = { Plugin: class {}, PluginSettingTab: class {}, Modal: class {}, ItemView: class {} };
 const dashboard = load('src/dashboard-view.ts', { './models': models, obsidian,
-    'chart.js': { Tooltip: { positioners: {} } } }, '\nexport { getRunningBalanceByTransactionIdForAccount };');
+    'chart.js': { Tooltip: { positioners: {} } } });
 const Plugin = load('main.ts', { './src/models': models, obsidian }).default;
 function renderer(source) {
     return load('src/transactions-view.ts', { './models': models, obsidian, './dashboard-view': dashboard },
         '\nexport { getRunningBalanceByTransactionIdForAccount };', source);
 }
 const current = renderer();
+
+test('daily review bulk actions retain the selected day and use the shared mutation handlers', async () => {
+    const confirmations = [];
+    const { ExpensicaTransactionsView } = load('src/transactions-view.ts', {
+        './models': models, obsidian, './dashboard-view': dashboard,
+        './notice': { showExpensicaNotice() {} },
+        './confirmation-modal': { ConfirmationModal: class {
+            constructor(app, title, message, confirm) { this.confirm = confirm; }
+            open() { confirmations.push(this); }
+        } }
+    });
+    let rows = [
+        { id: 'prior', date: '2026-10-14', type: 'income', amount: 100 },
+        { id: 'early', date: '2026-10-15', time: '00:00:00', type: 'expense', amount: 5 },
+        { id: 'late', date: '2026-10-15', time: '23:59:59', type: 'income', amount: 7 },
+        { id: 'next', date: '2026-10-16', type: 'expense', amount: 8 }
+    ];
+    const changed = [];
+    const p = {
+        settings: { enableAccounts: false }, getAllTransactions: () => rows,
+        async updateTransactions(ids, changes) {
+            changed.push([...ids]); rows = rows.map(row => ids.includes(row.id) ? { ...row, ...changes } : row);
+        },
+        async deleteTransactions(ids) { changed.push([...ids]); rows = rows.filter(row => !ids.includes(row.id)); }
+    };
+    const view = new ExpensicaTransactionsView({}, p);
+    let visible = [];
+    view.renderTransactionsList = () => { visible = Array.from(view.filteredTransactions, row => row.id); };
+    view.renderDailyReview({ isConnected: true, empty() {} }, new Date(2026, 9, 15, 12), () => {});
+    assert.deepEqual(visible, ['late', 'early']);
+    visible.forEach(id => view.selectedTransactionIds.add(id));
+    await view.bulkRenameSelectedTransactions('Renamed');
+    assert.deepEqual(changed[0], ['late', 'early']);
+    assert.deepEqual(visible, ['late', 'early']);
+    assert.ok(rows.filter(row => ['prior', 'next'].includes(row.id)).every(row => row.description === undefined));
+    await view.deleteSelectedTransactions();
+    await confirmations[0].confirm(true);
+    assert.deepEqual(visible, []);
+    assert.deepEqual(rows.map(row => row.id), ['prior', 'next']);
+    assert.equal(view.selectedTransactionIds.size, 0);
+});
 const entry = (id, fields = {}) => ({ id, date: '2026-10-15', time: '12:00:00', type: 'income', amount: 1.234,
     description: 'ENTRY', category: 'salary', account: 'chequing-cash', ...fields });
 function fixture(count = 100, accountCount = 20) {
@@ -74,7 +115,7 @@ function expectedCards(source, accounts, visible, currency = 'USD') {
     h.p.settings.defaultCurrency = currency;
     const balances = reference => {
         if (!maps.has(reference)) maps.set(reference,
-            dashboard.getRunningBalanceByTransactionIdForAccount(h.p, reference, source));
+            current.getRunningBalanceByTransactionIdForAccount(h.p, reference, source));
         return maps.get(reference);
     };
     return visible.map(row => {

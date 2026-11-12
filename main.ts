@@ -6,6 +6,8 @@ import { ExpensicaTransactionsView } from './src/transactions-view';
 import type { TransactionNavigationFilter } from './src/transactions-view';
 
 import {
+    renderUiIcon,
+    getAccountIcon,
     Transaction,
     TransactionType,
     generateId,
@@ -35,7 +37,6 @@ import {
     compareAccounts,
     formatAccountReference,
     getAccountColor,
-    getAccountEmoji,
     getAccountTypeLabel,
     normalizeAccountName,
     normalizePaletteColor,
@@ -1121,6 +1122,12 @@ export default class ExpensicaPlugin extends Plugin {
 
     deactivateDashboardTransactionsTab(dashboard: ExpensicaDashboardView) {
         this.dashboardTransactionsViews.get(dashboard)?.deactivate();
+    }
+
+    renderDailyReviewTransactions(container: HTMLElement, date: Date, onEdit: (transaction: Transaction) => void) {
+        const transactionsView = new ExpensicaTransactionsView(this.app, this, null);
+        transactionsView.renderDailyReview(container, date, onEdit);
+        return () => transactionsView.deactivate();
     }
 
     renderDashboardAccountsTab(dashboard: ExpensicaDashboardView, container: HTMLElement) {
@@ -2298,7 +2305,7 @@ export default class ExpensicaPlugin extends Plugin {
             const yesterdayExpenses = TransactionAggregator.getTotalExpenses(yesterdayTransactions);
             
             // Daily insights section
-            noteContent += `## 📊 Daily Summary\n\n`;
+            noteContent += `## Daily Summary\n\n`;
             
             if (todaysTransactions.length === 0) {
                 noteContent += `> [!note] No transactions recorded today.\n\n`;
@@ -2329,7 +2336,7 @@ export default class ExpensicaPlugin extends Plugin {
             
             // Today's transactions section
             if (todaysTransactions.length > 0) {
-                noteContent += `## 📝 Today's Transactions\n\n`;
+                noteContent += `## Today's Transactions\n\n`;
                 noteContent += `| Description | Category | Amount | Notes |\n`;
                 noteContent += `| ----------- | -------- | ------ | ----- |\n`;
                 
@@ -2357,7 +2364,7 @@ export default class ExpensicaPlugin extends Plugin {
                 );
                 
                 if (Object.keys(expensesByCategory).length > 0) {
-                    noteContent += `## 📊 Today's Spending Breakdown\n\n`;
+                    noteContent += `## Today's Spending Breakdown\n\n`;
                     
                     // Convert to array and sort by amount (highest first)
                     const categoryBreakdown = Object.entries(expensesByCategory)
@@ -2375,7 +2382,7 @@ export default class ExpensicaPlugin extends Plugin {
                     noteContent += `\n`;
                 }
             } else {
-                noteContent += `## 📝 Today's Transactions\n\n`;
+                noteContent += `## Today's Transactions\n\n`;
                 noteContent += `No transactions recorded today.\n\n`;
             }
             
@@ -2446,7 +2453,7 @@ export default class ExpensicaPlugin extends Plugin {
                 const dateBalance = TransactionAggregator.getBalance(dateTransactions);
                 
                 // Daily insights section
-                noteContent += `## 📊 Daily Summary\n\n`;
+                noteContent += `## Daily Summary\n\n`;
                 
                 if (dateTransactions.length === 0) {
                     noteContent += `> [!note] No transactions recorded for this date.\n\n`;
@@ -2460,7 +2467,7 @@ export default class ExpensicaPlugin extends Plugin {
                 
                 // Transactions section
                 if (dateTransactions.length > 0) {
-                    noteContent += `## 📝 Transactions\n\n`;
+                    noteContent += `## Transactions\n\n`;
                     noteContent += `| Description | Category | Amount | Notes |\n`;
                     noteContent += `| ----------- | -------- | ------ | ----- |\n`;
                     
@@ -2489,7 +2496,7 @@ export default class ExpensicaPlugin extends Plugin {
                     );
                     
                     if (Object.keys(expensesByCategory).length > 0) {
-                        noteContent += `## 📊 Spending Breakdown\n\n`;
+                        noteContent += `## Spending Breakdown\n\n`;
                         
                         // Convert to array and sort by amount (highest first)
                         const categoryBreakdown = Object.entries(expensesByCategory)
@@ -2507,7 +2514,7 @@ export default class ExpensicaPlugin extends Plugin {
                         noteContent += `\n`;
                     }
                 } else {
-                    noteContent += `## 📝 Transactions\n\n`;
+                    noteContent += `## Transactions\n\n`;
                     noteContent += `No transactions recorded for this date.\n\n`;
                 }
                 
@@ -2906,6 +2913,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
             })
             .addButton(button => button
                 .setButtonText('Browse')
+                .then(button => button.buttonEl.addClass('expensica-standard-button', 'expensica-btn', 'expensica-btn-secondary'))
                 .onClick(async () => {
                     new FolderSuggestionModal(this.app, this.plugin, async (folder) => {
                         this.plugin.settings.dailyReviewFolder = folder;
@@ -2919,6 +2927,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
         setting
             .addButton(button => button
                 .setButtonText('Export Transactions')
+                .then(button => button.buttonEl.addClass('expensica-standard-button', 'expensica-btn', 'expensica-btn-secondary'))
                 .onClick(() => {
                     this.plugin.openExportModal();
                 }));
@@ -2928,6 +2937,7 @@ class ExpensicaSettingTab extends PluginSettingTab {
         setting
             .addButton(button => button
                 .setButtonText('Import')
+                .then(button => button.buttonEl.addClass('expensica-standard-button', 'expensica-btn', 'expensica-btn-secondary'))
                 .onClick(() => {
                     this.plugin.openImportModal();
                 }));
@@ -2943,89 +2953,114 @@ class ExpensicaSettingTab extends PluginSettingTab {
         selectedCode: string,
         onChange: (currencyCode: string) => void | Promise<void>
     ): void {
-        // Create the main container
-        const currencySelectContainer = container.createDiv('currency-select-container');
-        
-        // Create the display element
-        const currencyDisplay = currencySelectContainer.createDiv('expensica-select-display');
-        
-        // Get the selected currency
+        const currencySelectContainer = container.createDiv('currency-select-container expensica-currency-select');
+        const currencyDisplay = currencySelectContainer.createEl('button', {
+            cls: 'expensica-standard-button expensica-settings-select-button expensica-currency-current',
+            attr: { type: 'button', 'aria-label': 'Default currency', 'aria-haspopup': 'listbox', 'aria-expanded': 'false' }
+        });
+        const currencyDisplayText = currencyDisplay.createSpan('expensica-select-text');
         const selectedCurrency = getCurrencyByCode(selectedCode);
-        
-        // Create the display text
-        const currencyDisplayText = currencyDisplay.createDiv('expensica-select-text');
-        currencyDisplayText.textContent = selectedCurrency
-            ? `${selectedCurrency.code} ${selectedCurrency.symbol} - ${selectedCurrency.name}`
-            : 'Choose a valid currency';
-        
-        // Create the arrow icon
-        const arrowIcon = currencyDisplay.createDiv('expensica-select-arrow');
-        createChevronIcon(arrowIcon, 12);
-        
-        // Create the options container
-        const currencyOptions = currencySelectContainer.createDiv('expensica-select-options expensica-select-hidden');
-        
-        // Add search input
-        const searchContainer = currencyOptions.createDiv('currency-search-container');
-        // Create options
-        const optionsContainer = currencyOptions.createDiv('currency-options-container');
-        
-        // Function to filter and render options
-        const renderFilteredOptions = (searchTerm = '') => {
-            optionsContainer.empty();
-            const filteredCurrencies = COMMON_CURRENCIES.filter(currency => {
-                const searchLower = searchTerm.toLowerCase();
-                return currency.code.toLowerCase().includes(searchLower) ||
-                       currency.name.toLowerCase().includes(searchLower) ||
-                       currency.symbol.toLowerCase().includes(searchLower);
-            });
-            
-            filteredCurrencies.forEach(currency => {
-                const optionItem = optionsContainer.createDiv('expensica-select-option');
-                optionItem.textContent = `${currency.code} ${currency.symbol} - ${currency.name}`;
-                
-                if (currency.code === selectedCode) {
-                    optionItem.addClass('expensica-option-selected');
-                }
-                
-                optionItem.addEventListener('click', () => {
-                    void Promise.resolve(onChange(currency.code)).catch(() => {
-                        showExpensicaNotice('Could not save the selected currency.');
-                    });
-                    currencyDisplayText.textContent = `${currency.code} ${currency.symbol} - ${currency.name}`;
-                    currencyOptions.addClass('expensica-select-hidden');
-                    arrowIcon.removeClass('expensica-select-arrow-open');
-                });
-            });
+        const currencyLabel = (currency: typeof COMMON_CURRENCIES[number]) => `${currency.code} ${currency.symbol} - ${currency.name}`;
+        currencyDisplayText.textContent = selectedCurrency ? currencyLabel(selectedCurrency) : 'Choose a valid currency';
+        const arrowIcon = currencyDisplay.createSpan('expensica-select-arrow');
+        arrowIcon.setAttribute('aria-hidden', 'true');
+        createChevronIcon(arrowIcon, 14);
+        const menu = currencySelectContainer.createDiv('expensica-category-quick-menu expensica-currency-menu');
+        menu.hidden = true;
+        const searchSection = menu.createDiv('expensica-category-quick-menu-section');
+        const searchWrap = searchSection.createDiv('expensica-category-quick-menu-search');
+        const searchInput = searchWrap.createEl('input', {
+            cls: 'expensica-form-input expensica-category-quick-menu-search-input',
+            attr: { type: 'search', placeholder: 'Search currencies', 'aria-label': 'Search currencies', autocomplete: 'off' }
+        });
+        const list = menu.createDiv('expensica-category-quick-menu-section expensica-category-quick-menu-list');
+        list.setAttribute('role', 'listbox');
+        list.setAttribute('aria-label', 'Currencies');
+        const doc = currencyDisplay.ownerDocument;
+        let currentCode = selectedCode;
+        let disposed = false;
+        let saving = false;
+        let optionButtons: HTMLButtonElement[] = [];
+        const outside = (event: Event) => {
+            if (!currencySelectContainer.contains(event.target as Node)) hide();
         };
-        
-        // Initial render
-        renderFilteredOptions();
-        
-        let searchInput: HTMLInputElement | null = null;
-        new Setting(searchContainer)
-            .setClass('currency-search-setting')
-            .addSearch(search => {
-                search.setPlaceholder('Search currencies...')
-                    .onChange(searchTerm => renderFilteredOptions(searchTerm));
-                search.inputEl.addClass('currency-search-input');
-                searchInput = search.inputEl;
-            });
-        
-        // Toggle dropdown
-        currencyDisplay.addEventListener('click', () => {
-            const isHidden = currencyOptions.hasClass('expensica-select-hidden');
-            currencyOptions.toggleClass('expensica-select-hidden', !isHidden);
-            arrowIcon.toggleClass('expensica-select-arrow-open', !isHidden);
-            if (!isHidden) {
-                searchInput?.focus();
-            }
-        });
-
-        this.registerOutsideClick(currencySelectContainer, () => {
-            currencyOptions.addClass('expensica-select-hidden');
+        const hide = (restoreFocus = false) => {
+            menu.hidden = true;
+            currencyDisplay.setAttribute('aria-expanded', 'false');
             arrowIcon.removeClass('expensica-select-arrow-open');
+            doc.removeEventListener('mousedown', outside, true);
+            doc.removeEventListener('focusin', outside);
+            if (restoreFocus && !disposed && currencyDisplay.isConnected) currencyDisplay.focus();
+        };
+        const renderFilteredOptions = () => {
+            list.empty();
+            optionButtons = [];
+            const term = searchInput.value.trim().toLocaleLowerCase();
+            const currencies = COMMON_CURRENCIES.filter(currency =>
+                [currency.code, currency.name, currency.symbol].some(value => value.toLocaleLowerCase().includes(term)));
+            if (!currencies.length) list.createDiv({ cls: 'expensica-category-quick-menu-empty', text: 'No currencies found' });
+            for (const currency of currencies) {
+                const selected = currency.code === currentCode;
+                const option = list.createEl('button', {
+                    cls: `expensica-category-quick-menu-item${selected ? ' is-selected' : ''}`,
+                    attr: { type: 'button', role: 'option', tabindex: '-1', 'aria-selected': String(selected) }
+                });
+                option.createSpan({ text: currency.symbol, cls: 'expensica-category-quick-menu-item-emoji' });
+                option.createSpan({ text: `${currency.code} - ${currency.name}`, cls: 'expensica-category-quick-menu-item-label' });
+                optionButtons.push(option);
+                option.addEventListener('click', voidAsync(async () => {
+                    if (disposed || saving || menu.hidden || !option.isConnected) return;
+                    saving = true;
+                    option.disabled = true;
+                    try {
+                        await onChange(currency.code);
+                        if (disposed) return;
+                        currentCode = currency.code;
+                        currencyDisplayText.textContent = currencyLabel(currency);
+                        hide(true);
+                    } catch {
+                        if (!disposed) showExpensicaNotice('Could not save the selected currency.');
+                    } finally {
+                        saving = false;
+                        option.disabled = false;
+                    }
+                }));
+            }
+        };
+        const show = () => {
+            if (disposed) return;
+            searchInput.value = '';
+            renderFilteredOptions();
+            menu.hidden = false;
+            currencyDisplay.setAttribute('aria-expanded', 'true');
+            arrowIcon.addClass('expensica-select-arrow-open');
+            doc.addEventListener('mousedown', outside, true);
+            doc.addEventListener('focusin', outside);
+            searchInput.focus();
+        };
+        currencyDisplay.addEventListener('click', () => { if (menu.hidden) show(); else hide(); });
+        searchInput.addEventListener('input', renderFilteredOptions);
+        currencySelectContainer.addEventListener('keydown', event => {
+            if (event.key === 'Escape' && !menu.hidden) {
+                event.preventDefault(); event.stopPropagation(); hide(true); return;
+            }
+            if (event.key === 'Tab') { hide(); return; }
+            if (event.key === 'Enter' && event.target === searchInput) {
+                event.preventDefault(); optionButtons[0]?.click(); return;
+            }
+            if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+            if (menu.hidden && event.target !== currencyDisplay) return;
+            if ((event.key === 'Home' || event.key === 'End') && event.target === searchInput) return;
+            event.preventDefault();
+            if (menu.hidden) show();
+            const index = optionButtons.indexOf(event.target as HTMLButtonElement);
+            if (event.key === 'ArrowUp' && index === 0) { searchInput.focus(); return; }
+            const next = event.key === 'Home' ? 0 : event.key === 'End' ? optionButtons.length - 1
+                : index < 0 ? (event.key === 'ArrowUp' ? optionButtons.length - 1 : 0)
+                : (index + (event.key === 'ArrowDown' ? 1 : -1) + optionButtons.length) % optionButtons.length;
+            optionButtons[next]?.focus();
         });
+        this.registerCleanup(() => { disposed = true; hide(); });
     }
 
     renderTimeFormatDropdown(
@@ -3034,7 +3069,10 @@ class ExpensicaSettingTab extends PluginSettingTab {
         onChange: (timeFormat: '12' | '24') => void | Promise<void>
     ): void {
         const selectContainer = container.createDiv('currency-select-container');
-        const selectDisplay = selectContainer.createDiv('expensica-select-display');
+        const selectDisplay = selectContainer.createEl('button', {
+            cls: 'expensica-select-display expensica-standard-button expensica-settings-select-button',
+            attr: { type: 'button', 'aria-label': 'Time format' }
+        });
         const selectText = selectDisplay.createDiv('expensica-select-text');
         const arrowIcon = selectDisplay.createDiv('expensica-select-arrow');
         const optionsContainer = selectContainer.createDiv('expensica-select-options expensica-select-hidden');
@@ -3102,8 +3140,8 @@ class TransactionSummaryModal extends Modal {
             this.corrections.forEach(correction => list.createEl('li', { text: correction }));
         }
         this.contentEl.createEl('p', { text: this.summary });
-        const buttons = this.contentEl.createDiv('modal-button-container');
-        buttons.createEl('button', { text: 'OK', cls: 'mod-cta' })
+        const buttons = this.contentEl.createDiv('expensica-form-footer modal-button-container');
+        buttons.createEl('button', { text: 'OK', cls: 'expensica-standard-button expensica-btn expensica-btn-primary', attr: { type: 'button' } })
             .addEventListener('click', () => this.close());
     }
 
@@ -3138,7 +3176,9 @@ class AccountReconciliationModal extends Modal {
             actions.createEl('button', { text, cls: 'expensica-standard-button' }).addEventListener('click', () => this.start(mode));
         }
         this.errorEl = this.contentEl.createEl('p', { cls: 'expensica-reconcile-error' });
-        this.contentEl.createDiv('modal-button-container').createEl('button', { text: 'Cancel' })
+        this.contentEl.createDiv('expensica-form-footer modal-button-container').createEl('button', {
+            text: 'Cancel', cls: 'expensica-standard-button expensica-btn expensica-btn-secondary', attr: { type: 'button' }
+        })
             .addEventListener('click', () => this.close());
     }
 
@@ -3250,7 +3290,7 @@ class AccountResolutionStepModal extends Modal {
     }
 
     private accountLabel(account: Account): string {
-        return getAccountEmoji(account.type) + ' ' + this.fullAccountName(account)
+        return this.fullAccountName(account)
             + (this.owner.isDraft(account.id) ? ' (will be created)' : '');
     }
 
@@ -3269,9 +3309,11 @@ class AccountResolutionStepModal extends Modal {
                 const list = selected.filter(account => this.owner.isDraft(account.id) === draft);
                 contentEl.createEl('p', { text: label + ': ' + list.length });
                 const items = contentEl.createEl('ul');
-                for (const account of list) items.createEl('li', {
-                    text: getAccountEmoji(account.type) + ' ' + this.fullAccountName(account)
-                }).setCssStyles({ color: getAccountColor(account) });
+                for (const account of list) {
+                    const item = items.createEl('li', { text: this.fullAccountName(account) });
+                    item.setCssStyles({ color: getAccountColor(account) });
+                    renderUiIcon(item, getAccountIcon(account.type), '', 'inherit');
+                }
             }
         } else {
             const groups = this.owner.validation.missingAccounts;
@@ -3297,6 +3339,7 @@ class AccountResolutionStepModal extends Modal {
                         attr: { type: 'button', role: 'menuitemradio', 'data-account-id': account.id,
                             'aria-checked': String(this.selectedId === account.id) } });
                     option.setCssStyles({ color: getAccountColor(account) });
+                    renderUiIcon(option, getAccountIcon(account.type), '', 'inherit');
                     option.addEventListener('click', () => {
                         if (this.owner.saving) return;
                         this.selectedId = account.id;
@@ -3334,9 +3377,11 @@ class AccountResolutionStepModal extends Modal {
                 .setCssStyles({ color: getAccountColor(selected) });
         }
         this.errorEl = contentEl.createEl('p', { cls: 'expensica-reconcile-error' });
-        const buttons = contentEl.createDiv('modal-button-container');
-        buttons.createEl('button', { text: 'Cancel' }).addEventListener('click', () => this.back());
-        const confirm = buttons.createEl('button', { text: this.summary || this.mode === 'all' ? 'Confirm' : 'Next', cls: 'mod-cta' });
+        const buttons = contentEl.createDiv('expensica-form-footer modal-button-container');
+        buttons.createEl('button', {
+            text: 'Cancel', cls: 'expensica-standard-button expensica-btn expensica-btn-secondary', attr: { type: 'button' }
+        }).addEventListener('click', () => this.back());
+        const confirm = buttons.createEl('button', { text: this.summary || this.mode === 'all' ? 'Confirm' : 'Next', cls: 'expensica-standard-button expensica-btn expensica-btn-primary', attr: { type: 'button' } });
         confirm.disabled = this.summary
             ? this.owner.validation.missingAccounts.some(group => !accounts.has(this.owner.choices.get(group.reference) || ''))
             : !this.selectedId;
@@ -3458,14 +3503,14 @@ class ImportModal extends Modal {
         const buttonContainer = contentEl.createDiv('expensica-import-buttons');
         const closeButton = buttonContainer.createEl('button', {
             text: 'Close',
-            cls: 'expensica-btn expensica-btn-secondary'
+            cls: 'expensica-standard-button expensica-btn expensica-btn-secondary', attr: { type: 'button' }
         });
         this.chooseButton = buttonContainer.createEl('button', {
-            text: 'Choose JSON', cls: 'expensica-btn expensica-btn-secondary'
+            text: 'Choose JSON', cls: 'expensica-standard-button expensica-btn expensica-btn-secondary', attr: { type: 'button' }
         });
         this.importButton = buttonContainer.createEl('button', {
             text: 'Import',
-            cls: 'expensica-btn expensica-btn-primary'
+            cls: 'expensica-standard-button expensica-btn expensica-btn-primary', attr: { type: 'button' }
         });
         this.importButton.disabled = true;
         closeButton.addEventListener('click', () => this.close());
@@ -3501,7 +3546,7 @@ class ImportModal extends Modal {
                             ? 'Correct the JSON file, then Retry to select it again.' : error.action;
                         this.actionEl.hidden = false;
                         if (error.canReconcileAccounts) {
-                            this.actionEl.createEl('button', { text: 'Resolve accounts', cls: 'mod-cta' })
+                            this.actionEl.createEl('button', { text: 'Resolve accounts', cls: 'expensica-standard-button expensica-btn expensica-btn-primary', attr: { type: 'button' } })
                                 .addEventListener('click', voidAsync(async () => {
                                     try { await this.plugin.openAccountReconciliation(source, () => { if (!this.dismissed) this.close(); }); }
                                     catch { this.messageEl.textContent = 'Could not open account reconciliation. Check the file, then Retry.'; }
@@ -3618,7 +3663,7 @@ class FolderSuggestionModal extends Modal {
         
         // Create title
         const modalTitle = contentEl.createEl('h2', { cls: 'expensica-modal-title' });
-        modalTitle.createSpan({ cls: 'expensica-modal-title-icon', text: '📁' });
+        renderUiIcon(modalTitle, 'folder', 'expensica-modal-title-icon');
         modalTitle.append(document.createTextNode(' Select Folder for Daily Reviews'));
         
         contentEl.createEl('p', {text: 'Choose where to store your daily finance review notes:'});
@@ -3665,12 +3710,12 @@ class FolderSuggestionModal extends Modal {
             
             const cancelButton = buttonContainer.createEl('button', {
                 text: 'Cancel',
-                cls: 'expensica-btn expensica-btn-secondary'
+                cls: 'expensica-standard-button expensica-btn expensica-btn-secondary', attr: { type: 'button' }
             });
             
             const createButton = buttonContainer.createEl('button', {
                 text: 'Create',
-                cls: 'expensica-btn expensica-btn-primary'
+                cls: 'expensica-standard-button expensica-btn expensica-btn-primary', attr: { type: 'button' }
             });
             
             cancelButton.addEventListener('click', () => {
@@ -3764,9 +3809,10 @@ class DatePickerModal extends Modal {
     onOpen() {
         const { contentEl } = this;
         contentEl.empty();
+        contentEl.addClass('expensica-modal');
         
         // Create title
-        contentEl.createEl('h2', { text: 'Select Date for Daily Review' });
+        contentEl.createEl('h2', { text: 'Select Date for Daily Review', cls: 'expensica-modal-title' });
         
         // Create date input
         const dateInput = contentEl.createEl('input', {
@@ -3779,9 +3825,10 @@ class DatePickerModal extends Modal {
         dateInput.value = formatDate(today);
         
         // Create submit button
-        const submitButton = contentEl.createEl('button', {
+        const submitButton = contentEl.createDiv('expensica-form-footer').createEl('button', {
             text: 'Create Review',
-            cls: 'expensica-submit-button'
+            cls: 'expensica-standard-button expensica-btn expensica-btn-primary',
+            attr: { type: 'button' }
         });
         
         // Handle submit

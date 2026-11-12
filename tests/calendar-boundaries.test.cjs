@@ -12,7 +12,7 @@ function load(filename, dependencies = {}) {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
     }).outputText;
     vm.runInNewContext(compiled, { exports, Date, Intl, console,
-        require: name => dependencies[name] || (name.endsWith('/account-calculations') ? load('src/account-calculations.ts', { './models': dependencies['./models'] || dependencies['../models'] }) : undefined) || {}
+        require: name => dependencies[name] || (name.endsWith('/calendar-ui') ? load('src/calendar-ui.ts', { './models': dependencies['./models'] || dependencies['../models'], obsidian: { setIcon() {} } }) : undefined) || (name.endsWith('/account-calculations') ? load('src/account-calculations.ts', { './models': dependencies['./models'] || dependencies['../models'] }) : undefined) || {}
     });
     return exports;
 }
@@ -23,38 +23,74 @@ const { ExpensicaDashboardView, DateRangeType } = load('src/dashboard-view.ts', 
     'chart.js': { Tooltip: { positioners: {} } }
 });
 class Element {
-    constructor() { this.children = []; }
+    constructor() { this.children = []; this.style = {}; }
     empty() { this.children.length = 0; }
     addClass() {}
     createDiv() { const child = new Element(); this.children.push(child); return child; }
+    createSpan(options) { return this.createEl('span', options); }
+    createSvg(tag, options) { return this.createEl(tag, options); }
     createEl(tag, options) {
         const child = this.createDiv();
         child.tag = tag;
         child.text = options.text;
+        child.attrs = options.attr || {};
         return child;
     }
 }
 class Heatmap {
-    constructor() { this.updates = []; this.selections = []; }
+    constructor(...args) { this.updates = []; this.getReviewRange = args[8]; }
     render() {}
-    updateMonth(date, transactions, selectedDate) { this.updates.push({ date, transactions, selectedDate }); }
-    selectDate(date) { this.selections.push(date); }
+    updateMonth(date, transactions) { this.updates.push({ date, transactions }); }
 }
 const { PremiumVisualizations } = load('src/dashboard-integration.ts', {
+    './models': models,
     './visualizations/calendar-view': { CalendarHeatmap: Heatmap }
 });
 
-function navigation(initial, onTodayClick) {
+test('daily review reads the dashboard range and filtered ledger without changing independent calendar navigation', () => {
+    const { ExpensicaDashboardView: Dashboard } = load('src/dashboard-view.ts', {
+        './models': models, './dashboard-integration': { PremiumVisualizations },
+        obsidian: { Modal: class {}, ItemView: class {} }, 'chart.js': { Tooltip: { positioners: {} } }
+    });
+    const source = [
+        { id: 'opening', date: '2024-01-31', type: 'income', amount: 100 },
+        { id: 'daily', date: '2024-02-10', type: 'expense', amount: 15 },
+        { id: 'leap', date: '2024-02-29', type: 'expense', amount: 30 }
+    ];
+    const calendarDate = models.parseLocalDate('2024-02-10', 12);
+    const view = Object.assign(Object.create(Dashboard.prototype), {
+        currentDate: calendarDate, selectedCalendarDate: calendarDate,
+        plugin: { getAllTransactions: () => source, getTransactionsForMonth: () => source.slice(1) }
+    });
+    for (const [type, start, end, expected] of [
+        [DateRangeType.TODAY, '2024-02-10', '2024-02-10', ['daily']],
+        [DateRangeType.THIS_WEEK, '2024-02-05', '2024-02-11', ['daily']],
+        [DateRangeType.THIS_MONTH, '2024-02-01', '2024-02-29', ['daily', 'leap']],
+        [DateRangeType.ALL_TIME, '2024-01-31', '2024-02-29', ['opening', 'daily', 'leap']],
+        [DateRangeType.CUSTOM, '2024-01-31', '2024-02-10', ['opening', 'daily']]
+    ]) {
+        view.dateRange = { type, startDate: models.parseLocalDate(start), endDate: models.parseLocalDate(end), label: 'Range' };
+        if (!view.premiumVisualizations) view.renderPremiumVisualizations(new Element());
+        const range = view.premiumVisualizations.calendarHeatmap.getReviewRange();
+        assert.equal(range.startDate, view.dateRange.startDate);
+        assert.equal(range.endDate, view.dateRange.endDate);
+        assert.deepEqual(Array.from(range.transactions, row => row.id), expected);
+        assert.equal(range.label, view.getResolvedDateRangeLegendLabel(view.dateRange, 'Range'));
+        assert.equal(view.currentDate, calendarDate);
+    }
+});
+
+function navigation(initial) {
     const source = models.parseLocalDate(initial, 12);
     const before = source.getTime();
     const queries = [];
     const rows = [];
     const plugin = { getTransactionsForMonth(year, month) { queries.push([year, month]); return rows; } };
     const container = new Element();
-    const instance = new PremiumVisualizations(container, plugin, source, null, undefined, onTodayClick);
+    const instance = new PremiumVisualizations(container, plugin, source);
     instance.render();
-    const buttons = container.children[0].children[0].children[1].children;
-    return { instance, source, before, queries, rows, previous: buttons[0], today: buttons[1], next: buttons[2] };
+    return { instance, source, before, queries, rows,
+        previous: { onclick: () => instance.changeMonth(-1) }, next: { onclick: () => instance.changeMonth(1) } };
 }
 
 for (const [initial, direction, expected] of [
@@ -95,42 +131,6 @@ test('repeated calendar clicks advance exactly one month and retain the clamped 
     fixture.previous.onclick();
     assert.equal(models.formatDate(fixture.instance.currentDate), '2026-03-28');
     assert.equal(fixture.source.getTime(), fixture.before);
-});
-
-test('Today keeps its existing callback and fallback behavior', () => {
-    let calls = 0;
-    const delegated = navigation('2026-01-31', () => calls++);
-    delegated.today.onclick();
-    assert.equal(calls, 1);
-    assert.equal(delegated.instance.currentDate, delegated.source);
-    const fallback = navigation('2026-01-31');
-    fallback.today.onclick();
-    assert.equal(models.formatDate(fallback.instance.currentDate), models.formatDate(new Date()));
-});
-
-test('selecting Today in the visible month updates only the day selection', () => {
-    const today = new Date();
-    const fixture = navigation(models.formatDate(today));
-    const heatmap = fixture.instance.calendarHeatmap;
-    fixture.instance.updateDate(today, true);
-    assert.equal(fixture.queries.length, 1, 'no monthly transaction reload');
-    assert.equal(heatmap.updates.length, 0, 'no month rebuild');
-    assert.deepEqual(heatmap.selections, [today]);
-    assert.equal(fixture.instance.selectedDate, today);
-});
-
-test('returning to Today from another month updates that month once with Today selected', () => {
-    const today = new Date();
-    const previous = new Date(today);
-    previous.setMonth(previous.getMonth() - 1, 1);
-    const fixture = navigation(models.formatDate(previous));
-    const heatmap = fixture.instance.calendarHeatmap;
-    fixture.instance.updateDate(today, true);
-    assert.equal(fixture.queries.length, 2);
-    assert.equal(heatmap.updates.length, 1);
-    assert.equal(heatmap.updates[0].selectedDate, today);
-    assert.equal(heatmap.selections.length, 0);
-    assert.equal(fixture.instance.calendarHeatmap, heatmap);
 });
 
 function chart(timeFormat = '24') {

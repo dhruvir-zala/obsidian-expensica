@@ -52,7 +52,7 @@ function harness(amounts = [25, 75], currency = 'USD', mini = false) {
     const view = Object.assign(Object.create(ExpensicaDashboardView.prototype), {
         plugin: { settings: { defaultCurrency: currency } },
         prepareChartCanvasSize() {}, getCssPixelValue: () => 8, getChartAnimationOptions: () => false, getChartResizeDelay: () => 0,
-        getChartAnimationDuration: () => 0, getTooltipBackgroundColor: () => '#fff',
+        getChartAnimationDuration: () => 500, getTooltipBackgroundColor: () => '#fff',
         getTooltipTitleColor: () => '#000', getTooltipBodyColor: () => '#000', getTooltipBorderColor: () => '#888',
         adjustColor: color => color, updateDashboardChartGridLayout() {}, syncChartsAfterCategoryLayoutChange() {}
     });

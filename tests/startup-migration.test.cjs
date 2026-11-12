@@ -14,7 +14,7 @@ function load(filename, dependencies = {}, globals = {}) {
     const exports = {};
     vm.runInNewContext(compiled.get(filename), { exports, Date, crypto: require('node:crypto').webcrypto,
         console: { log() {}, error() {}, warn() {} }, ...globals,
-        require(name) { return dependencies[name] || (name.endsWith('/account-calculations') ? load('src/account-calculations.ts', { './models': dependencies['./models'] || dependencies['../models'] }) : undefined) || (name.endsWith('/modal-utils') ? load('src/modal-utils.ts') : {}); }
+        require(name) { return dependencies[name] || (name.endsWith('/calendar-ui') ? load('src/calendar-ui.ts', { './models': dependencies['./models'] || dependencies['../models'], obsidian: { setIcon() {} } }) : undefined) || (name.endsWith('/account-calculations') ? load('src/account-calculations.ts', { './models': dependencies['./models'] || dependencies['../models'] }) : undefined) || (name.endsWith('/modal-utils') ? load('src/modal-utils.ts') : {}); }
     });
     return exports;
 }

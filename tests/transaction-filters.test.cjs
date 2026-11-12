@@ -29,7 +29,7 @@ const RangeType = {
 const { ExpensicaTransactionsView } = load('transactions-view.ts', {
     './account-calculations': load('account-calculations.ts', { './models': models }),
     './models': models, obsidian: { Modal: class {} }, '../main': {}, './dashboard-view': { DateRangeType: RangeType },
-    './confirmation-modal': {}, './notice': {}, './transaction-card': {},
+    './chart-tooltip': {}, './confirmation-modal': {}, './notice': {}, './transaction-card': {},
     './category-chip': {}, './category-quick-menu': {}, './modal-utils': load('modal-utils.ts')
 });
 const accounts = [

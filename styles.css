@@ -238,6 +238,10 @@
   --expensica-gap-xl: var(--size-4-6, 24px);
   --expensica-gap-2xl: var(--size-4-8, 32px);
   --expensica-gap-3xl: var(--size-4-12, 48px);
+  --expensica-panel-gap: var(--expensica-gap-md);
+  --expensica-panel-header-inset: var(--expensica-gap-md);
+  --expensica-panel-header-separator-gap: var(--expensica-gap-md);
+  --expensica-panel-header-font-size: var(--expensica-font-size);
   --expensica-card-title-margin-block-start: 0;
   --expensica-card-title-margin-inline: 0;
   --expensica-card-value-margin: 0;
@@ -258,6 +262,7 @@
   --expensica-font-size-donut-amount-mini: var(--expensica-font-size-xs);
   --expensica-donut-label-gap: var(--expensica-gap-xs);
   --expensica-card-trend-font-size: var(--font-smallest, var(--font-ui-smallest, var(--expensica-font-size-xs)));
+  --expensica-account-stat-min-width: 16ch;
   --expensica-card-trend-icon-size: 1em;
   --expensica-card-trend-icon-stroke-width: 3;
   
@@ -307,12 +312,13 @@
 
 /* Dashboard Layout */
 .expensica-dashboard {
+  container: expensica-dashboard / inline-size;
   padding: var(--expensica-gap-2xl);
   max-width: 1200px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: var(--expensica-gap-lg);
+  gap: var(--expensica-panel-gap);
   background-color: transparent;
 }
 
@@ -569,8 +575,7 @@
   letter-spacing: 0.02em;
 }
 
-.expensica-card-title svg,
-.expensica-card-title span.emoji {
+.expensica-card-title svg {
   width: 16px;
   height: 16px;
   opacity: 0.7;
@@ -639,7 +644,7 @@
 .expensica-dashboard-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--expensica-gap-lg);
+  gap: var(--expensica-panel-gap);
   margin-bottom: 0;
   align-items: stretch;
 }
@@ -651,7 +656,7 @@
 .expensica-chart-container {
   background-color: var(--expensica-bg-primary);
   border-radius: var(--expensica-radius-lg);
-  padding: var(--expensica-gap-lg);
+  padding: var(--expensica-gap-md);
   border: 1px solid var(--expensica-border-primary);
   box-shadow: var(--expensica-shadow-panel-rest);
   display: flex;
@@ -729,14 +734,16 @@
   display: inline-flex;
 }
 
-.expensica-chart-type-options {
+.expensica-chart-type-options,
+.expensica-date-range-options {
   left: 0;
   right: auto;
   background: var(--background-primary);
   background-color: var(--background-primary);
 }
 
-.expensica-chart-type-option {
+.expensica-chart-type-option,
+.expensica-date-range-option {
   display: block;
   width: 100%;
   border: none;
@@ -746,6 +753,7 @@
   text-align: left;
 }
 
+.expensica-date-range-options button.expensica-date-range-option,
 .expensica-chart-type-options button.expensica-chart-type-option,
 .expensica-chart-type-options button.shadcn-date-range-option {
   box-shadow: none;
@@ -763,6 +771,9 @@
   outline: none;
 }
 
+.expensica-date-range-options button.expensica-date-range-option:hover,
+.expensica-date-range-options button.expensica-date-range-option:focus-visible,
+.expensica-date-range-options button.expensica-date-range-option.shadcn-date-range-option-active,
 .expensica-chart-type-options button.expensica-chart-type-option:hover,
 .expensica-chart-type-options button.expensica-chart-type-option:focus-visible,
 .expensica-chart-type-options button.expensica-chart-type-option.is-active,
@@ -802,22 +813,38 @@
   flex: 0 1 auto;
   height: auto;
   max-height: var(--expensica-chart-height);
-  min-height: calc(var(--expensica-chart-height) * 0.75);
+  min-height: 0;
 }
 
-.expensica-cumulative-expenses-chart-container .expensica-canvas-container {
-  margin-left: auto;
-  margin-right: auto;
+.expensica-income-expense-chart-container .expensica-canvas-container canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.expensica-cash-flow-panel > .expensica-canvas-container {
+  align-self: center;
+  width: 100%;
   max-width: 600px;
   max-height: 200px;
-  min-height: 200px;
+  min-height: 0;
+  aspect-ratio: var(--expensica-chart-aspect-ratio);
+}
+
+.expensica-cash-flow-panel > .expensica-canvas-container.is-empty {
+  aspect-ratio: auto;
+  max-height: none;
+}
+
+.expensica-cash-flow-panel .expensica-empty-charts {
+  min-height: 0;
+  padding: var(--expensica-gap-md);
 }
 
 .expensica-chart-grid-same-row .expensica-income-expense-chart-container .expensica-canvas-container {
   aspect-ratio: auto;
   flex: 1 1 auto;
   max-height: none;
-  min-height: calc(var(--expensica-chart-height) * 0.75);
+  min-height: 0;
 }
 
 .expensica-empty-charts {
@@ -1170,13 +1197,14 @@ button.expensica-category-chip {
 
 .expensica-cumulative-expenses-legend {
   display: grid;
-  grid-template-columns: repeat(var(--expensica-cumulative-legend-columns, 1), minmax(0, 130px));
+  grid-template-columns: repeat(var(--expensica-cumulative-legend-columns, 1), minmax(0, 1fr));
+  align-self: center;
   justify-content: center;
   justify-items: stretch;
-  gap: var(--expensica-gap-sm) var(--expensica-gap-md);
-  margin-top: var(--expensica-gap-md);
+  gap: var(--expensica-gap-md);
+  margin: 0;
   max-width: 100%;
-  width: 100%;
+  width: max-content;
   flex: none;
 }
 
@@ -1187,7 +1215,6 @@ button.expensica-category-chip {
   gap: var(--expensica-gap-sm);
   width: 100%;
   min-width: 0;
-  max-width: 130px;
   cursor: default;
 }
 
@@ -1206,53 +1233,6 @@ button.expensica-category-chip {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.expensica-chart-range-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--expensica-gap-xs, 4px);
-  margin-top: var(--expensica-gap-md);
-  margin-bottom: var(--expensica-gap-lg);
-}
-
-button.expensica-chart-range-button {
-  appearance: none;
-  -webkit-appearance: none;
-  width: auto;
-  padding: 6px 10px;
-  min-width: 0;
-  border: none;
-  border-radius: 10px;
-  background: transparent;
-  background-color: transparent;
-  color: var(--text-faint);
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 1.2;
-  cursor: pointer;
-  box-shadow: none;
-  text-shadow: none;
-  outline: none;
-  transition: background-color 0.15s ease, color 0.15s ease;
-}
-
-button.expensica-chart-range-button:hover,
-button.expensica-chart-range-button:focus,
-button.expensica-chart-range-button:focus-visible,
-button.expensica-chart-range-button:active {
-  background: var(--background-modifier-hover);
-  background-color: var(--background-modifier-hover);
-  color: var(--text-normal);
-  outline: none;
-}
-
-button.expensica-chart-range-button.is-active {
-  background: var(--background-modifier-hover);
-  background-color: var(--background-modifier-hover);
-  color: var(--text-normal);
-  outline: none;
 }
 
 .expensica-donut-category-legend .expensica-category-chip {
@@ -2027,6 +2007,26 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
 
 .expensica-modal-title-icon {
   opacity: 0.7;
+  color: var(--interactive-accent);
+}
+
+.expensica-ui-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.expensica-ui-icon > svg {
+  flex-shrink: 0;
+}
+
+.expensica-date-field-icon,
+.expensica-time-field-icon,
+.expensica-date-selector button svg,
+.expensica-time-selector-mode-toggle svg,
+.shadcn-date-range-current svg {
+  color: var(--interactive-accent);
 }
 
 .expensica-form-group {
@@ -2467,7 +2467,15 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
   flex-shrink: 0;
 }
 
-/* Shared calendar date selector */
+/* Calendar foundation shared by the picker and spending heatmap. */
+:root {
+  --expensica-date-calendar-size: calc(var(--expensica-gap-2xl) * 9 + var(--expensica-gap-lg));
+  --expensica-date-control-size: calc(var(--expensica-gap-2xl) + var(--expensica-gap-md) + var(--expensica-gap-sm));
+  --expensica-date-icon-size: var(--expensica-font-size-sm);
+  --expensica-calendar-day-gap: 0px;
+}
+
+/* Date picker modal */
 .modal.expensica-date-selector-modal {
   --expensica-primary: var(--interactive-accent);
   --expensica-text-primary: var(--text-normal);
@@ -2476,10 +2484,7 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
   --expensica-bg-secondary: var(--background-secondary);
   --expensica-bg-tertiary: var(--background-modifier-hover);
   --expensica-border-primary: var(--background-modifier-border);
-  --expensica-date-calendar-size: calc(var(--expensica-gap-2xl) * 9 + var(--expensica-gap-lg));
-  --expensica-date-control-size: calc(var(--expensica-gap-2xl) + var(--expensica-gap-md) + var(--expensica-gap-sm));
   --expensica-date-value-scale: 1.3;
-  --expensica-date-icon-size: var(--expensica-font-size-sm);
   box-sizing: border-box;
   width: min(calc(var(--expensica-date-calendar-size) + var(--expensica-gap-xl) * 2), calc(100vw - var(--expensica-gap-2xl)));
   max-width: calc(100vw - var(--expensica-gap-2xl));
@@ -2552,7 +2557,8 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
   border-color: var(--expensica-primary);
 }
 
-.expensica-date-selector button:is(.expensica-date-selector-edit, .expensica-date-selector-previous, .expensica-date-selector-next) {
+.expensica-date-selector button.expensica-date-selector-edit,
+button.expensica-calendar-navigation-button {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2561,18 +2567,23 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
   min-width: 0;
   height: var(--expensica-date-control-size);
   padding: 0;
-  border: 1px solid var(--expensica-border-primary);
+  border: 1px solid var(--background-modifier-border);
   border-radius: var(--expensica-radius-sm);
-  background-color: var(--expensica-bg-primary);
-  color: var(--expensica-text-primary);
+  background-color: var(--background-primary);
+  color: var(--text-normal);
   box-shadow: none;
   cursor: pointer;
 }
 
-.expensica-date-selector button svg {
+:is(.expensica-date-selector, .expensica-heatmap) button svg,
+.expensica-calendar-navigation-button svg {
   width: var(--expensica-date-icon-size);
   height: var(--expensica-date-icon-size);
   flex-shrink: 0;
+}
+
+.expensica-calendar-navigation-button svg {
+  color: var(--interactive-accent);
 }
 
 .expensica-date-selector-navigation {
@@ -2601,7 +2612,7 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
   text-overflow: ellipsis;
 }
 
-.expensica-date-selector button.expensica-date-selector-year {
+:is(.expensica-date-selector, .expensica-heatmap) button.expensica-date-selector-year {
   flex-shrink: 0;
   min-width: 0;
   height: var(--expensica-date-control-size);
@@ -2632,6 +2643,7 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
 .expensica-date-selector-days {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--expensica-calendar-day-gap);
 }
 
 .expensica-date-selector-weekdays {
@@ -2651,7 +2663,7 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
   gap: var(--expensica-gap-md);
 }
 
-.expensica-date-selector button:is(.expensica-date-selector-day, .expensica-date-selector-year-option) {
+:is(.expensica-date-selector, .expensica-heatmap) button:is(.expensica-date-selector-day, .expensica-date-selector-year-option) {
   position: relative;
   display: flex;
   align-items: center;
@@ -2673,13 +2685,14 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
   cursor: pointer;
 }
 
-.expensica-date-selector button.expensica-date-selector-day {
+:is(.expensica-date-selector, .expensica-heatmap) button.expensica-date-selector-day {
   aspect-ratio: 1;
   border-radius: 50%;
 }
 
-.expensica-date-selector button:is(.expensica-date-selector-edit, .expensica-date-selector-previous, .expensica-date-selector-next, .expensica-date-selector-year, .expensica-date-selector-day, .expensica-date-selector-year-option):hover:not(:disabled) {
-  background-color: var(--expensica-bg-tertiary);
+.expensica-date-selector button:is(.expensica-date-selector-edit, .expensica-date-selector-year, .expensica-date-selector-day, .expensica-date-selector-year-option):hover:not(:disabled),
+button.expensica-calendar-navigation-button:hover:not(:disabled) {
+  background-color: var(--background-modifier-hover);
 }
 
 .expensica-date-selector button:is(.expensica-date-selector-day, .expensica-date-selector-year-option).is-selected {
@@ -2700,13 +2713,15 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
   pointer-events: none;
 }
 
-.expensica-date-selector button:disabled {
+:is(.expensica-date-selector, .expensica-heatmap) button:disabled,
+button.expensica-calendar-navigation-button:disabled {
   cursor: default;
   opacity: var(--disabled-opacity, 0.5);
 }
 
-.expensica-date-selector :is(button, input):focus-visible {
-  outline: var(--expensica-gap-xs) solid var(--expensica-primary);
+:is(.expensica-date-selector, .expensica-heatmap) :is(button, input):focus-visible,
+button.expensica-calendar-navigation-button:focus-visible {
+  outline: var(--expensica-gap-xs) solid var(--interactive-accent);
   outline-offset: calc(var(--expensica-gap-xs) * -1);
 }
 
@@ -2932,6 +2947,58 @@ button.expensica-standard-button.expensica-btn.expensica-btn-danger-solid.expens
   width: 100%;
   max-width: 300px;
   position: relative;
+}
+
+.expensica-currency-select {
+  position: relative;
+  min-width: 0;
+}
+
+.expensica-currency-current {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.expensica-currency-current .expensica-select-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
+.expensica-category-quick-menu.expensica-currency-menu {
+  position: absolute;
+  top: calc(100% + var(--expensica-gap-sm));
+  left: 0;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.expensica-currency-menu[hidden] {
+  display: none;
+}
+
+.expensica-currency-menu .expensica-category-quick-menu-list {
+  max-height: min(280px, 45vh);
+  overscroll-behavior: contain;
+}
+
+.expensica-settings-container .currency-dropdown-container button.expensica-settings-select-button {
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--expensica-radius-sm);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: var(--expensica-font-size-sm);
+  box-shadow: var(--expensica-shadow-control);
+  transform: none;
+}
+
+.expensica-settings-container .currency-dropdown-container button.expensica-settings-select-button:hover {
+  border-color: var(--background-modifier-border-hover);
+  background: var(--background-modifier-hover);
+  transform: none;
 }
 
 .currency-symbol {
@@ -3235,63 +3302,6 @@ to { opacity: 1; transform: translateY(0); }
   
 }
 
-/* Calendar Heatmap Styles */
-
-.expensica-calendar-container {
-  background-color: var(--expensica-bg-primary);
-  border-radius: var(--expensica-radius-lg);
-  padding: var(--expensica-gap-lg);
-  border: 1px solid var(--expensica-border-primary);
-  margin-bottom: 0;
-}
-
-.expensica-calendar-flex-container {
-  display: flex;
-  gap: var(--expensica-gap-lg);
-  align-items: flex-start;
-  flex-wrap: wrap;
-  margin-bottom: 0;
-}
-
-.expensica-calendar-flex-container > .expensica-calendar-container {
-  margin-bottom: 0;
-}
-
-.expensica-calendar-flex-container.expensica-calendar-stacked {
-  justify-content: safe center;
-}
-
-.expensica-calendar-flex-container.expensica-calendar-stacked > .expensica-calendar-grid-container {
-  margin-left: 0;
-  margin-right: 0;
-}
-
-.expensica-calendar-svg {
-  display: block;
-  width: 100%;
-  min-width: var(--expensica-panel-min-width, 75%);
-  max-width: 100%;
-  height: auto;
-}
-
-.expensica-calendar-tooltip .tooltip-comparison {
-  margin-top: 6px;
-  font-size: 12px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  display: inline-block;
-}
-
-.tooltip-higher {
-  background-color: var(--expensica-error-light);
-  color: var(--expensica-error);
-}
-
-.tooltip-lower {
-  background-color: var(--expensica-success-light);
-  color: var(--expensica-success);
-}
-
 .expensica-calendar-details-total {
   font-size: 16px;
   display: flex;
@@ -3377,22 +3387,73 @@ to { opacity: 1; transform: translateY(0); }
 .expensica-breakdown-chart {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 12px;
+  gap: var(--expensica-gap-md);
+  margin-top: var(--expensica-gap-md);
+}
+
+.expensica-category-bar-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--expensica-gap-md);
+  min-width: 0;
 }
 
 .expensica-category-bar {
+  display: flex;
+  align-items: center;
   position: relative;
   height: 28px;
   background-color: var(--background-primary);
   border-radius: 6px;
-  overflow: hidden;
+  overflow: visible;
   box-shadow: inset 0 0 0 1px var(--background-modifier-border);
-  transition: transform 0.15s ease;
 }
 
-.expensica-category-bar:hover {
-  transform: scale(1.01);
+.expensica-category-segment {
+  display: flex;
+  flex: 0 1 var(--category-percentage);
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: 100%;
+  container-type: inline-size;
+  background-color: var(--category-color);
+  color: var(--text-normal);
+  font-size: var(--expensica-font-size-xs);
+  text-shadow: 0 0 var(--expensica-gap-sm) var(--background-primary);
+  cursor: pointer;
+  position: relative;
+}
+
+.expensica-category-segment:first-child {
+  border-start-start-radius: inherit;
+  border-end-start-radius: inherit;
+}
+
+.expensica-category-segment:last-child {
+  border-start-end-radius: inherit;
+  border-end-end-radius: inherit;
+}
+
+.expensica-category-segment.is-active {
+  z-index: 1;
+}
+
+.expensica-category-segment:focus-visible {
+  outline: var(--expensica-gap-xs) solid var(--interactive-accent);
+  outline-offset: calc(-1 * var(--expensica-gap-xs));
+}
+
+.expensica-category-segment-percentage {
+  pointer-events: none;
+  visibility: hidden;
+}
+
+@container (min-width: 4em) {
+  .expensica-category-segment-percentage {
+    visibility: visible;
+  }
 }
 
 .expensica-bar-fill {
@@ -3585,16 +3646,6 @@ to {
 
 /* Responsive adjustments for visualizations */
 
-@media screen and (max-width: 768px) {
-  .expensica-calendar-flex-container {
-      flex-direction: column;
-  }
-  
-  .expensica-calendar-details-container {
-      max-height: none;
-  }
-}
-
 /* Date Range Selector Styles */
 .expensica-date-range-container {
   position: relative;
@@ -3695,31 +3746,68 @@ to {
 }
 
 .expensica-export-modal .expensica-modal-title {
-  margin-bottom: 32px;
+  font-size: var(--expensica-font-size-xl);
+  margin-bottom: var(--expensica-gap-xl);
 }
 
 .expensica-export-modal .expensica-form {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: var(--expensica-gap-xl);
 }
 
-.expensica-export-modal .expensica-setting-group {
-  background-color: var(--background-secondary);
-  border-radius: var(--expensica-radius-lg);
-  padding: 20px;
-  box-shadow: var(--expensica-shadow);
-  border: 1px solid var(--background-modifier-border);
+.expensica-export-modal .expensica-export-label {
+  display: flex;
+  align-items: center;
+  gap: var(--expensica-gap-md);
+  color: var(--text-normal);
+  font-size: var(--expensica-font-size-sm);
+  font-weight: 500;
 }
 
 .expensica-export-modal .expensica-setting-group-title {
-  font-size: 16px;
+  font-size: var(--expensica-font-size-lg);
   font-weight: 600;
   color: var(--text-normal);
-  margin: 0 0 16px 0;
+  margin: 0 0 var(--expensica-gap-lg);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--expensica-gap-md);
+}
+
+.expensica-export-modal .expensica-export-panel-row,
+.expensica-export-modal .expensica-export-category-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--expensica-gap-lg);
+}
+
+.expensica-export-modal .expensica-export-panel-heading {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.expensica-export-category-group-header .expensica-setting-group-title {
+  margin: 0;
+}
+
+.expensica-export-panel-row > .expensica-export-dropdown {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+}
+
+.expensica-export-panel-row > .expensica-export-dropdown .shadcn-date-range-current {
+  width: auto;
+}
+
+.expensica-export-panel-row > .expensica-export-dropdown .shadcn-date-range-options {
+  left: auto;
+  right: 0;
+}
+
+.expensica-export-category-group-header {
+  margin-bottom: var(--expensica-gap-md);
 }
 
 .expensica-export-modal .setting-item {
@@ -3735,7 +3823,7 @@ to {
 .expensica-export-modal .setting-item-name {
   font-weight: 500;
   color: var(--text-normal);
-  font-size: 14px;
+  font-size: var(--expensica-font-size-sm);
 }
 
 .expensica-export-modal .setting-item-description {
@@ -3748,15 +3836,17 @@ to {
 .expensica-export-modal .expensica-select-all {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 0;
-  margin-bottom: 16px;
+  gap: var(--expensica-gap-md);
+  padding: var(--expensica-gap-md) 0;
+  margin-bottom: var(--expensica-gap-lg);
+  font-size: var(--expensica-font-size-sm);
   border-bottom: 1px solid var(--background-modifier-border);
 }
 
 .expensica-export-modal .expensica-select-all input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
+  width: var(--expensica-font-size);
+  height: var(--expensica-font-size);
+  margin: 0;
   cursor: pointer;
 }
 
@@ -3766,53 +3856,49 @@ to {
   cursor: pointer;
 }
 
-.expensica-export-modal .expensica-category-checkbox-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 12px;
-  margin-top: 16px;
-}
-
-.expensica-export-modal .expensica-category-checkbox {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background-color: var(--background-primary);
-  border-radius: 8px;
-  border: 1px solid var(--background-modifier-border);
-  transition: var(--expensica-transition);
-}
-
-.expensica-export-modal .expensica-category-checkbox:hover {
-  background-color: var(--background-modifier-hover);
-  transform: translateY(-1px);
-  box-shadow: var(--expensica-shadow);
-}
-
-.expensica-export-modal .expensica-category-checkbox input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-}
-
-.expensica-export-modal .expensica-category-checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
+.expensica-export-modal .expensica-export-group-select-all {
+  flex: 0 0 auto;
+  padding: 0;
+  margin: 0;
+  border: 0;
   color: var(--text-normal);
+  font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
 }
 
-.expensica-export-modal .category-emoji {
-  font-size: 16px;
+.expensica-export-modal .expensica-export-category-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 112px), 130px));
+  justify-content: flex-start;
 }
 
-.expensica-export-modal .expensica-form-footer {
-  margin-top: 32px;
-  padding-top: 24px;
-  border-top: 1px solid var(--background-modifier-border);
+.expensica-export-modal .expensica-category-group + .expensica-category-group {
+  margin-top: var(--expensica-gap-lg);
+}
+
+.expensica-export-modal .expensica-export-date-description {
+  color: var(--text-muted);
+  font-size: var(--expensica-font-size-sm);
+  margin: var(--expensica-gap-sm) 0 0;
+}
+
+.expensica-export-dropdown .shadcn-date-range-selector {
+  position: relative;
+}
+
+.expensica-export-dropdown .shadcn-date-range-options {
+  max-height: min(360px, 50vh);
+  overflow-y: auto;
+}
+
+.expensica-export-dropdown .shadcn-date-range-current {
+  max-width: 100%;
+}
+
+.expensica-export-dropdown .shadcn-date-range-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Responsive adjustments for export modal */
@@ -3822,249 +3908,23 @@ to {
     margin: 0 16px;
   }
   
-  .expensica-export-modal .expensica-category-checkbox-grid {
-    grid-template-columns: 1fr;
+  .expensica-export-modal .setting-item {
+    flex-wrap: wrap;
+    gap: var(--expensica-gap-md);
   }
-  
+
+  .expensica-export-modal .setting-item-control {
+    max-width: 100%;
+  }
+
   .expensica-export-modal .expensica-form-footer {
-    flex-direction: column;
-  }
-  
-  .expensica-export-modal .expensica-btn {
-    width: 100%;
+    flex-wrap: wrap;
   }
 }
-
-/* Calendar Heatmap Container */
-.expensica-calendar-container {
-  background-color: var(--expensica-bg-primary);
-  border-radius: var(--expensica-radius-lg);
-  padding: var(--expensica-gap-lg);
-  border: 1px solid var(--expensica-border-primary);
-  margin-bottom: var(--expensica-gap-3xl);
-}
-
-/* Calendar Grid */
-.expensica-calendar-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: var(--expensica-gap-md);
-  margin-bottom: var(--expensica-gap-xl);
-}
-
-/* Calendar Header */
-.expensica-calendar-header {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: var(--expensica-gap-md);
-  margin-bottom: var(--expensica-gap-lg);
-  padding-bottom: var(--expensica-gap-lg);
-  border-bottom: 1px solid var(--expensica-border-secondary);
-}
-
-.expensica-calendar-header span {
-  text-align: center;
-  font-size: var(--expensica-font-size);
-  color: var(--expensica-text-secondary);
-  font-weight: 500;
-  padding: var(--expensica-gap-sm);
-}
-
-/* Calendar Days */
-.expensica-calendar-day {
-  aspect-ratio: 1;
-  border-radius: var(--expensica-radius);
-  background-color: var(--expensica-bg-secondary);
-  transition: var(--expensica-transition);
-  cursor: pointer;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid transparent;
-  min-width: 40px;
-  min-height: 40px;
-  padding: 0;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-  overflow: hidden;
-}
-
-.expensica-calendar-day-number {
-  font-size: var(--expensica-font-size);
-  font-weight: 500;
-  color: var(--expensica-text-primary);
-  line-height: 1;
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  z-index: 1;
-  pointer-events: none;
-}
-
-/* Add a clickable overlay that covers the entire cell */
-.expensica-calendar-day::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 2;
-  cursor: pointer;
-}
-
-/* Ensure hover and active states work properly */
-.expensica-calendar-day:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--expensica-shadow-sm);
-  border-color: var(--expensica-border-primary);
-}
-
-.expensica-calendar-day:active {
-  transform: translateY(0);
-  background-color: var(--expensica-bg-tertiary);
-}
-
-.expensica-calendar-day.today {
-  border: 2px solid var(--expensica-primary);
-  background-color: var(--expensica-primary-light);
-}
-
-.expensica-calendar-day.selected {
-  border: 2px solid var(--expensica-primary);
-  background-color: var(--expensica-primary-lighter);
-}
-
-/* Mobile Optimizations */
-@media screen and (max-width: 768px) {
-  .expensica-calendar-day {
-    min-width: 42px;
-    min-height: 42px;
-    padding: var(--expensica-gap-sm);
-  }
-
-  .expensica-calendar-day-number {
-    font-size: var(--expensica-font-size-sm);
-  }
-  
-  .expensica-calendar-container {
-    padding: 12px; /* Reduced padding on mobile */
-  }
-}
-
-/* Day Details Panel */
-.expensica-calendar-details {
-  background-color: var(--expensica-bg-primary);
-  border-radius: var(--expensica-radius-lg);
-  padding: var(--expensica-gap-xl);
-  margin-top: var(--expensica-gap-xl);
-  border: 1px solid var(--expensica-border-primary);
-  box-shadow: var(--expensica-shadow-sm);
-}
-
-.expensica-calendar-details-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--expensica-gap-lg);
-  padding-bottom: var(--expensica-gap-lg);
-  border-bottom: 1px solid var(--expensica-border-secondary);
-}
-
-.expensica-calendar-details-date {
-  font-size: var(--expensica-font-size-lg);
-  font-weight: 600;
-  color: var(--expensica-text-primary);
-}
-
 .expensica-calendar-details-amount {
   font-size: var(--expensica-font-size-lg);
   font-weight: 600;
   color: var(--expensica-error);
-}
-
-.expensica-calendar-details-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: var(--expensica-gap-2xl);
-  text-align: center;
-  color: var(--expensica-text-secondary);
-}
-
-.expensica-calendar-details-empty-icon {
-  font-size: 32px;
-  margin-bottom: var(--expensica-gap-lg);
-}
-
-.expensica-calendar-details-empty-text {
-  font-size: var(--expensica-font-size);
-  margin: 0;
-}
-
-/* Category Breakdown */
-.expensica-calendar-categories {
-  margin-top: var(--expensica-gap-xl);
-}
-
-.expensica-calendar-category {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--expensica-gap-lg);
-  border-radius: var(--expensica-radius);
-  margin-bottom: var(--expensica-gap-sm);
-  background-color: var(--expensica-bg-secondary);
-  transition: var(--expensica-transition);
-}
-
-.expensica-calendar-category:hover {
-  background-color: var(--expensica-bg-tertiary);
-  transform: translateX(4px);
-}
-
-.expensica-calendar-category-name {
-  display: flex;
-  align-items: center;
-  gap: var(--expensica-gap-sm);
-  font-weight: 500;
-  color: var(--expensica-text-primary);
-}
-
-.expensica-calendar-category-amount {
-  color: var(--expensica-text-secondary);
-  font-weight: 500;
-}
-
-/* Legend */
-.expensica-calendar-legend {
-  display: flex;
-  align-items: center;
-  gap: var(--expensica-gap-lg);
-  margin-top: var(--expensica-gap-xl);
-  padding-top: var(--expensica-gap-lg);
-  border-top: 1px solid var(--expensica-border-secondary);
-}
-
-.expensica-calendar-legend-item {
-  display: flex;
-  align-items: center;
-  gap: var(--expensica-gap-sm);
-  font-size: var(--expensica-font-size-sm);
-  color: var(--expensica-text-secondary);
-}
-
-.expensica-calendar-legend-color {
-  width: 16px;
-  height: 16px;
-  border-radius: var(--expensica-radius-sm);
 }
 
 /* View All Transactions button */
@@ -4114,7 +3974,7 @@ to {
     max-width: 100%;
     display: flex;
     flex-direction: column;
-    gap: var(--expensica-gap-2xl);
+    gap: var(--expensica-panel-gap);
     height: auto;
     overflow: visible;
 }
@@ -4147,37 +4007,12 @@ to {
 .is-mobile .expensica-premium-visualizations,
 .is-mobile .expensica-chart-container,
 .is-mobile .expensica-canvas-container,
-.is-mobile .expensica-calendar-container,
-.is-mobile .expensica-calendar-flex-container,
-.is-mobile .expensica-calendar-grid-container,
-.is-mobile .expensica-calendar-details-container,
 .is-mobile .expensica-category-breakdown,
 .is-mobile .expensica-breakdown-chart {
   min-width: 0;
   max-width: 100%;
 }
 
-.is-mobile .expensica-calendar-flex-container {
-  flex-direction: column;
-}
-
-.is-mobile .expensica-calendar-grid-container,
-.is-mobile .expensica-calendar-details-container {
-  flex: 1 1 auto;
-  width: 100%;
-  height: auto;
-  max-height: none;
-}
-
-.is-mobile .expensica-calendar-grid-container {
-  overflow: hidden;
-}
-
-.is-mobile .expensica-calendar-details-container {
-  overflow-y: visible;
-}
-
-.is-mobile .expensica-calendar-svg,
 .is-mobile .expensica-canvas-container canvas {
   display: block;
   max-width: 100%;
@@ -4194,33 +4029,6 @@ to {
 .is-mobile .expensica-card-value {
   font-size: clamp(24px, 7vw, 30px);
   line-height: 1.15;
-}
-
-.is-mobile .expensica-tabs {
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  min-height: 44px;
-  align-items: flex-start;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-  gap: var(--expensica-gap-sm);
-  padding-bottom: 2px;
-}
-
-.is-mobile .expensica-tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.is-mobile .expensica-tab {
-  display: inline-flex;
-  flex: 0 0 auto;
-  white-space: nowrap;
-  min-width: max-content;
-  visibility: visible;
-  opacity: 1;
 }
 
 .is-mobile .expensica-category-chart-layout {
@@ -4252,23 +4060,6 @@ to {
   max-width: 130px;
   padding: var(--expensica-category-chip-padding-y) var(--expensica-category-chip-padding-x);
   font-size: var(--expensica-category-chip-font-size);
-}
-
-.is-mobile .expensica-cumulative-expenses-legend {
-  grid-template-columns: repeat(var(--expensica-cumulative-legend-columns, 1), minmax(0, 112px));
-  column-gap: var(--expensica-gap-md);
-}
-
-.is-mobile .expensica-cumulative-expenses-legend-item {
-  max-width: 112px;
-}
-
-.is-mobile .expensica-chart-range-buttons {
-  gap: var(--expensica-gap-xs, 4px);
-}
-
-.is-mobile .expensica-chart-range-button {
-  padding: 6px 8px;
 }
 
 .is-mobile .expensica-chart-legend-column {
@@ -4350,19 +4141,6 @@ to {
     color: var(--expensica-success);
 }
 
-.shadcn-header {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: var(--expensica-gap-md);
-}
-
-.shadcn-header .shadcn-title-section,
-.shadcn-header .shadcn-actions {
-    margin-top: 0;
-    margin-bottom: 0;
-    width: 100%;
-}
-
 /* Filter Section */
 .expensica-filter-section {
     background-color: var(--background-primary);
@@ -4379,7 +4157,7 @@ to {
     justify-content: space-between;
     align-items: center;
     margin-bottom: var(--expensica-gap-md);
-    padding-bottom: var(--expensica-gap-md);
+    padding-bottom: var(--expensica-panel-header-separator-gap);
     border-bottom: 1px solid var(--expensica-border-secondary);
 }
 
@@ -4398,7 +4176,7 @@ to {
 
 .expensica-section-title {
     margin: 0;
-    font-size: var(--expensica-font-size-lg);
+    font-size: var(--expensica-panel-header-font-size);
     font-weight: 600;
     color: var(--text-normal);
 }
@@ -4827,8 +4605,8 @@ to {
 }
 
 .is-mobile .expensica-pagination {
-    justify-content: flex-start;
-    flex-wrap: wrap;
+    justify-content: space-between;
+    flex-wrap: nowrap;
     overflow: visible;
     padding: var(--expensica-gap-md) var(--expensica-gap-2xl);
     row-gap: var(--expensica-gap-2xl);
@@ -4836,8 +4614,9 @@ to {
 
 .is-mobile .expensica-pagination-nav {
     justify-content: flex-start;
-    flex: 0 0 auto;
-    flex-wrap: nowrap;
+    flex: 0 1 auto;
+    min-width: 0;
+    flex-wrap: wrap;
     gap: var(--expensica-gap-md);
 }
 
@@ -4850,15 +4629,11 @@ to {
 }
 
 .is-mobile .expensica-items-per-page {
-    flex: 0 0 100%;
-    justify-content: flex-start;
-    width: 100%;
+    flex: 0 0 auto;
+    justify-content: flex-end;
+    width: auto;
+    margin-left: auto;
     white-space: nowrap;
-}
-
-.is-mobile .expensica-calendar-container {
-    padding-left: 8px;
-    padding-right: 8px;
 }
 
 /* Transactions View Styles */
@@ -4991,13 +4766,7 @@ to {
     outline: none;
     border-color: var(--interactive-accent);
 }
-
 /* Week numbers styles */
-.week-label, .week-number {
-    font-family: var(--font-interface);
-    font-size: 12px;
-    color: var(--text-muted);
-}
 
 .expensica-note {
     font-size: 13px;
@@ -5076,13 +4845,7 @@ to {
     cursor: pointer;
     padding: 0;
 }
-
 /* Week numbers styles */
-.week-label, .week-number {
-    font-family: var(--font-interface);
-    font-size: 12px;
-    color: var(--text-muted);
-}
 
 .expensica-note {
     font-size: 13px;
@@ -5435,7 +5198,8 @@ to {
 /* Budget Feature Styles */
 .expensica-tabs {
     display: flex;
-    gap: 8px;
+    flex-wrap: wrap;
+    gap: var(--expensica-gap-md);
     padding: 0;
     margin-bottom: var(--expensica-gap-sm);
     position: relative;
@@ -5587,7 +5351,7 @@ to {
 
 .expensica-account-card-name {
     color: var(--text-normal);
-    font-weight: 500;
+    font-weight: var(--font-normal, 400);
 }
 
 .expensica-account-card-type,
@@ -5818,14 +5582,15 @@ to {
     gap: var(--expensica-gap-sm);
 }
 
-.expensica-categories-tab .expensica-categories-list > .expensica-categories-unused-title {
+.expensica-categories-tab .expensica-categories-list > .expensica-categories-unused-title,
+.expensica-categories-tab .expensica-categories-list > .expensica-categories-top-title {
     margin-top: var(--expensica-gap-lg);
     margin-bottom: var(--expensica-gap-lg);
 }
 
 .expensica-category-card-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--expensica-gap-sm);
     align-items: stretch;
 }
@@ -5845,43 +5610,6 @@ to {
     box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px,
                 rgba(15, 15, 15, 0.05) 0px 2px 4px;
     transition: all 0.2s ease;
-}
-
-button.expensica-category-card-edit-button {
-    width: auto;
-    aspect-ratio: 1 / 1;
-    align-self: stretch;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: var(--expensica-radius);
-    background-color: var(--background-secondary);
-    color: var(--text-muted);
-    box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px,
-                rgba(15, 15, 15, 0.05) 0px 2px 4px;
-    transition: all 0.2s ease;
-    cursor: pointer;
-}
-
-button.expensica-category-card-edit-button:hover,
-button.expensica-category-card-edit-button:focus-visible {
-    border-color: var(--background-modifier-border-hover);
-    background: var(--background-modifier-hover);
-    background-color: var(--background-modifier-hover);
-    background-image: none;
-    color: var(--text-normal);
-    outline: none;
-}
-
-button.expensica-category-card-edit-button:active {
-    border-color: var(--background-modifier-border-hover, var(--background-modifier-border));
-    background: var(--background-modifier-hover);
-    background-color: var(--background-modifier-hover);
-    background-image: none;
-    color: var(--text-normal);
-    outline: none;
 }
 
 .expensica-category-card:hover {
@@ -6613,16 +6341,6 @@ button.expensica-category-card-edit-button:active {
   outline: none;
 }
 
-.expensica-emoji-picker-modal .button-container .expensica-btn-primary {
-  background-color: var(--interactive-accent);
-  color: var(--text-on-accent);
-}
-
-.expensica-emoji-picker-modal .button-container .expensica-btn-primary:hover {
-  background-color: var(--interactive-accent-hover);
-  color: var(--text-on-accent);
-}
-
 .expensica-form-footer .expensica-btn-primary:hover {
   background-color: var(--interactive-accent-hover);
 }
@@ -6931,21 +6649,11 @@ button.expensica-category-card-edit-button:active {
     align-items: center;
 }
 
-.expensica-chart-title::before {
-    content: '';
-    display: inline-block;
-    width: 4px;
-    height: 16px;
-    background: var(--text-accent);
-    margin-right: 10px;
-    border-radius: 2px;
-}
-
 .expensica-chart-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 15px 20px;
+    padding: 0 0 var(--expensica-panel-header-separator-gap);
     border-bottom: 1px solid var(--background-modifier-border);
 }
 
@@ -7460,9 +7168,22 @@ button.expensica-category-card-edit-button:active {
 .expensica-dashboard-transactions-tab .expensica-search-controls {
     display: flex;
     align-items: center;
-    gap: 0;
+    gap: var(--expensica-gap-md);
     flex-wrap: nowrap;
     width: 100%;
+}
+
+.expensica-dashboard-transactions-tab .expensica-select-page {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 36px;
+    min-height: 36px;
+    cursor: pointer;
+}
+
+.expensica-dashboard-transactions-tab .expensica-select-page-checkbox {
+    margin: 0;
 }
 
 .expensica-dashboard-transactions-tab .expensica-search-container {
@@ -7821,157 +7542,6 @@ button.expensica-category-card-edit-button:active {
 .expensica-date-range-current:active {
   transform: scale(0.98);
 }
-
-/* Spending Heatmap Calendar */
-
-/* Calendar Container Redesign */
-.expensica-calendar-container {
-  background-color: var(--background-primary);
-  border-radius: 8px;
-  padding: var(--expensica-gap-lg);
-  border: 1px solid var(--background-modifier-border);
-  margin-bottom: 0;
-  box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px, 
-              rgba(15, 15, 15, 0.05) 0px 2px 4px;
-  transition: box-shadow 0.15s ease;
-}
-
-.expensica-calendar-container:hover {
-  box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px, 
-              rgba(15, 15, 15, 0.08) 0px 4px 6px;
-}
-
-.expensica-calendar-flex-container {
-  display: flex;
-  gap: var(--expensica-gap-lg);
-  align-items: flex-start;
-  flex-wrap: wrap;
-  margin-bottom: 0;
-}
-
-.expensica-calendar-flex-container > .expensica-calendar-container {
-  margin-bottom: 0;
-}
-
-.expensica-calendar-flex-container.expensica-calendar-stacked {
-  justify-content: safe center;
-}
-
-.expensica-calendar-flex-container.expensica-calendar-stacked > .expensica-calendar-grid-container {
-  margin-left: 0;
-  margin-right: 0;
-}
-
-.expensica-calendar-flex-container.expensica-calendar-stacked > .expensica-calendar-details-container {
-  flex-basis: 100%;
-  flex-grow: 1;
-  width: 100%;
-  min-width: 0;
-  max-width: none;
-}
-
-.expensica-calendar-grid-container {
-  flex: 0 1 auto;
-  width: var(--expensica-panel-natural-width, auto);
-  min-width: min(100%, 280px);
-  max-width: 100%;
-  overflow: hidden;
-}
-
-/* Notion-like Calendar Header */
-.expensica-calendar-header {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 8px;
-  margin-bottom: 8px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--background-modifier-border);
-}
-
-.expensica-calendar-header span {
-  text-align: center;
-  font-size: 12px;
-  color: var(--text-muted);
-  font-weight: 500;
-  padding: 4px;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-/* Calendar Day cells */
-.expensica-calendar-day {
-  aspect-ratio: 1;
-  border-radius: 4px;
-  background-color: var(--background-primary);
-  transition: background-color 0.15s ease;
-  cursor: pointer;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--background-modifier-border);
-  min-width: 40px;
-  min-height: 40px;
-  padding: 0;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-  overflow: hidden;
-}
-
-.expensica-calendar-day:hover {
-  background-color: var(--background-modifier-hover);
-  transform: none;
-}
-
-.expensica-calendar-day-number {
-  font-size: 14px;
-  font-weight: 400;
-  color: var(--text-normal);
-  line-height: 1;
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  z-index: 1;
-  pointer-events: none;
-}
-
-.expensica-calendar-day.today {
-  border: 1px solid var(--interactive-accent);
-  background-color: rgba(var(--interactive-accent-rgb), 0.05);
-}
-
-/* Details container redesign */
-.expensica-calendar-details-container {
-  flex: 1 1 300px;
-  min-width: min(100%, 300px);
-  max-width: 100%;
-  background-color: var(--background-primary);
-  border-radius: 8px;
-  padding: var(--expensica-gap-lg);
-  border: 1px solid var(--background-modifier-border);
-  max-height: none;
-  overflow-y: visible;
-  box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px, 
-              rgba(15, 15, 15, 0.05) 0px 2px 4px;
-  transition: box-shadow 0.15s ease;
-}
-
-.expensica-calendar-flex-container:not(.expensica-calendar-stacked) > .expensica-calendar-details-container {
-  max-height: 500px;
-  overflow-y: auto;
-}
-
-.expensica-calendar-details-container:hover {
-  box-shadow: rgba(15, 15, 15, 0.05) 0px 0px 0px 1px, 
-              rgba(15, 15, 15, 0.08) 0px 4px 6px;
-}
-
 /* Calendar Details Title */
 .expensica-calendar-details-title {
   margin: 0 0 16px 0;
@@ -7981,7 +7551,7 @@ button.expensica-category-card-edit-button:active {
   box-shadow: none;
   color: var(--text-normal);
   display: block;
-  font-size: var(--expensica-font-size-lg);
+  font-size: var(--expensica-panel-header-font-size);
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1.3;
@@ -7989,7 +7559,7 @@ button.expensica-category-card-edit-button:active {
   max-width: 100%;
   opacity: 1;
   overflow: visible;
-  padding: 0 0 10px 0;
+  padding: 0 0 var(--expensica-panel-header-separator-gap);
   position: relative;
   transform: none;
   visibility: visible;
@@ -7998,62 +7568,14 @@ button.expensica-category-card-edit-button:active {
   -webkit-text-fill-color: var(--text-normal);
 }
 
-/* Tooltip Redesign */
-.expensica-calendar-tooltip {
-  display: none;
-  background-color: var(--background-primary);
-  border-radius: 4px;
-  padding: 8px 12px;
-  box-shadow: rgba(15, 15, 15, 0.1) 0px 0px 0px 1px, 
-              rgba(15, 15, 15, 0.2) 0px 3px 6px;
-  border: none;
-  max-width: 250px;
-  transition: opacity 0.2s ease;
-}
-
-.expensica-calendar-tooltip .tooltip-title {
-  font-weight: 500;
-  margin-bottom: 8px;
-  font-size: 14px;
-  color: var(--text-muted);
-}
-
-.expensica-calendar-tooltip .tooltip-value {
-  font-weight: 600;
-  color: var(--text-normal);
-  font-size: 16px;
-  margin-bottom: 8px;
-}
-
-.expensica-calendar-tooltip .tooltip-hint {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-top: 6px;
-}
-
 /* Responsive styles */
 @media screen and (max-width: 768px) {
-  .expensica-calendar-container {
-    padding: 16px;
-  }
-  
-  .expensica-calendar-flex-container {
-    gap: var(--expensica-gap-lg);
-  }
-  
+
   .expensica-calendar-title {
     font-size: 18px;
     padding: 10px 14px;
   }
-  
-  .expensica-calendar-day {
-    min-width: 36px;
-    min-height: 36px;
-  }
-  
-  .expensica-calendar-day-number {
-    font-size: 12px;
-  }
+
 }
 
 .expensica-chart-title,
@@ -8064,7 +7586,7 @@ button.expensica-category-card-edit-button:active {
   box-shadow: none;
   color: var(--text-normal);
   display: block;
-  font-size: var(--expensica-font-size-lg);
+  font-size: var(--expensica-panel-header-font-size);
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1.3;
@@ -8081,20 +7603,17 @@ button.expensica-category-card-edit-button:active {
   max-width: 100%;
 }
 
-.expensica-chart-title::before,
-.expensica-calendar-header-content .expensica-calendar-title::before,
-.expensica-section-header .expensica-transactions-title::before,
-.expensica-calendar-details-title::before {
-  content: '';
-  display: inline-block;
-  width: 4px;
-  height: 16px;
-  background: var(--text-accent);
-  border-radius: 2px;
-  margin-right: 10px;
-  position: static;
-  transform: translateY(2px);
-  vertical-align: baseline;
+.expensica-panel-title-icon {
+  width: 1em;
+  height: 1em;
+  font-size: inherit;
+  margin-inline-end: var(--expensica-gap-md);
+  vertical-align: -0.125em;
+}
+
+.expensica-panel-title-icon > svg {
+  width: 1em;
+  height: 1em;
 }
 
 .expensica-calendar-header-content .expensica-calendar-title::after,
@@ -8109,44 +7628,10 @@ h3.expensica-chart-title,
 h4.expensica-transactions-title {
   -webkit-text-fill-color: var(--text-normal);
   color: var(--text-normal);
-  font-size: var(--expensica-font-size-lg);
+  font-size: var(--expensica-panel-header-font-size);
   font-weight: 600;
   opacity: 1;
   visibility: visible;
-}
-
-/* Calendar Heatmap Legend improvements */
-.expensica-calendar-legend {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--background-modifier-border);
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.expensica-legend-item {
-  display: flex;
-  align-items: center;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.expensica-legend-color {
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-  margin-right: 4px;
-}
-
-/* Week number styling */
-.week-label, .week-number {
-  font-family: var(--font-interface);
-  font-size: 11px;
-  color: var(--text-faint);
-  font-weight: 400;
 }
 
 /* Calendar transactions styling improvements */
@@ -8254,23 +7739,9 @@ h4.expensica-transactions-title {
   100% { box-shadow: 0 0 0 1px var(--interactive-accent); }
 }
 
-.expensica-calendar-day.selected {
-  animation: subtle-pulse 2s infinite;
-  border: 2px solid var(--interactive-accent);
-  background-color: rgba(var(--interactive-accent-rgb), 0.08);
-}
-
 /* Calendar legend styling */
-.expensica-calendar-svg .legend rect {
-  filter: drop-shadow(0px 2px 3px rgba(0, 0, 0, 0.1));
-}
 
 /* Mobile optimization for the legend */
-@media screen and (max-width: 768px) {
-  .expensica-calendar-svg .legend text {
-    font-size: 10px;
-  }
-}
 
 .expensica-calendar-details-label {
   display: flex;
@@ -8307,7 +7778,7 @@ h4.expensica-transactions-title {
 }
 
 .notion-budget-progress-container h3 {
-    font-size: 14px;
+    font-size: var(--expensica-panel-header-font-size);
     font-weight: 500;
     margin: 0 0 16px;
     color: var(--text-normal);
@@ -8599,11 +8070,11 @@ h4.expensica-transactions-title {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 12px;
-    padding: 16px 16px 0 16px;
+    padding: var(--expensica-panel-header-inset) 16px 0;
 }
 
 .notion-chart-title {
-    font-size: 14px;
+    font-size: var(--expensica-panel-header-font-size);
     font-weight: 500;
     color: var(--text-normal);
     letter-spacing: 0.03em;
@@ -8864,50 +8335,7 @@ h4.expensica-transactions-title {
   width: var(--budget-fill-percentage);
 }
 
-/* shadcn/ui inspired styles for Expensica Dashboard Header */
-.shadcn-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  flex-direction: column;
-  padding: var(--expensica-gap-lg);
-  border-radius: var(--expensica-radius);
-  background-color: var(--background-primary);
-  border: 1px solid var(--background-modifier-border);
-  margin-bottom: 0;
-  position: relative;
-  animation: fadeIn 0.3s ease;
-  flex-wrap: wrap;
-  gap: var(--expensica-gap-md);
-}
-
-.shadcn-title-section {
-  display: flex;
-  align-items: center;
-  gap: var(--expensica-gap-md);
-  width: 100%;
-}
-
-.shadcn-title {
-  margin: 0;
-  font-size: 1.8em;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--text-normal);
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  gap: var(--expensica-gap-md);
-}
-
-.shadcn-actions {
-  display: flex;
-  gap: var(--expensica-gap-md);
-  align-items: center;
-  flex-wrap: wrap;
-  width: 100%;
-}
-
+/* Shared dropdown and action button styles */
 .shadcn-btn {
   display: inline-flex;
   align-items: center;
@@ -8973,14 +8401,6 @@ h4.expensica-transactions-title {
 .shadcn-btn-danger:hover {
   background-color: color-mix(in srgb, var(--expensica-error), var(--background-primary) 10%);
   border-color: color-mix(in srgb, var(--expensica-error), var(--background-primary) 10%);
-}
-
-.shadcn-date-range-container {
-  position: relative;
-}
-
-.shadcn-date-range-selector {
-  position: relative;
 }
 
 .shadcn-date-range-current {
@@ -9066,18 +8486,6 @@ h4.expensica-transactions-title {
 
 /* Media queries for responsiveness */
 @media screen and (max-width: 768px) {
-  .shadcn-header {
-    padding: 12px;
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  
-  .shadcn-actions {
-    width: 100%;
-    margin-top: 0;
-    justify-content: flex-start;
-  }
-  
   .shadcn-btn {
     padding: 0 8px;
     font-size: 12px;
@@ -9093,7 +8501,18 @@ h4.expensica-transactions-title {
 }
 
 /* Expensica spacing contract: parent containers own external gaps; panels own only internal padding. */
-.expensica-dashboard > .shadcn-header,
+body .expensica-dashboard,
+body .expensica-container,
+body .expensica-dashboard-grid {
+  gap: var(--expensica-panel-gap) !important;
+}
+
+.expensica-dashboard > :is(.expensica-cash-flow-container, .expensica-account-balances-container, .expensica-chart-container, .expensica-section, .expensica-dashboard-grid, .expensica-account-warnings, .expensica-data-recovery-warning),
+.expensica-dashboard .expensica-chart-container,
+.expensica-container > :is(.expensica-filter-section, .expensica-transactions-section) {
+  margin-block: 0 !important;
+}
+
 .expensica-dashboard > .expensica-tabs,
 .expensica-dashboard > .expensica-summary,
 .expensica-dashboard > .expensica-section,
@@ -9103,7 +8522,7 @@ h4.expensica-transactions-title {
 }
 
 .expensica-dashboard > .expensica-categories-tab {
-  margin-top: calc(var(--expensica-gap-sm) - var(--expensica-gap-lg));
+  margin-top: 0;
   margin-bottom: 0;
 }
 
@@ -9113,7 +8532,7 @@ h4.expensica-transactions-title {
 
 .expensica-category-chart-type-selector-overlay {
   position: absolute;
-  top: var(--expensica-gap-md);
+  top: var(--expensica-panel-header-inset);
   left: var(--expensica-gap-md);
   right: var(--expensica-gap-md);
   z-index: var(--expensica-z-controls);
@@ -9164,24 +8583,25 @@ h4.expensica-transactions-title {
 }
 
 .expensica-summary,
-.expensica-dashboard-grid,
-.expensica-calendar-container,
-.expensica-calendar-flex-container,
-.shadcn-header {
+.expensica-dashboard-grid {
   margin-top: 0;
   margin-bottom: 0;
 }
 
-.expensica-dashboard-grid,
-.expensica-calendar-flex-container {
-  gap: var(--expensica-gap-lg);
+.expensica-dashboard-grid {
+  gap: var(--expensica-panel-gap);
 }
 
 .expensica-chart-container,
-.expensica-calendar-container,
-.shadcn-header,
 .expensica-filter-section {
-  padding: var(--expensica-gap-lg);
+  padding: var(--expensica-gap-md);
+}
+
+.expensica-chart-container,
+.expensica-filter-section,
+.expensica-premium-viz-container,
+.notion-budget-progress-container {
+  padding-top: var(--expensica-panel-header-inset);
 }
 
 .expensica-card {
@@ -9196,7 +8616,6 @@ h4.expensica-transactions-title {
   gap: var(--expensica-gap-sm);
 }
 
-body:not(.is-mobile) .expensica-calendar-flex-container,
 body:not(.is-mobile) .expensica-transactions,
 body:not(.is-mobile) .expensica-accounts-container,
 body:not(.is-mobile) .expensica-accounts-list,
@@ -9216,39 +8635,6 @@ body:not(.is-mobile) .expensica-transaction {
   min-width: max-content;
 }
 
-body:not(.is-mobile) .expensica-calendar-container {
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
-}
-
-body:not(.is-mobile) .expensica-calendar-grid-container {
-  width: clamp(320px, 100%, 400px);
-  min-width: 320px;
-  max-width: 400px;
-}
-
-body:not(.is-mobile) .expensica-calendar-details-container {
-  min-width: 320px;
-  max-width: 400px;
-}
-
-body:not(.is-mobile) .expensica-calendar-flex-container:not(.expensica-calendar-stacked) {
-  flex-wrap: nowrap;
-  justify-content: center;
-  align-items: flex-start;
-}
-
-body:not(.is-mobile) .expensica-calendar-flex-container:not(.expensica-calendar-stacked) > .expensica-calendar-details-container {
-  order: 2;
-  flex: 0 1 400px;
-}
-
-body:not(.is-mobile) .expensica-calendar-flex-container:not(.expensica-calendar-stacked) > .expensica-calendar-grid-container {
-  order: 1;
-  flex: 0 1 auto;
-}
-
 body:not(.is-mobile) .expensica-dashboard-grid {
   grid-template-columns: repeat(2, minmax(var(--expensica-chart-panel-shrink-min-width), 1fr));
 }
@@ -9265,49 +8651,6 @@ body:not(.is-mobile) .expensica-chart-container {
   gap: var(--expensica-gap-md);
 }
 
-/* Calendar navigation buttons mirror pagination controls. */
-.expensica-calendar-nav {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: var(--expensica-gap-md);
-  margin: 0;
-  padding: 0;
-}
-
-.expensica-calendar-nav::after {
-  content: none;
-  display: none;
-}
-
-.expensica-calendar-nav-button {
-  padding: 6px 12px;
-  min-width: 36px;
-  border: 1px solid var(--background-modifier-border);
-  background: var(--background-primary);
-  color: var(--text-normal);
-  border-radius: var(--expensica-radius-sm);
-  cursor: pointer;
-  font-size: var(--expensica-font-size-sm);
-  transition: var(--expensica-transition);
-}
-
-.expensica-calendar-nav-button:hover {
-  background: var(--background-modifier-hover);
-  border-color: var(--background-modifier-border-hover);
-}
-
-.expensica-calendar-nav-button:active {
-  background: var(--background-modifier-active);
-}
-
-.is-mobile .expensica-calendar-nav-button {
-  min-width: 36px;
-  height: 36px;
-  padding: 0 10px;
-  font-size: var(--expensica-font-size-sm);
-}
-
 .expensica-standard-button,
 button.expensica-standard-button,
 .shadcn-date-range-current,
@@ -9316,8 +8659,7 @@ button.expensica-standard-button,
 .expensica-tab,
 .expensica-chart-option,
 .expensica-chart-type-current,
-.expensica-pagination-btn,
-.expensica-calendar-nav-button {
+.expensica-pagination-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -9360,8 +8702,7 @@ button.expensica-standard-button:hover,
 .expensica-tab:hover,
 .expensica-chart-option:hover,
 .expensica-chart-type-current:hover,
-.expensica-pagination-btn:hover:not(.disabled),
-.expensica-calendar-nav-button:hover {
+.expensica-pagination-btn:hover:not(.disabled) {
   border-color: var(--background-modifier-border-hover);
   background: var(--background-modifier-hover);
   background-color: var(--background-modifier-hover);
@@ -9377,8 +8718,7 @@ button.expensica-standard-button:focus-visible,
 .expensica-tab:focus-visible,
 .expensica-chart-option:focus-visible,
 .expensica-chart-type-current:focus-visible,
-.expensica-pagination-btn:focus-visible:not(.disabled),
-.expensica-calendar-nav-button:focus-visible {
+.expensica-pagination-btn:focus-visible:not(.disabled) {
   outline: 2px solid rgba(var(--interactive-accent-rgb), 0.2);
   outline-offset: 2px;
 }
@@ -9409,6 +8749,8 @@ button.expensica-standard-button:focus-visible,
 /* Dashboard titles share one left alignment; panel padding owns the offset. */
 .expensica-chart-header,
 .expensica-section-header {
+  padding-top: 0;
+  padding-bottom: var(--expensica-panel-header-separator-gap);
   padding-left: 0;
   padding-right: 0;
 }
@@ -9470,11 +8812,9 @@ body:not(.is-mobile) .expensica-dashboard > .expensica-overview-summary.expensic
 }
 
 .expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-title svg,
-.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-title span.emoji,
-.expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card > .expensica-card-title svg,
-.expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card > .expensica-card-title span.emoji {
-  width: var(--size-2-3);
-  height: var(--size-2-3);
+.expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card > .expensica-card-title svg {
+  width: var(--icon-size, 18px);
+  height: var(--icon-size, 18px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -9482,18 +8822,9 @@ body:not(.is-mobile) .expensica-dashboard > .expensica-overview-summary.expensic
   margin-inline-end: var(--expensica-gap-xs);
 }
 
-.expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-title span.emoji,
-.expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card > .expensica-card-title span.emoji {
-  /* Emoji glyphs need their natural width inside the clipped title. */
-  width: auto;
-  min-width: 1em;
-  height: auto;
-  letter-spacing: normal;
-}
-
 .expensica-dashboard > .expensica-overview-summary.expensica-summary > .expensica-overview-card > .expensica-card-value,
 .expensica-overview-summary.expensica-summary.expensica-budget-summary > .expensica-overview-card > .expensica-card-value {
-  font-size: var(--font-ui-large);
+  font-size: var(--expensica-font-size);
   line-height: var(--expensica-line-height-normal);
   padding-block: var(--expensica-gap-sm);
   white-space: nowrap;
@@ -9570,4 +8901,710 @@ body:not(.is-mobile) .expensica-dashboard > .expensica-overview-summary.expensic
 .expensica-chart-radius-probe {
   display: none;
   border-radius: var(--expensica-chart-bar-radius);
+}
+
+/* Heatmap uses the picker grid; only its data presentation and cell shape differ. */
+body .expensica-premium-viz-container {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0;
+}
+
+.expensica-calendar-flex-container {
+  --expensica-calendar-panel-size: calc(var(--expensica-date-calendar-size) + var(--expensica-gap-lg) * 2);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: stretch;
+  gap: var(--expensica-gap-lg);
+  min-width: 0;
+  max-width: 100%;
+}
+
+body .expensica-premium-viz-container .expensica-calendar-flex-container > .expensica-chart-container {
+  box-sizing: border-box;
+  flex: 1 1 calc((100% - var(--expensica-gap-lg)) / 2);
+  min-width: min(100%, var(--expensica-calendar-panel-size));
+  max-width: 100%;
+  padding: var(--expensica-gap-lg);
+  padding-top: var(--expensica-panel-header-inset);
+}
+
+.expensica-calendar-details-container {
+  overflow-wrap: anywhere;
+}
+
+.expensica-calendar-details-container > .expensica-chart-header {
+  margin-bottom: var(--expensica-gap-lg);
+}
+
+.expensica-daily-review-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--expensica-chart-panel-shrink-min-width)), 1fr));
+  align-items: start;
+  column-gap: var(--expensica-gap-md);
+  row-gap: var(--expensica-gap-lg);
+  min-width: 0;
+  margin-bottom: var(--expensica-gap-lg);
+}
+
+.expensica-daily-review-metrics + .expensica-daily-review-details {
+  margin-top: var(--expensica-gap-lg);
+}
+
+.expensica-daily-review-details > .expensica-category-breakdown {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.expensica-calendar-details-container .expensica-breakdown-title-container {
+  margin: 0 0 var(--expensica-gap-lg);
+  gap: var(--expensica-gap-md);
+}
+
+.expensica-calendar-details-container .expensica-breakdown-title {
+  display: flex;
+  align-items: center;
+  gap: var(--expensica-gap-md);
+  margin: 0;
+  font-size: var(--expensica-font-size-sm);
+  line-height: var(--expensica-line-height-tight);
+}
+
+.expensica-calendar-details-container .expensica-breakdown-title > .expensica-panel-title-icon {
+  margin: 0;
+  font-size: var(--expensica-font-size);
+}
+
+.expensica-calendar-details-container .expensica-breakdown-chart,
+.expensica-calendar-details-container > .expensica-calendar-empty-state {
+  margin-top: 0;
+}
+
+.expensica-calendar-details-container .expensica-transactions {
+  background: transparent;
+  border-radius: 0;
+}
+
+.expensica-dashboard:is(.expensica-overview, .expensica-dashboard-transactions-tab) {
+  padding-bottom: calc(var(--expensica-gap-2xl) + var(--expensica-mobile-footer-safe-space) + env(safe-area-inset-bottom));
+}
+
+.expensica-daily-account-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, max(var(--expensica-account-stat-min-width), calc((100% - var(--expensica-gap-md)) / 2))), 1fr));
+  gap: var(--expensica-gap-md);
+  min-width: 0;
+}
+
+.expensica-daily-account-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, max-content);
+  align-items: center;
+  gap: var(--expensica-gap-md);
+  border-radius: var(--expensica-radius-lg);
+  padding-block: var(--size-2-3, 6px);
+}
+
+.expensica-daily-account-card .expensica-card-title,
+.expensica-daily-account-card .expensica-card-value {
+  min-width: 0;
+  margin: 0;
+}
+
+.expensica-daily-account-card .expensica-card-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.expensica-daily-account-card > .expensica-ui-icon {
+  display: flex;
+}
+
+.expensica-heatmap {
+  --expensica-heatmap-hover-overlay: color-mix(in srgb, var(--background-modifier-hover) 50%, transparent);
+  --expensica-heatmap-day-size: var(--size-4-10, 45px);
+  --expensica-heatmap-income-dot-size: var(--expensica-radius-sm);
+  --expensica-calendar-day-gap: var(--expensica-gap-sm);
+  --expensica-calendar-panel-size: calc(var(--expensica-heatmap-day-size) * 7 + var(--expensica-calendar-day-gap) * 6 + var(--expensica-gap-lg) * 2 + var(--expensica-heatmap-week-width, 0px) + 2px);
+  padding-inline: var(--expensica-gap-lg);
+}
+
+.expensica-heatmap:has(> .expensica-date-selector-calendar.has-week-numbers) {
+  --expensica-heatmap-week-width: calc(var(--expensica-gap-xl) + var(--expensica-calendar-day-gap));
+}
+
+.expensica-heatmap > :is(.expensica-date-selector-navigation, .expensica-date-selector-calendar) {
+  align-self: center;
+  width: 100%;
+  max-width: calc(var(--expensica-calendar-panel-size) - var(--expensica-gap-lg) * 2 - 2px);
+}
+
+.expensica-heatmap .expensica-date-selector-navigation {
+  margin-top: 0;
+}
+
+.expensica-heatmap .expensica-date-selector-calendar {
+  aspect-ratio: auto;
+  grid-template-rows: var(--expensica-date-control-size) auto;
+}
+
+.expensica-date-selector-calendar.has-week-numbers > :is(.expensica-date-selector-weekdays, .expensica-date-selector-days) {
+  grid-template-columns: var(--expensica-gap-xl) repeat(7, minmax(0, 1fr));
+}
+
+.expensica-calendar-week-number {
+  align-self: center;
+  text-align: center;
+  font-size: var(--expensica-font-size-2xs);
+  color: var(--text-faint);
+}
+
+.expensica-heatmap button.expensica-date-selector-day {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-content: stretch;
+  aspect-ratio: auto;
+  min-height: min-content;
+  border-radius: var(--expensica-radius-sm);
+  border-color: var(--background-modifier-border);
+  background-color: var(--expensica-day-color);
+  color: var(--expensica-day-text);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Square minimum; long amounts can increase the row height without clipping. */
+.expensica-heatmap button.expensica-date-selector-day::before {
+  content: '';
+  grid-area: 1 / 1;
+  padding-top: 100%;
+}
+
+.expensica-heatmap-day-content {
+  grid-area: 1 / 1;
+  display: grid;
+  align-self: stretch;
+  align-content: start;
+  padding-block: var(--expensica-gap-md);
+  gap: var(--expensica-gap-xs);
+  min-width: 0;
+}
+
+.expensica-heatmap button.expensica-date-selector-day:is(.is-selected, .is-today, :hover) {
+  border-color: var(--interactive-accent);
+  box-shadow: inset 0 0 0 var(--expensica-gap-xs) var(--interactive-accent);
+  background-color: var(--expensica-day-color);
+}
+
+.expensica-heatmap button.expensica-date-selector-day:hover {
+  background-image: linear-gradient(var(--expensica-heatmap-hover-overlay), var(--expensica-heatmap-hover-overlay));
+}
+
+.expensica-heatmap-amount {
+  max-width: 100%;
+  color: var(--expensica-text-tertiary);
+  font-size: var(--expensica-font-size-2xs);
+  font-weight: var(--font-medium, 500);
+}
+
+.expensica-heatmap-income-dots {
+  position: absolute;
+  top: var(--expensica-gap-xs);
+  right: var(--expensica-gap-xs);
+  display: flex;
+  flex-direction: column;
+  gap: var(--expensica-gap-xs);
+  pointer-events: none;
+}
+
+.expensica-heatmap-income-dot {
+  width: var(--expensica-heatmap-income-dot-size);
+  height: var(--expensica-heatmap-income-dot-size);
+  border-radius: 50%;
+  background: var(--expensica-income-dot-color);
+}
+
+.expensica-heatmap-legend {
+  display: grid;
+  width: min(100%, calc(var(--expensica-date-control-size) * 5));
+  gap: var(--expensica-gap-md);
+  margin-top: var(--expensica-gap-xl);
+  margin-inline: auto;
+  font-size: var(--expensica-font-size-xs);
+  color: var(--text-muted);
+}
+
+.expensica-heatmap-legend-title {
+  text-align: center;
+  font-size: var(--expensica-font-size-sm);
+  color: var(--text-normal);
+}
+
+.expensica-heatmap-gradient {
+  height: var(--expensica-gap-lg);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--expensica-radius-sm);
+  background: var(--expensica-heatmap-gradient);
+  background-color: var(--background-primary);
+  background-clip: padding-box;
+}
+
+.expensica-heatmap-legend-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--expensica-gap-md);
+  overflow-wrap: anywhere;
+}
+
+.expensica-heatmap-legend-labels > div {
+  display: grid;
+  gap: var(--expensica-gap-sm);
+  min-width: 0;
+}
+
+.expensica-heatmap-legend-labels > div:last-child {
+  text-align: right;
+}
+
+.expensica-overview {
+  container: expensica-dashboard expensica-overview / inline-size;
+}
+
+.expensica-overview-panels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: var(--expensica-panel-gap);
+  min-width: 0;
+}
+
+.expensica-overview-panels > .expensica-account-balances-container,
+.expensica-overview-panels > .expensica-cash-flow-container {
+  display: grid;
+}
+
+body .expensica-overview .expensica-chart-container {
+  min-width: 0;
+}
+
+body .expensica-overview > .expensica-dashboard-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body .expensica-overview > .expensica-dashboard-grid > .expensica-chart-container {
+  align-self: stretch;
+}
+
+body .expensica-overview > .expensica-dashboard-grid.is-narrow {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+
+.expensica-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--expensica-gap-md);
+  flex-wrap: wrap;
+}
+
+.expensica-global-date-range,
+.expensica-create-transaction,
+.expensica-import-transactions,
+.expensica-export-transactions {
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+
+.expensica-toolbar .expensica-standard-button {
+  padding-inline: var(--expensica-gap-sm);
+}
+
+.expensica-toolbar .shadcn-date-range-selector {
+  position: relative;
+}
+
+.expensica-toolbar .shadcn-date-range-current {
+  padding-inline: var(--size-4-3, 12px);
+}
+
+.expensica-toolbar .shadcn-date-range-icon svg {
+  width: var(--expensica-font-size-sm);
+  height: var(--expensica-font-size-sm);
+}
+
+.expensica-toolbar svg {
+  width: var(--expensica-font-size);
+  height: var(--expensica-font-size);
+}
+
+.expensica-chart-range-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--expensica-gap-xs);
+  margin-block: var(--expensica-gap-md);
+}
+
+button.expensica-chart-range-button,
+button.expensica-category-type-button {
+  appearance: none;
+  width: auto;
+  height: auto;
+  padding: var(--expensica-gap-sm) var(--expensica-gap-md);
+  min-width: 0;
+  border: none;
+  border-radius: var(--expensica-radius);
+  background: transparent;
+  color: var(--text-faint);
+  font-size: var(--expensica-font-size-sm);
+  font-weight: 400;
+  line-height: var(--expensica-line-height-tight);
+  cursor: pointer;
+  box-shadow: none;
+}
+
+button.expensica-chart-range-button:is(:hover, :focus-visible, .is-active),
+button.expensica-category-type-button:is(:hover, :focus-visible, .is-active) {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+button.expensica-chart-range-button:focus-visible,
+button.expensica-category-type-button:focus-visible {
+  outline: var(--expensica-gap-xs) solid var(--interactive-accent);
+}
+
+.expensica-cash-flow-panel > .expensica-chart-range-buttons {
+  margin: 0;
+}
+
+.expensica-tabs .expensica-tab svg {
+  width: var(--expensica-font-size);
+  height: var(--expensica-font-size);
+}
+
+@container expensica-dashboard (max-width: 808px) {
+  .expensica-tabs .expensica-tab {
+    box-sizing: border-box;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    width: max-content;
+    min-width: var(--size-4-16, 64px);
+    max-width: 100%;
+    height: var(--size-4-16, 64px);
+    padding: var(--expensica-gap-xs);
+    gap: var(--expensica-gap-xs);
+    font-size: var(--expensica-font-size-xs);
+    line-height: var(--expensica-line-height-tight);
+    white-space: normal;
+  }
+
+  .expensica-tab .expensica-ui-icon {
+    grid-area: 1 / 1;
+    align-self: center;
+    color: var(--text-normal);
+  }
+
+  .expensica-tabs .expensica-tab svg {
+    width: var(--size-4-6, 24px);
+    height: var(--size-4-6, 24px);
+  }
+
+  .expensica-tab-label {
+    grid-area: 2 / 1;
+    align-self: end;
+    font-weight: var(--font-normal, 400);
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+}
+
+.expensica-cash-flow-container,
+.expensica-account-balances-container {
+  container-type: inline-size;
+  min-width: 0;
+  max-width: 100%;
+}
+
+body .expensica-chart-container.expensica-cash-flow-panel,
+body .expensica-chart-container.expensica-account-balances-panel {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  gap: var(--expensica-gap-md);
+  padding: var(--expensica-gap-md);
+}
+
+.expensica-cash-flow-metrics,
+.expensica-account-balances-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.expensica-cash-flow-metrics {
+  justify-content: center;
+  gap: var(--expensica-gap-md);
+}
+
+.expensica-daily-review-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.expensica-daily-review-metrics:has(> :only-child) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.expensica-daily-review-metrics > .expensica-cash-flow-metric {
+  display: grid;
+}
+
+.expensica-daily-review-metrics .expensica-metric-total :is(.expensica-cash-flow-label, .expensica-card-value) {
+  font-size: var(--expensica-font-size-lg);
+}
+
+.expensica-cash-flow-header,
+.expensica-account-balances-header {
+  margin-bottom: 0;
+}
+
+button.expensica-cash-flow-info,
+button.expensica-cash-flow-info:is(:hover, :focus, :active) {
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  height: auto;
+  padding: var(--expensica-gap-sm);
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.expensica-cash-flow-info svg {
+  color: var(--text-muted);
+  width: var(--expensica-panel-header-font-size);
+  height: var(--expensica-panel-header-font-size);
+}
+
+.expensica-cash-flow-metric {
+  display: grid;
+  flex: 0 1 auto;
+  align-content: start;
+  justify-items: center;
+  min-width: 0;
+  max-width: 100%;
+  text-align: center;
+  gap: var(--expensica-gap-md);
+}
+
+.expensica-cash-flow-label,
+.expensica-account-balances-row .expensica-card-title,
+.expensica-daily-account-card .expensica-card-title {
+  display: flex;
+  align-items: center;
+  gap: var(--expensica-gap-md);
+  margin: 0;
+  color: var(--text-normal);
+  font-size: var(--expensica-font-size-xs);
+  font-weight: var(--font-normal, 400);
+}
+
+.expensica-cash-flow-label {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.expensica-account-balances-row .expensica-ui-icon svg,
+.expensica-daily-account-card .expensica-ui-icon svg {
+  width: var(--expensica-font-size);
+  height: var(--expensica-font-size);
+  opacity: 1;
+}
+
+.expensica-metric-total {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.expensica-metric-total .expensica-cash-flow-label {
+  display: inline;
+}
+
+.expensica-metric-total:focus-visible {
+  outline: var(--expensica-gap-xs) solid var(--interactive-accent);
+  outline-offset: var(--expensica-gap-xs);
+}
+
+.expensica-cash-flow-metric .expensica-card-value,
+.expensica-account-balances-row .expensica-card-value,
+.expensica-daily-account-card .expensica-card-value {
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  color: var(--expensica-cash-flow-color);
+  font-size: var(--expensica-font-size-xl);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.expensica-cash-flow-metric .expensica-card-value,
+.expensica-daily-account-card .expensica-card-value {
+  font-size: var(--expensica-font-size-xs);
+}
+
+.expensica-cash-flow-comparison,
+.expensica-account-balances-comparison {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--expensica-gap-md);
+  max-width: 100%;
+  margin: 0;
+  padding: var(--expensica-gap-xs) var(--expensica-gap-sm);
+  border-radius: var(--expensica-radius-xl);
+  background-color: var(--background-modifier-hover);
+  color: var(--expensica-text-tertiary);
+  line-height: var(--expensica-line-height-tight);
+  white-space: nowrap;
+}
+
+.expensica-cash-flow-comparison,
+.expensica-account-balances-comparison,
+.expensica-cash-flow-comparison > span,
+.expensica-account-balances-comparison > span,
+.expensica-account-balances-owed {
+  font-size: var(--expensica-card-trend-font-size);
+}
+
+.expensica-account-balances-owed {
+  display: block;
+  margin-top: var(--expensica-gap-xs);
+  color: var(--text-error);
+  font-weight: 400;
+  line-height: var(--expensica-line-height-tight);
+}
+
+.expensica-cash-flow-comparison,
+.expensica-account-balances-comparison {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.expensica-account-balances-viewport {
+  position: relative;
+  min-width: 0;
+}
+
+.expensica-account-balances-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, min(140px, 100%)));
+  justify-content: center;
+  align-items: stretch;
+  gap: var(--expensica-gap-md);
+  min-width: 0;
+  overflow: visible;
+  padding: var(--expensica-gap-md);
+}
+
+.expensica-account-balances-row > .expensica-card {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  align-content: start;
+  justify-items: start;
+  gap: var(--expensica-gap-md);
+  width: 100%;
+  min-width: min(140px, 100%);
+  max-width: min(28ch, 100%);
+  height: auto;
+  min-height: min-content;
+  padding: var(--expensica-gap-md);
+  border-radius: var(--expensica-radius-lg);
+  overflow-wrap: anywhere;
+}
+
+.expensica-account-balances-row .expensica-account-balances-comparison {
+  align-self: end;
+}
+
+.expensica-account-editor-modal .expensica-account-editor-warning {
+  color: var(--text-warning);
+}
+
+.expensica-cash-flow-comparison svg,
+.expensica-account-balances-comparison svg {
+  width: var(--expensica-card-trend-icon-size);
+  height: var(--expensica-card-trend-icon-size);
+  stroke-width: var(--expensica-card-trend-icon-stroke-width);
+}
+
+.expensica-account-balances-footer {
+  gap: var(--expensica-gap-md);
+  margin: 0;
+  padding: 0 var(--expensica-gap-md);
+  font-size: var(--expensica-font-size-xs);
+  text-align: center;
+}
+
+.expensica-account-balances-footer .expensica-card-value {
+  font-variant-numeric: tabular-nums;
+}
+
+@container expensica-overview (min-width: 808px) {
+  .expensica-overview-panels {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .expensica-dashboard-grid > .expensica-expenses-chart-container > .expensica-chart-range-buttons {
+    display: none;
+  }
+}
+
+.expensica-category-type-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--expensica-gap-sm);
+  margin-inline-start: auto;
+}
+
+.expensica-card-trend[role="button"] {
+  cursor: pointer;
+}
+
+.expensica-card-trend[role="button"]:focus-visible {
+  outline: var(--expensica-gap-xs) solid var(--interactive-accent);
+  outline-offset: var(--expensica-gap-xs);
+}
+
+.tooltip.expensica-chart-tooltip {
+  --background-modifier-message: var(--background-secondary);
+  background-color: var(--background-secondary);
+  color: var(--text-muted);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--expensica-radius-sm);
+  padding: var(--size-2-3, 6px);
+  font-family: var(--font-interface);
+  font-size: var(--expensica-font-size-xs);
+  white-space: pre-line;
+  box-shadow: none;
+}
+
+.tooltip.expensica-chart-tooltip::first-line {
+  color: var(--text-normal);
+  font-weight: var(--font-normal, 400);
 }

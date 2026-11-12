@@ -23,19 +23,28 @@ class Element {
     createDiv(options) { return this.createEl('div', options); }
     createSpan(options) { return this.createEl('span', options); }
     createSvg(tag, options) { return this.createEl(tag, options); }
+    cloneNode(deep = false) {
+        const copy = new Element(this.tag, { cls: [...this.classes].join(' '), text: this.textContent, attr: { ...this.attrs } });
+        if (deep) this.children.forEach(child => copy.appendChild(child.cloneNode(true)));
+        return copy;
+    }
+    set className(value) { this.classes = new Set(value.split(' ')); }
     setCssProps(properties) { Object.assign(this.style, properties); }
     setCssStyles(properties) { Object.assign(this.style, properties); }
     empty() { this.children = []; }
     addClass(name) { this.classes.add(name); }
     removeClass(name) { this.classes.delete(name); }
     hasClass(name) { return this.classes.has(name); }
-    get classList() { return { contains: name => this.classes.has(name) }; }
+    get classList() { return { contains: name => this.classes.has(name), add: name => this.classes.add(name), remove: name => this.classes.delete(name) }; }
     toggleClass(name, value) { value ? this.addClass(name) : this.removeClass(name); }
     setAttribute(key, value) { this.attrs[key] = value; }
-    get ownerDocument() { return { addEventListener() {}, removeEventListener() {} }; }
+    get ownerDocument() { return { addEventListener() {}, removeEventListener() {},
+        createElement: tag => new Element(tag), createDocumentFragment: () => new Element('fragment') }; }
     getAttribute(key) { return this.attrs[key]; }
+    removeAttribute(key) { delete this.attrs[key]; }
     addEventListener(name, fn) { (this.listeners[name] ||= []).push(fn); }
-    dispatchEvent(event) { for (const fn of this.listeners[event.type] || []) fn(event); }
+    removeEventListener(name, fn) { this.listeners[name] = (this.listeners[name] || []).filter(listener => listener !== fn); }
+    dispatchEvent(event) { if (!event.target) Object.defineProperty(event, 'target', { value: this }); for (const fn of this.listeners[event.type] || []) fn(event); }
     click() { if (!this.disabled) this.dispatchEvent({ type: 'click', preventDefault() {}, stopPropagation() {} }); }
     matches(selector) {
         if (selector.startsWith('.')) return this.classes.has(selector.slice(1));
@@ -52,6 +61,7 @@ class Element {
         ]);
     }
     querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
+    getBoundingClientRect() { return { left: 12, bottom: 36 }; }
     get options() { return this.children.filter(child => child.tag === 'option'); }
     get childElementCount() { return this.children.length; }
     focus() { this.focused = true; }
@@ -70,7 +80,7 @@ function load(filename, dependencies = {}, globals = {}, extraSource = '') {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
     }).outputText;
     vm.runInNewContext(compiled, { exports, Date, Intl, Event, console: { log() {}, error() {}, warn() {} }, ...globals,
-        require(name) { return dependencies[name] || (name.endsWith('/account-calculations') ? load('src/account-calculations.ts', { './models': dependencies['./models'] || dependencies['../models'] }) : undefined) || (name.endsWith('/modal-utils') ? load('src/modal-utils.ts') : {}); }
+        require(name) { return dependencies[name] || (name.endsWith('/financial-metrics') ? load('src/financial-metrics.ts', { './models': dependencies['./models'] || dependencies['../models'], obsidian: dependencies.obsidian }) : undefined) || (name.endsWith('/chart-tooltip') ? load('src/chart-tooltip.ts', { obsidian: dependencies.obsidian }) : undefined) || (name.endsWith('/account-calculations') ? load('src/account-calculations.ts', { './models': dependencies['./models'] || dependencies['../models'] }) : undefined) || (name.endsWith('/modal-utils') ? load('src/modal-utils.ts') : {}); }
     });
     return exports;
 }
@@ -100,6 +110,8 @@ class Chart {
     hide(index) { this.data.datasets[index].hidden = true; }
     setDatasetVisibility(index, visible) { this.data.datasets[index].hidden = !visible; }
     update() {}
+    draw() {}
+    render() {}
     stop() {}
     destroy() {}
 }
@@ -107,9 +119,14 @@ const animationFrames = [];
 const chartTimers = [];
 const transactionCards = [];
 const calendars = [];
+const balanceObservers = [];
+const focusedTooltips = [];
 const { ExpensicaDashboardView, TransactionModal, DateRangePickerModal, DateRangeType, BudgetModal, AccountEditorModal, AccountModal } = load('src/dashboard-view.ts', {
-    obsidian: { Component, Modal, ItemView: Component, setIcon() {} }, './models': models,
-    'chart.js/auto': { default: Chart }, 'chart.js': { Tooltip: { positioners: {} } },
+    obsidian: { Component, Modal, ItemView: Component, setIcon() {},
+        displayTooltip(element, content, options) { focusedTooltips.push({ element, content,
+            text: typeof content === 'string' ? content : modalText(content).trim(), options }); },
+        setTooltip(element, text, options) { element.setAttribute('aria-label', text); element.tooltipOptions = options; } }, './models': models,
+    'chart.js/auto': { default: Chart }, 'chart.js': { ...require('chart.js'), Tooltip: { positioners: {} } },
     './date-selector-modal': { DateSelectorModal, formatDateForDisplay: value => value },
     './time-selector-modal': { formatTimeForDisplay: value => value },
     './confirmation-modal': { ConfirmationModal },
@@ -118,10 +135,15 @@ const { ExpensicaDashboardView, TransactionModal, DateRangePickerModal, DateRang
     './account-card': accountCards,
     './transaction-card': { renderTransactionCard: (container, options) => transactionCards.push(options) },
     './dashboard-integration': { PremiumVisualizations: class {
-        constructor(...args) { this.onEdit = args[6]; calendars.push(this); }
+        constructor(...args) { this.onEdit = args[5]; calendars.push(this); }
         render() {}
     } }
 }, {
+    ResizeObserver: class {
+        constructor(callback) { this.callback = callback; this.elements = []; balanceObservers.push(this); }
+        observe(element) { this.elements.push(element); }
+        disconnect() { this.disconnected = true; }
+    },
     crypto: require('node:crypto').webcrypto,
     console: { log() {}, warn() {}, error: (...args) => presentationErrors.push(args) },
     setTimeout: callback => { chartTimers.push(callback); return chartTimers.length; },
@@ -171,7 +193,8 @@ function plugin(accounts = [{ ...models.DEFAULT_ACCOUNT }], enableAccounts = tru
         getTransactionAccountDisplay(value) { return this.findAccountByReference(value) || accounts[0]; },
         getCategories: type => models.DEFAULT_CATEGORIES.filter(category => !type || category.type === type),
         getCategoryById: id => models.DEFAULT_CATEGORIES.find(category => category.id === id),
-        getCategoryEmoji: () => ''
+        getCategoryEmoji: () => '',
+        getCategoryColor: models.getCategoryColor
     };
 }
 
@@ -244,6 +267,20 @@ for (const code of ['USD', 'CAD', 'JPY', 'KWD']) {
         assert.equal(JSON.stringify(p.transactions), ledger);
     });
 }
+
+test('Cumulative Expenses and Transactions & Balances share the chart hover renderer', () => {
+    const p = plugin();
+    p.transactions = [{ id: 'expense', date: '2026-09-01', type: 'expense', amount: 25 }];
+    const view = chartView(p);
+    view.createCumulativeExpensesChart({});
+    view.createIncomeExpenseChart({});
+    for (const chart of [view.cumulativeExpensesChart, view.incomeExpenseChart]) {
+        assert.equal(chart.config.plugins.length, 1);
+        assert.equal(chart.config.plugins[0].id, 'expensicaChartHoverDimming');
+        assert.equal(chart.config.options.interaction.mode, 'index');
+    }
+    assert.notEqual(view.cumulativeExpensesChart.config.plugins[0], view.incomeExpenseChart.config.plugins[0]);
+});
 
 for (const [method, field] of [['createCumulativeExpensesChart', 'cumulativeExpensesChart'],
     ['createWeeklyExpensesChart', 'expensesChart'], ['createMonthlyExpensesChart', 'expensesChart']]) {
@@ -328,82 +365,6 @@ test('CAD amount, budget, and credit-limit inputs keep a separate narrow symbol 
         assert.equal(wrapper.children[1].attrs.step, 'any');
         assert.equal(wrapper.children[1].attrs.min, '0');
     }
-});
-
-test('calendar Today preserves dashboard nodes and charts when the date range is unchanged', async () => {
-    const root = new Element();
-    const header = root.createDiv('shadcn-header');
-    const tabs = root.createDiv('expensica-tabs');
-    const summary = root.createDiv('expensica-summary');
-    const chartNode = root.createEl('canvas');
-    const today = models.parseLocalDate(models.formatDate(new Date()));
-    const range = { type: DateRangeType.THIS_MONTH,
-        startDate: new Date(today.getFullYear(), today.getMonth(), 1),
-        endDate: new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999) };
-    const charts = [{}, {}, {}];
-    const updates = [];
-    let saves = 0;
-    const view = Object.assign(Object.create(ExpensicaDashboardView.prototype), {
-        containerEl: { children: [null, root] }, dateRange: range,
-        currentDate: new Date(today.getFullYear(), today.getMonth() - 1, 1), selectedCalendarDate: null,
-        cumulativeExpensesChart: charts[0], expensesChart: charts[1], incomeExpenseChart: charts[2],
-        premiumVisualizations: { updateDate: (...args) => updates.push(args) },
-        persistDashboardState() { saves++; },
-        loadTransactionsData() { assert.fail('Today must not reload unchanged transaction filters'); },
-        renderDashboard() { assert.fail('Today must not rebuild the dashboard'); },
-        requestAllChartAnimations() { assert.fail('Today must not animate unrelated charts'); }
-    });
-    await view.handleCalendarTodayClick();
-    assert.equal(view.dateRange, range);
-    assert.equal(models.formatDate(view.currentDate), models.formatDate(today));
-    assert.equal(models.formatDate(view.getDefaultTransactionDate()), models.formatDate(today));
-    assert.equal(updates.length, 1);
-    assert.equal(updates[0][1], true);
-    assert.equal(saves, 1);
-    assert.deepEqual(root.children, [header, tabs, summary, chartNode]);
-    assert.equal(view.cumulativeExpensesChart, charts[0]);
-    assert.equal(view.expensesChart, charts[1]);
-    assert.equal(view.incomeExpenseChart, charts[2]);
-});
-
-test('calendar Today refreshes range-dependent content while retaining the header and tabs for a historical range', async () => {
-    const root = new Element();
-    const header = root.createDiv('shadcn-header');
-    const label = header.createSpan({ cls: 'shadcn-date-range-text', text: 'Old range' });
-    const oldOption = header.createDiv('shadcn-date-range-option shadcn-date-range-option-active');
-    oldOption.textContent = 'Old range';
-    const newOption = header.createDiv('shadcn-date-range-option');
-    newOption.textContent = '1M';
-    const action = header.createEl('button', { text: 'Transaction' });
-    const tabs = root.createDiv('expensica-tabs');
-    const oldBody = root.createDiv('old-content');
-    const today = new Date();
-    let loads = 0, saves = 0, renders = 0;
-    const view = Object.assign(Object.create(ExpensicaDashboardView.prototype), {
-        containerEl: { children: [null, root] }, currentTab: 'overview', plugin: {},
-        dateRange: { type: DateRangeType.LAST_MONTH,
-            startDate: new Date(today.getFullYear(), today.getMonth() - 1, 1),
-            endDate: new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59, 999) },
-        loadTransactionsData: async () => { loads++; }, persistDashboardState() { saves++; },
-        requestAllChartAnimations() {}, consumeChartAnimationRequest() {},
-        rememberScrollPosition() {}, restoreScrollPosition() {},
-        renderCurrentTabContent(container) { renders++; container.createDiv('updated-content'); },
-        renderDashboard() { assert.fail('Today must preserve the dashboard header and tabs'); }
-    });
-    await view.handleCalendarTodayClick();
-    assert.equal(view.dateRange.type, DateRangeType.THIS_MONTH);
-    assert.equal(models.formatDate(view.selectedCalendarDate), models.formatDate(today));
-    assert.equal(loads, 1);
-    assert.equal(saves, 1);
-    assert.equal(renders, 1);
-    assert.equal(root.children[0], header);
-    assert.equal(root.children[1], tabs);
-    assert.equal(header.querySelector('button'), action);
-    assert.equal(label.textContent, view.dateRange.label);
-    assert.equal(oldOption.hasClass('shadcn-date-range-option-active'), false);
-    assert.equal(newOption.hasClass('shadcn-date-range-option-active'), true);
-    assert.ok(!root.children.includes(oldBody));
-    assert.ok(root.querySelector('.updated-content'));
 });
 
 test('single default account has correct balance data and draws visibly above coincident Net', () => {
@@ -527,7 +488,7 @@ test('Chart.js draws the isolated default-account point after animation settles'
 function mutationView(p) {
     const effects = { loads: 0, renders: 0 };
     const view = Object.assign(Object.create(ExpensicaDashboardView.prototype), {
-        plugin: p, transactions: p.transactions, selectedTransactionIds: new Set(),
+        plugin: p, transactions: p.transactions,
         loadTransactionsData: async () => { effects.loads++; },
         renderDashboard: () => { effects.renders++; }, requestAllChartAnimations() {}
     });
@@ -802,7 +763,7 @@ test('failed budget deletion keeps its confirmation open and emits no success fe
 // Use the real persistence, controller, and recovery modal together at UI boundaries.
 const recoveryUI = load('src/data-recovery-modal.ts', { obsidian: { Modal } });
 const transactionPreparation = load('src/transaction-import.ts', { './models': models });
-const { default: PersistencePlugin, ImportModal } = load('main.ts', {
+const { default: PersistencePlugin, ImportModal, ExpensicaSettingTab } = load('main.ts', {
     obsidian: { Plugin: class {}, PluginSettingTab: class {}, Modal },
     './src/models': models, './src/data-recovery-modal': recoveryUI,
     './src/dashboard-view': { ExpensicaDashboardView, AccountEditorModal, EXPENSICA_VIEW_TYPE: 'expensica-dashboard-view' },
@@ -810,7 +771,7 @@ const { default: PersistencePlugin, ImportModal } = load('main.ts', {
     './src/account-card': accountCards,
     './src/transaction-import': transactionPreparation,
     './src/notice': { showExpensicaNotice: message => notices.push(message) }
-}, { crypto: require('node:crypto').webcrypto }, '\nexport { ImportModal };');
+}, { crypto: require('node:crypto').webcrypto }, '\nexport { ImportModal, ExpensicaSettingTab };');
 
 function recoveryHarness() {
     const p = new PersistencePlugin();
@@ -1162,7 +1123,6 @@ function creditWarningDashboard(h, tab = 'overview') {
         consumeChartAnimationRequest() {}, clearSelectorListeners() {}, destroyCharts() {},
         persistDashboardState() { counts.layouts++; },
         isDashboardVisible: () => true, loadTransactionsData: async () => {},
-        renderHeader(container) { container.createDiv('shadcn-header'); },
         renderTabNavigation(container) {
             const tabs = container.createDiv('expensica-tabs');
             for (const name of ['overview', 'accounts', 'transactions', 'categories', 'budget']) {
@@ -1170,6 +1130,7 @@ function creditWarningDashboard(h, tab = 'overview') {
             }
             this.updateActiveTabButtons(container);
         },
+        renderCashFlow() {},
         renderOverviewTab() { counts.content++; }, renderTransactionsTab() { counts.content++; },
         renderBudgetTab() { counts.content++; }, renderCategoriesTab() { counts.content++; },
         renderAccountsTab(...args) { counts.content++; return ExpensicaDashboardView.prototype.renderAccountsTab.apply(this, args); },
@@ -1195,12 +1156,12 @@ for (const reference of ['explicit', 'absent', 'empty', 'null']) {
         assert.equal(root.querySelector('.expensica-credit-limit-warning'), null);
         const modalCount = shownModals.length;
         warning.click();
-        assert.equal(view.currentTab, 'accounts');
-        assert.equal(shownModals.length, modalCount);
-        root.querySelector('.expensica-account-card').click();
+        assert.equal(view.currentTab, 'overview');
+        assert.equal(shownModals.length, modalCount + 1);
         const editor = shownModals.at(-1);
         assert.equal(editor.account.id, models.DEFAULT_ACCOUNT.id);
         assert.equal(editor.dashboardView, view);
+        view.switchDashboardTab('accounts');
         assert.equal(modalText(root.querySelector('.expensica-account-card-warning')), 'Overdraft');
         editor.close();
         await h.p.addTransaction({ ...expense, id: '20261015-120000-00000002', type: 'income', category: 'salary' });
@@ -1240,8 +1201,10 @@ for (const type of ['other', 'saving']) {
         assert.ok(warning);
         const modalCount = shownModals.length;
         warning.click();
-        assert.equal(fresh.view.currentTab, 'accounts');
-        assert.equal(shownModals.length, modalCount);
+        assert.equal(fresh.view.currentTab, 'overview');
+        assert.equal(shownModals.length, modalCount + 1);
+        assert.equal(shownModals.at(-1).account.id, account.id);
+        shownModals.at(-1).close();
         await restarted.p.addTransaction({ ...expense, id: '20261015-120000-00000003', type: 'income', category: 'salary',
             account: models.formatAccountReference(type, 'Renamed Daily') });
         await fresh.view.refreshData();
@@ -1317,14 +1280,14 @@ for (const type of ['saving', 'other', 'credit']) {
 }
 
 for (const action of ['click', 'Enter', ' ']) {
-    test(`mixed account advisories open only Accounts through ${JSON.stringify(action)}`, () => {
+    test(`mixed account advisories open the affected editor without switching tabs through ${JSON.stringify(action)}`, () => {
         const h = creditEditHarness('expense', 150);
         h.p.transactionsData.accounts.push({ id: 'joint', name: 'Joint', type: 'chequing' });
         h.p.transactionsData.transactions.push(
             { ...h.original, id: 'cash-expense', account: 'chequing-cash', amount: 12.5 },
             { ...h.original, id: 'joint-expense', account: 'chequing-joint', amount: 75 });
         const a = creditWarningDashboard(h), b = creditWarningDashboard(h, 'transactions');
-        const start = shownModals.length;
+        let expectedModals = shownModals.length;
         for (const name of ['Joint', 'Cash', 'Visa']) {
             const warning = a.root.querySelectorAll('.expensica-account-warning').find(card => modalText(card).includes(`: ${name}`));
             assert.ok(warning);
@@ -1336,18 +1299,21 @@ for (const action of ['click', 'Enter', ' ']) {
                 warning.dispatchEvent({ type: 'keydown', key: action, preventDefault() { prevented = true; } });
                 assert.ok(prevented);
             }
-            assert.equal(shownModals.length, start);
-            assert.equal(a.view.currentTab, 'accounts');
+            assert.equal(shownModals.length, ++expectedModals);
+            assert.equal(shownModals.at(-1).account.name, name);
+            assert.equal(shownModals.at(-1).dashboardView, a.view);
+            assert.equal(a.view.currentTab, 'overview');
             assert.equal(b.view.currentTab, 'transactions');
-            assert.ok(a.root.querySelector('[data-expensica-tab="accounts"]').hasClass('active'));
+            assert.ok(a.root.querySelector('[data-expensica-tab="overview"]').hasClass('active'));
             a.root.querySelector('.expensica-negative-balance-warning').click();
-            assert.equal(shownModals.length, start);
+            assert.equal(shownModals.length, expectedModals, 'an open editor prevents duplicate editors');
+            shownModals.at(-1).close();
         }
         assert.equal(a.root.querySelectorAll('.expensica-negative-balance-warning').length, 2);
         assert.equal(a.root.querySelectorAll('.expensica-credit-limit-warning').length, 1);
         assert.match(modalText(a.root.querySelector('.expensica-credit-limit-warning')), /Outstanding debt: \$200\.00.*Credit limit: \$100\.00.*Exceeded by: \$100\.00/);
-        assert.equal(a.counts.content, 2, 'only the first activation switches tabs');
-        assert.equal(a.counts.layouts, 1);
+        assert.equal(a.counts.content, 1, 'editor activation does not rerender the dashboard');
+        assert.equal(a.counts.layouts, 0);
         assert.equal(h.storage.writes, 0);
     });
 }
@@ -1358,7 +1324,6 @@ for (const editing of [false, true]) {
         h.p.transactionsData.transactions = editing ? [{ ...h.original, account: 'chequing-cash', amount: 10 }] : [];
         h.storage.fail = false;
         const { view, root } = creditWarningDashboard(h);
-        view.selectedTransactionIds = new Set();
         view.requestAllChartAnimations = () => {};
         const editor = new TransactionModal(h.p.app, h.p, view, editing ? h.p.getAllTransactions()[0] : null);
         editor.open();
@@ -1462,7 +1427,7 @@ test('Dashboard warnings use P1 cards and amounts while account cards retain onl
     const bytes = [...h.files], memory = JSON.stringify(h.p.transactionsData);
     const { root, counts } = creditWarningDashboard(h, 'accounts');
     const group = root.querySelector('.expensica-account-warnings');
-    assert.ok(root.children.indexOf(group) < root.children.indexOf(root.querySelector('.shadcn-header')));
+    assert.ok(root.children.indexOf(group) < root.children.indexOf(root.querySelector('.expensica-tabs')));
     const warnings = group.querySelectorAll('.expensica-credit-limit-warning');
     assert.equal(warnings.length, 2);
     const visa = warnings.find(warning => modalText(warning).includes('Visa'));
@@ -1473,7 +1438,7 @@ test('Dashboard warnings use P1 cards and amounts while account cards retain onl
     assert.ok(modalText(visa).includes(details));
     assert.equal(visa.getAttribute('role'), 'button');
     assert.equal(visa.getAttribute('tabindex'), '0');
-    assert.ok(visa.getAttribute('aria-label').startsWith('Open Accounts: Visa'));
+    assert.ok(visa.getAttribute('aria-label').startsWith('Edit account: Visa'));
     assert.ok(visa.getAttribute('aria-label').includes(details));
     assert.equal(visa.querySelectorAll('button').length, 0);
     assert.equal(visa.getAttribute('data-recovery-kind'), undefined);
@@ -1495,11 +1460,11 @@ test('Dashboard warnings use P1 cards and amounts while account cards retain onl
 });
 
 for (const action of ['click', 'Enter', ' ']) {
-    test(`Dashboard credit warning ${JSON.stringify(action)} opens only Accounts in the same dashboard`, () => {
+    test(`Dashboard credit warning ${JSON.stringify(action)} opens its editor in the same dashboard`, () => {
         const h = creditEditHarness('expense', 150);
         h.p.transactionsData.transactions.push({ ...h.original, id: 'master-debt', account: 'credit-master', amount: 175 });
         const a = creditWarningDashboard(h), b = creditWarningDashboard(h, 'transactions');
-        const start = shownModals.length;
+        const start = shownModals.length; let expectedModals = start;
         a.root.querySelector('.expensica-credit-limit-warning').dispatchEvent({ type: 'keydown', key: 'Escape' });
         assert.equal(shownModals.length, start);
         for (const name of ['Master', 'Visa']) {
@@ -1508,18 +1473,21 @@ for (const action of ['click', 'Enter', ' ']) {
             if (action === 'click') card.click();
             else card.dispatchEvent({ type: 'keydown', key: action, preventDefault() { prevented = true; } });
             assert.equal(prevented, action !== 'click');
-            assert.equal(shownModals.length, start);
-            assert.equal(a.view.currentTab, 'accounts');
+            assert.equal(shownModals.length, ++expectedModals);
+            assert.equal(shownModals.at(-1).account.name, name);
+            assert.equal(shownModals.at(-1).dashboardView, a.view);
+            assert.equal(a.view.currentTab, 'overview');
             assert.equal(b.view.currentTab, 'transactions');
-            assert.ok(a.root.querySelector('[data-expensica-tab="accounts"]').hasClass('active'));
-            card.click(); // Repeated or detached warnings never open editors.
+            assert.ok(a.root.querySelector('[data-expensica-tab="overview"]').hasClass('active'));
+            card.click(); // An already-open editor is reused.
             a.root.querySelectorAll('.expensica-credit-limit-warning')[0].click();
             a.view.renderDashboard();
             a.root.querySelectorAll('.expensica-credit-limit-warning')[0].click();
-            assert.equal(shownModals.length, start);
+            assert.equal(shownModals.length, expectedModals);
+            shownModals.at(-1).close();
         }
-        assert.equal(a.counts.content, 4, 'one initial render, one tab switch, and two requested dashboard renders');
-        assert.equal(a.counts.layouts, 1, 'already-active Accounts needs no navigation or refresh');
+        assert.equal(a.counts.content, 3, 'one initial render and two requested dashboard renders');
+        assert.equal(a.counts.layouts, 0, 'direct editing needs no tab navigation');
         assert.equal(h.storage.writes, 0);
     });
 }
@@ -1540,8 +1508,10 @@ test('Dashboard refreshes replace advisories, resolve warnings, and ignore detac
     const visa = h.p.getAccounts().find(account => account.id === 'visa');
     await h.p.updateAccount('credit-visa', { ...visa, name: 'Renamed Visa' });
     current.click();
-    assert.equal(view.currentTab, 'accounts');
-    assert.equal(shownModals.length, start);
+    assert.equal(view.currentTab, 'overview');
+    assert.equal(shownModals.length, start + 1);
+    assert.equal(shownModals.at(-1).account.name, 'Renamed Visa');
+    shownModals.at(-1).close();
     await view.refreshData();
     assert.match(modalText(root.querySelector('.expensica-credit-limit-warning')), /Renamed Visa/);
     await h.p.addTransaction({ ...h.original, id: '20261015-120000-00000009', account: models.formatAccountReference('credit', 'Renamed Visa'), type: 'income', category: 'salary', amount: 100 });
@@ -1559,22 +1529,27 @@ test('Dashboard refreshes replace advisories, resolve warnings, and ignore detac
     assert.equal(root.querySelector('.expensica-account-warnings'), null);
 });
 
-test('credit-limit descriptions follow the selected account type using existing accessible field styles', () => {
-    const p = plugin();
-    const modal = new AccountEditorModal({}, p, null);
+test('account warning accessibility follows type changes without unconditional credit descriptions', () => {
+    const account = { id: 'a', name: 'Cash', type: 'credit', creditLimit: 10 };
+    const p = plugin([account]);
+    p.transactions = [{ id: 'debt', date: '2026-10-01', type: 'expense', amount: 25, account: 'credit-cash' }];
+    const modal = new AccountEditorModal({}, p, null, account);
     modal.open();
-    assert.equal(modal.contentEl.querySelector('#credit-limit-description'), null);
-    modal.contentEl.querySelector('[data-account-type="credit"]').click();
-    const description = modal.contentEl.querySelector('#credit-limit-description');
+    const warning = modal.contentEl.querySelector('#account-balance-warning');
     const input = modal.contentEl.querySelector('#credit-limit');
-    assert.equal(input.getAttribute('aria-describedby'), description.getAttribute('id'));
-    assert.ok(description.hasClass('expensica-form-description'));
-    assert.ok(description.hasClass('setting-item-description'));
-    assert.equal(description.textContent, 'Transactions above this limit are still recorded. Expensica displays a warning.');
-    modal.contentEl.querySelector('[data-account-type="saving"]').click();
+    assert.equal(input.getAttribute('aria-describedby'), 'account-balance-warning');
+    assert.equal(warning.hidden, false);
+    assert.match(warning.textContent, /Credit limit exceeded/);
+    assert.ok(warning.hasClass('expensica-form-description'));
     assert.equal(modal.contentEl.querySelector('#credit-limit-description'), null);
+    input.value = '50'; input.dispatchEvent({ type: 'input' });
+    assert.equal(warning.hidden, true);
+    assert.equal(input.getAttribute('aria-describedby'), undefined);
+    modal.contentEl.querySelector('[data-account-type="saving"]').click();
+    assert.equal(modal.contentEl.querySelector('#credit-limit'), null);
+    assert.equal(warning.hidden, true);
     modal.contentEl.querySelector('[data-account-type="credit"]').click();
-    assert.equal(modal.contentEl.querySelectorAll('#credit-limit-description').length, 1);
+    assert.equal(modal.contentEl.querySelectorAll('#account-balance-warning').length, 1);
     modal.close();
 });
 
@@ -2105,12 +2080,15 @@ async function reconciliationFixture(references = ['saving-missing', 'credit-mis
     return { ...h, owner, input, source };
 }
 
-test('account names use the existing account color while Create Account keeps theme styling', () => {
+test('account names stay neutral while icons and amounts preserve the account color', () => {
     const root = new Element();
     const account = { id: 'colored', name: 'Cash', type: 'saving', color: '#123456' };
     accountCards.renderAccountCard(root, { account, runningBalance: 0, lastTransactionDateLabel: 'Today',
         currencyCode: 'USD', color: account.color });
-    assert.equal(root.querySelector('.expensica-account-card-name').style.color, '#123456');
+    assert.equal(root.querySelector('.expensica-account-card-name').style.color, undefined);
+    assert.equal(root.querySelector('.expensica-account-card-icon').style.color, '#123456');
+    assert.equal(root.querySelector('.expensica-account-card-balance').style.color, '#123456');
+    assert.equal(root.querySelector('.expensica-category-color-preview'), null, 'account icons replace the redundant color swatch');
     const card = accountCards.renderCreateAccountCard(root, { onClick() {} });
     assert.equal(card.querySelector('.expensica-account-card-name').style.color, undefined);
     assert.ok(card.hasClass('expensica-account-card-create'));
@@ -2176,7 +2154,7 @@ test('per-reference navigation shares stable drafts, preserves Back/Next choices
     const option = child.contentEl.querySelector('[data-account-id="' + draft.id + '"]');
     assert.match(option.textContent, /Shared savings.*will be created/);
     assert.equal(option.style.color, draft.color);
-    assert.ok(option.textContent.includes(models.getAccountEmoji(draft.type)));
+    assert.equal(option.querySelector('svg').attrs.stroke, 'currentColor');
     option.click();
     await press(child, 'Next');
     chooseAccount(child, h.p.getAccounts()[0].id);
@@ -2413,8 +2391,8 @@ test('reconciliation summary displays full capitalized names and types for both 
     chooseAccount(child, existing.id);
     await press(child, 'Next');
     assert.deepEqual(child.contentEl.querySelectorAll('li').map(item => item.textContent), [
-        models.getAccountEmoji('saving') + ' Testing account with a long full name - Saving',
-        models.getAccountEmoji('saving') + ' Existing account with a long full name - Saving'
+        'Testing account with a long full name - Saving',
+        'Existing account with a long full name - Saving'
     ]);
     assert.equal(h.p.getAccounts()[0].name, existing.name, 'display formatting does not change stored names');
     assert.equal(h.storage.writes, 0);
@@ -2656,48 +2634,48 @@ test('error card Retry rechecks all datasets and detects newly corrupted files',
     assert.equal(h.storage.writes, 0);
 });
 
-test('Retry preserves the actual dashboard header and content nodes when recovery data is unchanged', async () => {
+test('Retry preserves the actual dashboard tabs and content nodes when recovery data is unchanged', async () => {
     const h = recoveryHarness();
-    let headerRenders = 0, loads = 0;
+    let tabRenders = 0, loads = 0;
     const dashboard = Object.assign(Object.create(ExpensicaDashboardView.prototype), {
         plugin: h.p, app: h.p.app, containerEl: { children: [null, h.container] }, currentTab: 'overview',
+        dateRange: ExpensicaDashboardView.prototype.getDateRange(DateRangeType.THIS_MONTH),
         isDashboardVisible: () => true,
         consumeChartAnimationRequest() {}, rememberScrollPosition() {}, restoreScrollPosition() {},
-        renderDateRangeSelector(container) { container.createEl('button', { text: 'Stored date range' }); },
-        renderHeader(container) { headerRenders++; ExpensicaDashboardView.prototype.renderHeader.call(this, container); },
-        renderTabNavigation() {}, renderCurrentTabContent(container) { container.createDiv({ cls: 'test-body', text: 'Unchanged content' }); },
+        renderTabNavigation(container) { tabRenders++; ExpensicaDashboardView.prototype.renderTabNavigation.call(this, container); },
+        renderCurrentTabContent(container) { container.createDiv({ cls: 'test-body', text: 'Unchanged content' }); },
         loadTransactionsData: async () => { loads++; }
     });
     h.p.app.workspace.getLeavesOfType = () => [{ view: dashboard }];
     h.p.refreshExpensicaViews = PersistencePlugin.prototype.refreshExpensicaViews.bind(h.p);
     dashboard.renderDashboard();
-    const header = h.container.querySelector('.shadcn-header');
+    const tabs = h.container.querySelector('.expensica-tabs');
     const body = h.container.querySelector('.test-body');
     const original = h.files.get(h.p.budgetFilePath);
     h.files.set(h.p.budgetFilePath, '{broken budget');
     await h.p.loadBudgetData();
     shownModals.at(-1).close();
     await h.container.querySelector('[data-recovery-kind="load"]').querySelector('button').listeners.click[0]();
-    assert.equal(headerRenders, 1);
+    assert.equal(tabRenders, 1);
     assert.equal(loads, 0);
-    assert.equal(h.container.querySelector('.shadcn-header'), header);
+    assert.equal(h.container.querySelector('.expensica-tabs'), tabs);
     assert.equal(h.container.querySelector('.test-body'), body);
     shownModals.at(-1).close();
     const modalCount = shownModals.length;
     h.files.set(h.p.budgetFilePath, original);
     await h.container.querySelector('[data-recovery-kind="load"]').querySelector('button').listeners.click[0]();
     assert.equal(shownModals.length, modalCount);
-    assert.equal(headerRenders, 1);
-    assert.equal(h.container.querySelector('.shadcn-header'), header);
+    assert.equal(tabRenders, 1);
+    assert.equal(h.container.querySelector('.expensica-tabs'), tabs);
     assert.equal(h.container.querySelector('.test-body'), body);
     h.files.set(h.p.budgetFilePath, JSON.stringify({ budgets: [{ id: 'b', categoryId: 'food', period: 'monthly', amount: 100 }] }));
     assert.equal(await h.p.retryDataRecovery(), true);
-    assert.equal(headerRenders, 2, 'changed recovered data still refreshes the dashboard');
+    assert.equal(tabRenders, 2, 'changed recovered data still refreshes the dashboard');
     assert.equal(loads, 1);
-    assert.notEqual(h.container.querySelector('.shadcn-header'), header);
+    assert.notEqual(h.container.querySelector('.expensica-tabs'), tabs);
     assert.equal(h.p.getAllBudgets()[0].amount, 100);
     assert.equal(await h.p.retryDataRecovery(), true);
-    assert.equal(headerRenders, 2);
+    assert.equal(tabRenders, 2);
 });
 
 test('All Time cumulative charts include migrated historical expenses after recovery and subsequent imports', async () => {
@@ -3401,23 +3379,1026 @@ test('Range selections update the shared dashboard filter and preserve inclusive
     assert.equal(view.dateRange.endDate.getMilliseconds(), 999);
 });
 
-test('dashboard Import follows Export and invokes the shared picker entry point', async () => {
-    const h = pickerHarness();
-    const container = new Element();
-    const view = { app: h.p.app, plugin: h.p, renderDateRangeSelector() {} };
-    ExpensicaDashboardView.prototype.renderHeader.call(view, container);
-    const buttons = container.querySelectorAll('button');
-    assert.deepEqual(buttons.map(button => modalText(button).trim().replace(/\s+/g, ' ')), ['Transaction', 'Export', 'Import']);
-    assert.equal(buttons[2].attrs['aria-label'], 'Import transactions');
-    const count = shownModals.length;
-    buttons[2].click();
+test('Overview retains its summaries and charts while transaction lists belong to the Transactions tab', () => {
+    const root = new Element();
+    const rendered = [];
+    const view = Object.assign(Object.create(ExpensicaDashboardView.prototype), {
+        renderSummary() { rendered.push('summary'); },
+        renderCashFlow() { rendered.push('cash-flow'); },
+        renderPremiumVisualizations() { rendered.push('calendar'); },
+        renderExpensesChart() { rendered.push('categories'); },
+        renderIncomeExpenseChart() { rendered.push('balances'); },
+        plugin: { renderDashboardTransactionsTab(owner, container) {
+            assert.equal(owner, view);
+            assert.equal(container, root);
+            rendered.push('transactions');
+        } }
+    });
+    view.renderOverviewTab(root);
+    assert.deepEqual(rendered, ['summary', 'cash-flow', 'balances', 'categories', 'calendar']);
+    assert.equal(root.querySelector('.expensica-recent-transactions-section'), null);
+    view.renderTransactionsTab(root);
+    assert.equal(rendered.at(-1), 'transactions');
+});
+
+test('Overview creates one panel grid followed by Transactions & Balances, Categories and Heatmap in DOM order', () => {
+    const root = new Element();
+    const view = Object.assign(Object.create(ExpensicaDashboardView.prototype), {
+        renderSummary(parent) { parent.createDiv('expensica-account-balances-container'); },
+        renderCashFlow(parent) { parent.createDiv('expensica-cash-flow-container'); },
+        renderIncomeExpenseChart() {}, renderExpensesChart() {},
+        renderPremiumVisualizations(parent) { parent.createDiv('expensica-section'); }
+    });
+    view.renderOverviewTab(root);
+    assert.ok(root.hasClass('expensica-overview'));
+    assert.equal(root.children.length, 3);
+    const [pair, charts, heatmap] = root.children;
+    assert.ok(pair.hasClass('expensica-overview-panels'));
+    assert.ok(pair.children[0].hasClass('expensica-account-balances-container'));
+    assert.ok(pair.children[1].hasClass('expensica-cash-flow-container'));
+    assert.ok(charts.hasClass('expensica-dashboard-grid'));
+    assert.ok(charts.children[0].hasClass('expensica-income-expense-chart-container'));
+    assert.ok(charts.children[1].hasClass('expensica-expenses-chart-container'));
+    assert.ok(heatmap.hasClass('expensica-section'));
+});
+
+test('compact Transaction button follows the range menu and opens the existing modal', () => {
+    const { view, root } = cashFlowHarness();
+    view.selectedCalendarDate = new Date(2026, 10, 4);
+    view.renderTabNavigation(root);
+    const toolbar = root.children[0], create = toolbar.children[1];
+    assert.ok(toolbar.hasClass('expensica-toolbar'));
+    assert.ok(toolbar.children[0].hasClass('shadcn-date-range-container'));
+    assert.ok(toolbar.children[0].querySelector('.expensica-global-date-range'));
+    assert.ok(create.hasClass('expensica-create-transaction'));
+    assert.equal(create.tag, 'button');
+    assert.equal(modalText(create).trim(), 'Transaction');
+    assert.equal(create.children[0].attrs['aria-hidden'], 'true');
+    assert.equal(create.querySelector('.expensica-account-card-date'), null);
+    assert.ok(root.children[1].hasClass('expensica-tabs'));
+    create.click();
+    const modal = shownModals.at(-1);
+    assert.ok(modal instanceof TransactionModal);
+    assert.equal(modal.editorHost, view);
+    assert.equal(modal.contentEl.querySelector('input[name="date"]').value, '2026-11-04');
+    modal.close();
+});
+
+function selectGlobalRange(view, root, type) {
+    root.querySelector('.expensica-global-date-range').click();
+    const index = view.getDateRangeOptions().findIndex(option => option.type === type);
+    root.querySelector('.expensica-date-range-options').children[index].click();
+}
+function selectedRangeLabel(view, type = view.dateRange.type) {
+    return view.getDateRangeOptions().find(option => option.type === type).label;
+}
+
+test('global range dropdown restores its calendar, chevron and anchored options with keyboard navigation', () => {
+    const { view, root } = cashFlowHarness();
+    view.renderDateRangeSelector(root);
+    const button = root.querySelector('.expensica-global-date-range');
+    const selector = root.querySelector('.shadcn-date-range-selector');
+    const menu = root.querySelector('.expensica-date-range-options');
+    assert.ok(button.hasClass('shadcn-date-range-current'));
+    assert.equal(button.querySelectorAll('svg').length, 2);
+    assert.ok(menu.hasClass('shadcn-date-range-options'));
+    assert.ok(menu.hasClass('shadcn-date-range-hidden'));
+    assert.deepEqual(menu.children.map(item => item.textContent), ['TD', '1W', 'LW', '1M', 'LM', '1Y', 'LY', 'All', 'Range']);
+    assert.deepEqual(menu.children.filter(item => item.attrs['aria-checked'] === 'true').map(item => item.textContent), ['1M']);
+    selector.dispatchEvent({ type: 'keydown', target: button, key: 'ArrowDown', preventDefault() {} });
+    assert.ok(menu.children[3].focused);
+    assert.equal(button.attrs['aria-expanded'], 'true');
+    assert.ok(root.querySelector('.shadcn-date-range-icon').hasClass('dropdown-icon-open'));
+    selector.dispatchEvent({ type: 'keydown', target: menu.children[3], key: 'ArrowDown', preventDefault() {} });
+    assert.ok(menu.children[4].focused);
+    selector.dispatchEvent({ type: 'keydown', key: 'Escape', preventDefault() {} });
+    assert.equal(button.attrs['aria-expanded'], 'false');
+    assert.ok(button.focused);
+    assert.equal(view.dateRangeMenu, null);
+    button.click(); view.clearSelectorListeners();
+    assert.ok(menu.hasClass('shadcn-date-range-hidden'));
+});
+
+test('chart date buttons update the same range as the global menu', async () => {
+    const { view, root, effects } = cashFlowHarness();
+    view.renderDashboard();
+    const range = root.querySelector('.expensica-chart-range-buttons');
+    range.children[4].click();
     await new Promise(setImmediate);
-    assert.equal(shownModals.length, count + 1);
-    assert.equal(h.options.length, 1);
+    assert.equal(view.dateRange.type, DateRangeType.LAST_MONTH);
+    assert.equal(modalText(root.querySelector('.expensica-global-date-range')).trim(), 'LM');
+    assert.equal(effects.shared, 1);
+    const row = root.querySelector('.expensica-chart-range-buttons');
+    assert.equal(row.children.filter(button => button.hasClass('is-active'))[0].textContent, 'LM');
+});
+
+test('dashboard unload closes the active Obsidian range menu', () => {
+    const { p, root } = cashFlowHarness();
+    const view = new ExpensicaDashboardView({}, p);
+    view.renderDateRangeSelector(root);
+    const button = root.querySelector('.expensica-global-date-range');
+    button.click();
+    assert.equal(button.attrs['aria-expanded'], 'true');
+    view.unload();
+    assert.equal(view.dateRangeMenu, null);
+    assert.equal(button.attrs['aria-expanded'], 'false');
+});
+
+test('navigation tabs retain accessible native buttons, decorative icons, active state and conditional tabs', () => {
+    for (const enabled of [false, true]) {
+        const root = new Element(), selected = [];
+        const view = Object.assign(Object.create(ExpensicaDashboardView.prototype), {
+            plugin: { settings: { enableAccounts: enabled, enableBudgeting: enabled } },
+            dateRange: ExpensicaDashboardView.prototype.getDateRange(DateRangeType.THIS_MONTH),
+            currentTab: 'transactions', switchDashboardTab: tab => selected.push(tab)
+        });
+        view.renderTabNavigation(root);
+        const tabs = root.querySelectorAll('.expensica-tab');
+        assert.deepEqual(tabs.map(tab => tab.attrs['aria-label']), enabled
+            ? ['Overview', 'Transactions', 'Accounts', 'Budgets', 'Categories']
+            : ['Overview', 'Transactions', 'Categories']);
+        for (const tab of tabs) {
+            assert.equal(tab.tag, 'button');
+            assert.equal(tab.attrs.type, 'button');
+            assert.equal(tab.children[0].attrs['aria-hidden'], 'true');
+            assert.equal(tab.querySelector('.expensica-tab-label').textContent, tab.attrs['aria-label']);
+            assert.equal(tab.hasClass('active'), tab.attrs['data-expensica-tab'] === 'transactions');
+            assert.equal(tab.attrs['aria-current'], tab.hasClass('active') ? 'page' : undefined);
+            tab.click();
+        }
+        assert.deepEqual(selected, tabs.map(tab => tab.attrs['data-expensica-tab']));
+    }
+});
+
+test('Overview range controls share one state and refresh all filtered panels while keeping recorded balances', async () => {
+    const { view, root, effects } = cashFlowHarness();
+    const recorded = [];
+    Object.assign(view, {
+        renderPremiumVisualizations() {},
+        renderCategoryChartTypeSelector(container) { container.createDiv('expensica-chart-header'); },
+        renderDashboard() {
+            root.empty(); this.renderTabNavigation(root); this.renderOverviewTab(root);
+            recorded.push(this.transactions.map(transaction => transaction.id));
+        }
+    });
+    view.renderDashboard();
+    const footerText = () => root.querySelector('.expensica-account-balances-footer').querySelectorAll('.expensica-card-value').map(el => el.textContent).join('|');
+    const balances = footerText();
+    for (const type of [DateRangeType.LAST_MONTH, DateRangeType.ALL_TIME, DateRangeType.THIS_MONTH]) {
+        const controls = root.querySelectorAll('.expensica-global-date-range');
+        assert.equal(controls.length, 1);
+        assert.equal(root.querySelectorAll('.expensica-chart-range-buttons').length, 2);
+        selectGlobalRange(view, root, type);
+        await new Promise(setImmediate);
+        assert.equal(view.dateRange.type, type);
+        assert.equal(modalText(root.querySelector('.expensica-global-date-range')).trim(), selectedRangeLabel(view, type));
+        assert.equal(footerText(), balances, 'recorded balances never use the selected range');
+        assert.deepEqual(recorded.at(-1), Array.from(view.getTransactionsForDateRange(view.dateRange), transaction => transaction.id));
+    }
+    assert.equal(recorded[2].length, view.plugin.transactions.length);
+    assert.deepEqual(effects, { shared: 3, saves: 3, animations: 3, renders: 0 });
+    view.unload();
+});
+
+test('one global range dropdown persists across every tab and selections refresh shared data once', async () => {
+    const { view, root, p, effects } = cashFlowHarness();
+    const seen = [];
+    Object.assign(view, {
+        containerEl: { children: [null, root] }, currentTab: 'overview',
+        renderDashboard: ExpensicaDashboardView.prototype.renderDashboard,
+        consumeChartAnimationRequest() {}, rememberScrollPosition() {}, restoreScrollPosition() {},
+        renderAccountWarnings() {},
+        renderOverviewTab(container) { this.renderSummary(container); this.renderCashFlow(container); },
+        renderAccountsTab(container) { container.createDiv('accounts-test-content'); },
+        renderBudgetTab(container) { container.createDiv('budget-test-content'); },
+        renderCategoriesTab(container) { container.createDiv('categories-test-content'); }
+    });
+    p.renderDataRecoveryWarning = () => {};
+    p.settings.enableBudgeting = true;
+    p.renderDashboardTransactionsTab = owner => seen.push(owner.dateRange.type);
+    view.renderDashboard();
+    const ledger = JSON.stringify(p.transactions);
+    const balanceAmounts = () => root.querySelectorAll('.expensica-overview-card-balance')
+        .map(card => card.querySelector('.expensica-card-currency-amount').textContent);
+    const latest = balanceAmounts();
+    for (const [tab, range] of [['transactions', DateRangeType.LAST_MONTH], ['accounts', DateRangeType.THIS_WEEK],
+        ['budget', DateRangeType.THIS_YEAR], ['categories', DateRangeType.ALL_TIME], ['overview', DateRangeType.THIS_MONTH]]) {
+        const beforeSwitch = root.querySelector('.expensica-global-date-range');
+        view.switchDashboardTab(tab);
+        assert.equal(root.querySelector('.expensica-global-date-range'), beforeSwitch);
+        assert.equal(modalText(beforeSwitch).trim(), selectedRangeLabel(view));
+        assert.equal(beforeSwitch.parentElement.parentElement.parentElement.children[1], root.querySelector('.expensica-create-transaction'));
+        const beforeSelection = effects.shared;
+        selectGlobalRange(view, root, range);
+        await new Promise(setImmediate);
+        assert.equal(effects.shared, beforeSelection + 1);
+        assert.equal(view.currentTab, tab);
+        assert.equal(view.dateRange.type, range);
+        assert.equal(root.querySelectorAll('.expensica-global-date-range').length, 1);
+        assert.equal(modalText(root.querySelector('.expensica-global-date-range')).trim(), selectedRangeLabel(view, range));
+        assert.equal(root.querySelectorAll('.expensica-chart-range-buttons').length, tab === 'overview' ? 1 : 0);
+        assert.deepEqual(Array.from(view.transactions, row => row.id), Array.from(view.getTransactionsForDateRange(view.dateRange), row => row.id));
+    }
+    assert.ok(seen.includes(DateRangeType.LAST_MONTH));
+    assert.deepEqual(balanceAmounts(), latest);
+    await view.applySharedDateRangeState({ type: DateRangeType.CUSTOM, startDate: '2026-10-01', endDate: '2026-10-15',
+        customStartDate: '2026-10-01', customEndDate: '2026-10-15', updatedAt: Date.now() });
+    assert.equal(modalText(root.querySelector('.expensica-global-date-range')).trim(), 'Range');
+    assert.equal(root.querySelector('.expensica-global-date-range').attrs['aria-description'], '2026-10-01 to 2026-10-15');
+    assert.deepEqual(balanceAmounts(), latest);
+    assert.equal(JSON.stringify(p.transactions), ledger);
+    view.unload();
+});
+
+test('global custom range cancellation and repeated selections preserve the existing range', async () => {
+    const { view, root, effects } = cashFlowHarness();
+    view.renderDateRangeSelector(root);
+    const select = root.querySelector('.expensica-global-date-range');
+    selectGlobalRange(view, root, view.dateRange.type);
+    await new Promise(setImmediate);
+    assert.equal(effects.shared, 0);
+    const range = view.dateRange;
+    selectGlobalRange(view, root, DateRangeType.CUSTOM);
+    shownModals.at(-1).close();
+    assert.equal(modalText(select).trim(), selectedRangeLabel(view, range.type));
+    assert.equal(view.dateRange, range);
+    assert.equal(effects.shared, 0);
+});
+
+test('trend tooltips contain only change text and the comparison month and year', () => {
+    const { view, root } = cashFlowHarness();
+    view.renderCashFlow(root);
+    const pill = root.querySelector('.expensica-cash-flow-comparison');
+    assert.equal(pill.attrs['aria-label'], 'More than 50% ($50.00) from Sep, 2026.');
+    pill.dispatchEvent({ type: 'focus' });
+    assert.equal(focusedTooltips.at(-1).content, pill.attrs['aria-label']);
+    assert.equal(typeof focusedTooltips.at(-1).content, 'string');
+});
+
+test('Settings retain Export Transactions and Import actions', () => {
+    const calls = [], buttons = [];
+    const settings = { plugin: {
+        openExportModal() { calls.push('export'); },
+        openImportModal() { calls.push('import'); }
+    } };
+    const setting = { addButton(callback) {
+        const button = {
+            buttonEl: new Element('button'),
+            then(callback) { callback(this); return this; },
+            setButtonText(text) { this.text = text; return this; },
+            onClick(handler) { this.click = handler; return this; }
+        };
+        callback(button); buttons.push(button); return this;
+    } };
+    ExpensicaSettingTab.prototype.renderExportSetting.call(settings, setting);
+    ExpensicaSettingTab.prototype.renderImportSetting.call(settings, setting);
+    assert.deepEqual(buttons.map(button => button.text), ['Export Transactions', 'Import']);
+    buttons.forEach(button => button.click());
+    assert.deepEqual(calls, ['export', 'import']);
+});
+
+test('new and edited transaction title SVGs follow type changes while category emojis remain', () => {
+    const p = plugin([{ ...models.DEFAULT_ACCOUNT }, { id: 's', name: 'Savings', type: 'saving' }]);
+    p.getCategoryEmoji = () => '\u{1f354}';
+    for (const editing of [false, true]) {
+        const transaction = editing ? { id: 't', date: '2026-10-01', type: 'expense', amount: 1, category: 'food' } : null;
+        const modal = new TransactionModal({}, p, {}, transaction);
+        modal.onOpen();
+        for (const [type, color] of [['income', 'var(--text-success)'], ['expense', 'var(--text-error)'], ['internal', 'var(--text-muted)']]) {
+            modal.contentEl.querySelector(`[data-transaction-type="${type}"]`).click();
+            const icon = modal.contentEl.querySelector('.expensica-modal-title-icon').querySelector('.expensica-ui-icon');
+            assert.equal(icon.style.color, color);
+            assert.equal(icon.querySelector('svg').attrs.stroke, 'currentColor');
+            assert.equal(icon.querySelector('svg').attrs['aria-hidden'], 'true');
+            assert.ok(modal.contentEl.querySelectorAll('.expensica-category-emoji').some(el => el.textContent === '\u{1f354}'));
+        }
+    }
+});
+
+test('account title SVGs retain account color through type and color edits', () => {
+    for (const editing of [false, true]) {
+        const p = plugin();
+        const account = editing ? { id: 'a', name: 'Card', type: 'credit', color: models.ColorPalette.colors[0] } : null;
+        const modal = new AccountEditorModal({}, p, null, account);
+        modal.onOpen();
+        const titleIcon = modal.contentEl.querySelector('.expensica-modal-title-icon');
+        const initialColor = editing ? account.color.slice(0, 7) : models.getNextAccountColor(p.getAccounts());
+        assert.equal(titleIcon.style.color, initialColor);
+        modal.contentEl.querySelector('[data-account-type="saving"]').click();
+        assert.equal(titleIcon.style.color, initialColor);
+        assert.equal(titleIcon.querySelector('svg').attrs.stroke, 'currentColor');
+        modal.contentEl.querySelector('#account-color').click();
+        const palette = shownModals.at(-1);
+        const swatch = palette.contentEl.querySelectorAll('button')[1];
+        swatch.click();
+        assert.equal(titleIcon.style.color, swatch.style.backgroundColor);
+        assert.equal(modal.contentEl.querySelector('form').style['--expensica-account-icon-color'], titleIcon.style.color);
+    }
+});
+
+test('budget cards and editor SVGs use category colors without changing category emoji parameters', () => {
+    const p = plugin();
+    p.getBudgetForCategory = () => null;
+    p.getCategoryEmoji = () => '\u{1f354}';
+    const budget = { id: 'b', categoryId: 'food', amount: 100, period: 'monthly' };
+    const { renderBudgetCard } = load('src/budget-cards.ts', { './models': models });
+    const color = p.getCategoryColor('food', 'Food');
+    const card = renderBudgetCard(new Element(), { budget, categoryName: 'Food', categoryColor: color, currencyCode: 'USD',
+        spent: 0, remaining: 100, percentage: 0, periodLabel: 'monthly', statusText: '', statusClass: '' });
+    assert.equal(card.querySelector('.expensica-budget-card-icon').style.color, color);
+    assert.equal(card.querySelector('svg').attrs.stroke, 'currentColor');
+    for (const entry of [null, budget]) {
+        const modal = new BudgetModal({}, p, {}, entry);
+        modal.onOpen();
+        const titleIcon = modal.contentEl.querySelector('.expensica-modal-title-icon');
+        if (entry) assert.equal(titleIcon.style.color, color);
+        const option = modal.categoryOptions.children[1];
+        option.click();
+        assert.equal(titleIcon.style.color, p.getCategoryColor(modal.selectedCategoryId, p.getCategoryById(modal.selectedCategoryId).name));
+        assert.equal(p.getCategoryEmoji(modal.selectedCategoryId), '\u{1f354}');
+    }
+});
+
+test('date-range title and empty budget summary render decorative SVGs with semantic colors', () => {
+    const modal = new DateRangePickerModal({}, new Date(2026, 9, 1), new Date(2026, 9, 2), () => {});
+    modal.onOpen();
+    assert.equal(modal.contentEl.querySelector('.expensica-modal-title-icon').attrs['aria-hidden'], 'true');
+    const root = new Element();
+    ExpensicaDashboardView.prototype.renderBudgetSummary.call({ formatBudgetCurrency: String }, root, []);
+    assert.deepEqual(root.querySelectorAll('.expensica-ui-icon').map(icon => icon.style.color),
+        Array(3).fill('var(--text-muted)'));
+});
+
+function cashFlowHarness(income = 150, expenses = 60) {
+    const p = plugin([{ id: 'cash', name: 'Cash', type: 'chequing', isDefault: true, color: '#123456' },
+        { id: 'saving', name: 'Savings', type: 'saving', color: '#456789' }]);
+    const row = (id, date, type, amount, fields = {}) => ({ id, date, type, amount, time: '12:00:00', account: 'chequing-cash', ...fields });
+    p.transactions = [row('opening', '2020-01-01', 'income', 1000),
+        row('prior-income', '2026-09-01', 'income', 100), row('prior-expense', '2026-09-30', 'expense', 40),
+        row('income', '2026-10-01', 'income', income), row('expense', '2026-10-31', 'expense', expenses),
+        row('transfer', '2026-10-15', 'internal', 25, { fromAccount: 'chequing-cash', toAccount: 'saving-savings' })];
+    const effects = { shared: 0, saves: 0, animations: 0, renders: 0 };
+    const root = new Element();
+    const view = Object.assign(Object.create(ExpensicaDashboardView.prototype), {
+        app: {}, plugin: p, currentDate: new Date(2026, 9, 15), selectedCalendarDate: null,
+        dateRange: { type: DateRangeType.THIS_MONTH, startDate: new Date(2026, 9, 1), endDate: new Date(2026, 9, 31, 23, 59, 59, 999), label: '1M' },
+        updateSharedDateRange: async () => { effects.shared++; },
+        loadTransactionsData: async () => view.loadTransactionsForDateRange(),
+        persistDashboardState: () => { effects.saves++; }, requestAllChartAnimations: () => { effects.animations++; },
+        renderDashboard() { effects.renders++; root.empty(); this.renderDateRangeSelector(root); this.renderCashFlow(root); }
+    });
+    view.scheduleChartInitialization = () => {};
+    view.loadTransactionsForDateRange();
+    return { p, view, root, effects };
+}
+
+test('Cash Flow keeps its chart range row below cumulative expenses', () => {
+    for (const empty of [false, true]) {
+        const { view, root } = cashFlowHarness();
+        if (empty) view.transactions = [];
+        const scheduled = [];
+        view.scheduleChartInitialization = (key, canvas) => scheduled.push({ key, canvas });
+        view.renderCashFlow(root);
+        const panel = root.querySelector('.expensica-cash-flow-panel');
+        assert.equal(root.querySelectorAll('.expensica-chart-container').length, 1);
+        assert.equal(panel.querySelectorAll('.expensica-chart-header').length, 1);
+        assert.equal(modalText(panel.querySelector('.expensica-chart-title')).trim(), 'Cash Flow');
+        assert.equal(root.querySelector('.expensica-cumulative-expenses-chart-container'), null);
+        const metrics = panel.querySelector('.expensica-cash-flow-metrics');
+        const canvas = panel.querySelector('.expensica-canvas-container');
+        assert.equal(canvas.parentElement, panel);
+        assert.ok(panel.children.indexOf(metrics) < panel.children.indexOf(canvas));
+        assert.equal(panel.querySelector('.expensica-chart-range-buttons').children.length, 9);
+        assert.equal(scheduled.length, empty ? 0 : 1);
+        if (!empty) {
+            assert.equal(scheduled[0].key, 'cumulativeExpensesChart');
+            assert.equal(scheduled[0].canvas.parentElement, canvas);
+        }
+        panel.closest = () => panel;
+        assert.equal(view.getChartScrollAnchorSelector(panel), '.expensica-cash-flow-panel');
+    }
+});
+
+test('Account Balances shows the full recorded ledger independently of past, current and future date ranges', () => {
+    const { p, view, root } = cashFlowHarness();
+    p.getAccounts().push({ id: 'credit', name: 'Visa', type: 'credit' });
+    p.transactions.push(
+        { id: 'future-income', date: '2099-01-01', time: '12:00:00', type: 'income', amount: 200, account: 'chequing-cash' },
+        { id: 'future-debt', date: '2099-01-02', time: '12:00:00', type: 'expense', amount: 80, account: 'credit-visa' },
+        { id: 'future-payment', date: '2099-01-03', time: '12:00:00', type: 'internal', amount: 30,
+            fromAccount: 'chequing-cash', toAccount: 'credit-visa' });
+    const before = JSON.stringify(p.transactions);
+    for (const year of [2019, 2026, 2100]) {
+        view.dateRange = { type: DateRangeType.THIS_MONTH, startDate: new Date(year, 9, 1), endDate: new Date(year, 9, 31) };
+        view.loadTransactionsForDateRange(); root.empty(); view.renderSummary(root);
+        const cards = root.querySelectorAll('.expensica-overview-card-balance');
+        assert.deepEqual(cards.map(card => card.querySelector('.expensica-card-currency-amount').textContent), ['$1,295.00', '$25.00', '$50.00']);
+        assert.deepEqual(root.querySelector('.expensica-account-balances-footer').querySelectorAll('.expensica-card-value').map(el => el.textContent), ['$1,320.00', '$50.00', '$1,270.00']);
+        assert.equal(root.querySelectorAll('.expensica-card-trend').length, 6, 'account and summary metrics share period comparisons');
+        assert.equal(root.querySelector('.expensica-chart-range-buttons'), null);
+        const info = root.querySelector('.expensica-account-balances-header').querySelector('button');
+        assert.equal(info.attrs['aria-label'], 'Last recorded account balances independant from the date range.');
+        assert.equal(info.attrs.title, undefined);
+        assert.ok(info.hasClass('expensica-cash-flow-info'));
+        assert.ok(cards[2].querySelector('.expensica-account-balances-owed'));
+    }
+    assert.equal(JSON.stringify(p.transactions), before);
+    view.unload();
+});
+
+test('period comparisons use the immediately preceding equivalent calendar period including custom ranges', () => {
+    const { view } = cashFlowHarness();
+    for (const [type, start, end, previousStart, previousEnd] of [
+        [DateRangeType.TODAY, '2026-01-01', '2026-01-01', '2025-12-31', '2025-12-31'],
+        [DateRangeType.THIS_WEEK, '2026-01-04', '2026-01-10', '2025-12-28', '2026-01-03'],
+        [DateRangeType.LAST_WEEK, '2026-03-08', '2026-03-14', '2026-03-01', '2026-03-07'],
+        [DateRangeType.THIS_MONTH, '2024-03-01', '2024-03-31', '2024-02-01', '2024-02-29'],
+        [DateRangeType.LAST_MONTH, '2026-01-01', '2026-01-31', '2025-12-01', '2025-12-31'],
+        [DateRangeType.THIS_YEAR, '2025-01-01', '2025-12-31', '2024-01-01', '2024-12-31'],
+        [DateRangeType.LAST_YEAR, '2024-01-01', '2024-12-31', '2023-01-01', '2023-12-31'],
+        [DateRangeType.CUSTOM, '2026-03-07', '2026-03-09', '2026-03-04', '2026-03-06'],
+        [DateRangeType.CUSTOM, '2024-02-28', '2024-03-01', '2024-02-25', '2024-02-27']
+    ]) {
+        view.dateRange = { type, startDate: models.parseLocalDate(start), endDate: models.parseLocalDate(end) };
+        const { range } = view.getPreviousPeriodComparisonRange();
+        assert.equal(models.formatDate(range.startDate), previousStart, type);
+        assert.equal(models.formatDate(range.endDate), previousEnd, type);
+        assert.equal(range.endDate.getHours(), 23);
+        assert.equal(range.endDate.getMilliseconds(), 999);
+    }
+});
+
+test('Accounts and summary trends compare selected closing positions while displaying the latest ledger', () => {
+    const { view, root } = cashFlowHarness();
+    view.plugin = plugin([{ id: 'cash', name: 'Cash', type: 'chequing', isDefault: true },
+        { id: 'card', name: 'Card', type: 'credit' }]);
+    view.plugin.transactions = [
+        ['2025-12-01', 'income', 100, 'chequing-cash'], ['2025-12-02', 'expense', 50, 'credit-card'],
+        ['2026-01-01', 'income', 100, 'chequing-cash'], ['2026-01-02', 'expense', 25, 'credit-card'],
+        ['2030-01-01', 'income', 1000, 'chequing-cash'], ['2030-01-02', 'expense', 100, 'credit-card']
+    ].map(([date, type, amount, account], index) => ({ id: String(index), date, type, amount, account }));
+    view.dateRange = view.getDateRange(DateRangeType.CUSTOM, models.parseLocalDate('2026-01-01'), models.parseLocalDate('2026-01-31'));
+    view.dateRange.type = DateRangeType.THIS_MONTH;
+    view.renderSummary(root);
+    const panel = root.querySelector('.expensica-account-balances-panel');
+    assert.equal(panel.children[1].tag, 'div', 'summary appears directly below the panel header');
+    assert.ok(panel.children[2].hasClass('expensica-account-balances-viewport'));
+    assert.deepEqual(root.querySelector('.expensica-account-balances-footer').querySelectorAll('.expensica-card-value').map(el => el.textContent), ['$1,200.00', '$175.00', '$1,025.00']);
+    const summaryPills = root.querySelector('.expensica-account-balances-footer').querySelectorAll('.expensica-card-trend');
+    assert.deepEqual(summaryPills.map(pill => modalText(pill).trim()), ['$100.00', '50%', '$75.00']);
+    assert.ok(summaryPills[1].hasClass('is-negative'), 'rising debt is negative news');
+    assert.ok(summaryPills.every(pill => pill.attrs['aria-label'].endsWith('from Dec, 2025.')));
+    assert.deepEqual(root.querySelectorAll('.expensica-overview-card-balance').map(card => modalText(card.querySelector('.expensica-card-trend')).trim()), ['$100.00', '50%']);
+    view.unload();
+});
+
+test('account and summary zero baselines use finite currency changes rather than undefined percentages', () => {
+    const { view, root } = cashFlowHarness();
+    view.plugin = plugin([{ id: 'cash', name: 'Cash', type: 'chequing', isDefault: true }]);
+    view.plugin.transactions = [{ id: 'new', date: '2026-10-01', type: 'income', amount: 100, account: 'chequing-cash' }];
+    view.renderSummary(root);
+    const pills = root.querySelectorAll('.expensica-card-trend');
+    assert.deepEqual(pills.map(pill => modalText(pill).trim()), ['$100.00', '0%', '$100.00', '$100.00']);
+    assert.ok(pills.every(pill => !/NaN|Infinity|100%/.test(pill.attrs['aria-label'])));
+    assert.equal(pills[1].querySelector('svg'), null);
+    view.unload();
+});
+
+test('account cards open the existing editor directly and retain the selected tab', () => {
+    const { view, root, p } = cashFlowHarness();
+    const navigation = [];
+    view.switchDashboardTab = tab => { navigation.push(tab); view.currentTab = tab; };
+    p.openTransactionsView = () => assert.fail('transaction search must not open');
+    view.renderSummary(root);
+    root.querySelector('.expensica-overview-card-balance').click();
+    assert.deepEqual(navigation, []);
+    assert.ok(view.accountEditorModal instanceof AccountEditorModal);
+    assert.equal(view.accountEditorModal.account.id, 'cash');
+    assert.equal(view.accountEditorModal.contentEl.querySelector('#account-name').value, 'Cash');
+    view.accountEditorModal.close();
+    view.unload();
+});
+
+test('account balance tooltips use latest balances and remaining credit, including credit balances and unset limits', () => {
+    const { view, root } = cashFlowHarness();
+    const cases = [
+        [{ id: 'a', name: 'Cash', type: 'chequing' }, 50, 'Your Cash balance is $50.00'],
+        [{ id: 'a', name: 'Visa', type: 'credit', creditLimit: 100 }, 25, 'Your Visa balance is $25.00, your remaining credit limit is $75.00'],
+        [{ id: 'a', name: 'Visa', type: 'credit', creditLimit: 100 }, 125, 'Your Visa balance is $125.00, your remaining credit limit is $0.00'],
+        [{ id: 'a', name: 'Visa', type: 'credit', creditLimit: 100 }, -25, 'Your Visa balance is -$25.00, your remaining credit limit is $100.00'],
+        [{ id: 'a', name: 'Visa', type: 'credit' }, 25, 'Your Visa balance is $25.00, your remaining credit limit is not set']
+    ];
+    for (const [account, balance, expected] of cases) {
+        const card = root.createDiv();
+        view.setAccountBalanceTooltip(card, account, balance);
+        assert.equal(card.attrs['aria-label'], expected);
+        assert.equal(card.tooltipOptions.classes[0], 'expensica-chart-tooltip');
+        card.dispatchEvent({ type: 'focus' });
+        assert.equal(focusedTooltips.at(-1).text, expected);
+        assert.equal(card.listeners.click, undefined, 'balance tooltip does not intercept account editing');
+    }
+});
+
+test('Overview omits the add-account card while the Accounts tab keeps its create action', () => {
+    const { view, root } = cashFlowHarness();
+    view.renderTabNavigation(root); view.renderSummary(root);
+    assert.equal(root.querySelector('.expensica-account-balance-create'), null);
+    assert.equal(root.querySelector('.expensica-account-balances-row').querySelector('.expensica-account-card-create'), null);
+    assert.ok(root.querySelectorAll('.expensica-tab').some(tab => tab.attrs['data-expensica-tab'] === 'accounts'));
+    const accounts = new Element(); view.renderAccountsTab(accounts);
+    assert.ok(accounts.querySelector('.expensica-account-card-create'));
+});
+
+test('account editor warnings appear only for overdrafts or exceeded credit limits and update with the limit', () => {
+    for (const [type, balance, limit, expected] of [
+        ['chequing', 25, undefined, ''], ['chequing', 0, undefined, ''], ['chequing', -25, undefined, 'Overdraft:'],
+        ['credit', 25, 100, ''], ['credit', 100, 100, ''], ['credit', 125, 100, 'Credit limit exceeded'],
+        ['credit', -25, 100, ''], ['credit', 25, undefined, ''], ['credit', 25, 0, 'Credit limit exceeded']
+    ]) {
+        const account = { id: 'a', name: 'Cash', type, creditLimit: limit };
+        const p = plugin([account]);
+        p.transactions = [{ id: 'balance', date: '2026-10-01', type: (type === 'credit') === (balance > 0) ? 'expense' : 'income',
+            amount: Math.abs(balance), account: models.formatAccountReference(type, account.name) }];
+        const modal = new AccountEditorModal({}, p, null, account);
+        modal.open();
+        const warning = modal.contentEl.querySelector('#account-balance-warning');
+        assert.equal(warning.hidden, expected === '', `${type}/${balance}/${limit}`);
+        assert.ok(warning.textContent.startsWith(expected));
+        assert.ok(warning.hasClass('expensica-account-editor-warning'));
+        assert.equal(modal.contentEl.querySelector('#account-overdraft-description'), null);
+        assert.equal(modal.contentEl.querySelector('#credit-limit-description'), null);
+        if (type === 'credit') {
+            const input = modal.contentEl.querySelector('#credit-limit');
+            input.value = '200'; input.dispatchEvent({ type: 'input' });
+            assert.equal(warning.hidden, true);
+            input.value = '0'; input.dispatchEvent({ type: 'input' });
+            assert.equal(warning.hidden, balance <= 0);
+            input.value = ''; input.dispatchEvent({ type: 'input' });
+            assert.equal(warning.hidden, true);
+        }
+        modal.close();
+    }
+});
+
+test('Overview category buttons switch only category chart state and retain the shared range', () => {
+    const { view, root } = cashFlowHarness();
+    view.categoryChartType = models.CategoryType.EXPENSE;
+    const range = view.dateRange, changes = [];
+    view.renderCategoryChartTypeSelector(root, () => changes.push(view.categoryChartType), { buttons: true });
+    assert.equal(root.querySelector('.expensica-chart-type-current'), null);
+    assert.equal(view.categoryChartTypeSelectorComponent, null, 'buttons require no outside-click listener');
+    const buttons = root.querySelector('.expensica-category-type-buttons').children;
+    assert.deepEqual(buttons.map(button => button.textContent), ['Income', 'Expenses']);
+    assert.equal(buttons[1].attrs['aria-pressed'], 'true');
+    buttons[1].click(); assert.deepEqual(changes, []);
+    buttons[0].click(); assert.deepEqual(changes, ['income']);
+    assert.equal(view.dateRange, range);
+    root.empty(); view.renderCategoryChartTypeSelector(root, () => {}, { buttons: true });
+    assert.equal(root.querySelector('.expensica-category-type-buttons').children[0].attrs['aria-pressed'], 'true');
+});
+
+test('embedded cumulative expenses keeps period data and comparison totals while abbreviating legend months', () => {
+    const { p, view } = cashFlowHarness();
+    const chart = Object.assign(chartView(p), { dateRange: view.dateRange, currentDate: view.currentDate, transactions: view.transactions });
+    const legend = new Element();
+    chart.createCumulativeExpensesChart(new Element('canvas'), legend);
+    assert.deepEqual(legend.querySelectorAll('.expensica-cumulative-expenses-legend-label').map(el => el.textContent), ['Oct, 2026', 'Sep, 2026']);
+    const datasets = chart.cumulativeExpensesChart.data.datasets;
+    assert.equal(datasets[1].data.at(-1), 60);
+    assert.equal(datasets[0].data.filter(value => value !== null).at(-1), 40);
+});
+
+for (const [income, expenses] of [[150, 60], [40, 60], [60, 60], [0, 0], [0.3, 0.2]]) {
+    test(`Cash Flow uses range totals and excludes transfers: ${income} - ${expenses}`, () => {
+        const { p, view, root } = cashFlowHarness(income, expenses);
+        const before = JSON.stringify(p.transactions);
+        view.renderCashFlow(root);
+        const metrics = root.querySelectorAll('.expensica-cash-flow-metric');
+        assert.deepEqual(metrics.map(item => item.querySelector('.expensica-cash-flow-label').textContent.trim()), ['Income:', 'Expenses:', 'Net Flow:']);
+        assert.deepEqual(metrics.map(item => item.querySelector('.expensica-card-currency-amount').textContent),
+            [income, expenses, income - expenses].map(value => models.formatCurrency(value, 'USD')));
+        assert.ok(metrics[2].querySelector('.expensica-cash-flow-comparison'));
+        const expectedColor = income === expenses ? 'var(--text-muted)' : income > expenses ? 'var(--text-success)' : 'var(--text-error)';
+        assert.equal(metrics[2].style['--expensica-cash-flow-color'], expectedColor);
+        assert.ok(metrics.every(item => !item.querySelector('.expensica-cash-flow-label').querySelector('svg')));
+        const panel = root.querySelector('.expensica-cash-flow-panel');
+        assert.ok(panel.hasClass('expensica-chart-container'));
+        assert.equal(panel.querySelector('.expensica-chart-range-buttons').children.length, 9);
+        assert.equal(JSON.stringify(p.transactions), before);
+    });
+}
+
+test('summary metrics show label and amount above trends and clicks only toggle total tooltips', () => {
+    const { view, root, p } = cashFlowHarness();
+    p.openTransactionsView = () => assert.fail('metrics must not open transaction navigation');
+    view.switchDashboardTab = () => assert.fail('metrics must not change tabs');
+    view.renderSummary(root); view.renderCashFlow(root);
+    const metrics = root.querySelectorAll('.expensica-cash-flow-metric');
+    const expected = [
+        'your total Assets is $1,150.00', 'your total Debts is $0.00', 'your total Net Balance is $1,150.00',
+        'your total Income for Oct, 2026 is $150.00', 'your total Expenses for Oct, 2026 is $60.00',
+        'your total Net Flow for Oct, 2026 is $90.00'
+    ];
+    metrics.forEach((metric, index) => {
+        assert.equal(metric.children.length, 2);
+        const [total, trend] = metric.children;
+        assert.ok(total.hasClass('expensica-metric-total'));
+        assert.ok(trend.hasClass('expensica-card-trend'));
+        assert.ok(total.children[0].textContent.endsWith(': '));
+        assert.ok(total.children[1].hasClass('expensica-card-value'));
+        assert.equal(total.attrs['aria-label'], expected[index]);
+        assert.equal(total.tooltipOptions.classes[0], 'expensica-chart-tooltip');
+        assert.equal(trend.tooltipOptions.classes[0], 'expensica-chart-tooltip');
+        assert.equal(metric.hasClass('expensica-overview-card-interactive'), false);
+        total.click();
+        assert.equal(focusedTooltips.at(-1).text, expected[index]);
+        assert.equal(total.attrs['aria-expanded'], 'true');
+        total.click();
+        assert.equal(total.attrs['aria-expanded'], 'false');
+        total.dispatchEvent({ type: 'keydown', key: 'Enter', preventDefault() {}, stopPropagation() {} });
+        assert.equal(total.attrs['aria-expanded'], 'true');
+        trend.click();
+        assert.equal(focusedTooltips.at(-1).text, trend.attrs['aria-label']);
+    });
+});
+
+test('Cash Flow comparisons reuse the previous period and keep its description in the tooltip', () => {
+    const { view, root } = cashFlowHarness();
+    view.renderCashFlow(root);
+    const pills = root.querySelectorAll('.expensica-cash-flow-comparison');
+    assert.equal(pills.length, 3);
+    assert.deepEqual(pills.map(pill => modalText(pill).trim()), ['50%', '50%', '50%']);
+    assert.deepEqual(pills.map(pill => pill.attrs['aria-label']), [
+        'More than 50% ($50.00) from Sep, 2026.',
+        'More than 50% ($20.00) from Sep, 2026.',
+        'More than 50% ($30.00) from Sep, 2026.'
+    ]);
+    assert.ok(pills.every(pill => pill.attrs.title === undefined));
+    assert.ok(pills.every(pill => pill.querySelectorAll('polyline').at(-1).attrs.points === '16 7 22 7 22 13'));
+    view.dateRange = view.getDateRange(DateRangeType.ALL_TIME);
+    view.loadTransactionsForDateRange(); root.empty(); view.renderCashFlow(root);
+    assert.equal(root.querySelectorAll('.expensica-cash-flow-comparison').length, 0);
+});
+
+test('Cash Flow arrows follow numeric direction while expense colors reverse financial meaning', () => {
+    for (const [income, expenses, state, percentage] of [[150, 60, 'is-positive', '50%'],
+        [50, 20, 'is-negative', '50%'], [100, 40, 'is-neutral', '0%']]) {
+        const { view, root } = cashFlowHarness(income, expenses);
+        view.renderCashFlow(root);
+        for (const [index, pill] of root.querySelectorAll('.expensica-cash-flow-comparison').entries()) {
+            const meaning = index === 1 && state !== 'is-neutral' ? (state === 'is-positive' ? 'is-negative' : 'is-positive') : state;
+            assert.ok(pill.hasClass(meaning));
+            assert.equal(modalText(pill).trim(), percentage);
+            const icon = pill.querySelector('svg');
+            if (state === 'is-neutral') assert.equal(icon, null);
+            else assert.equal(icon.querySelectorAll('polyline').at(-1).attrs.points,
+                state === 'is-positive' ? '16 7 22 7 22 13' : '16 17 22 17 22 11');
+        }
+    }
+});
+
+test('Account balance trends invert credit colors while preserving numeric direction and Owed labels', () => {
+    const { view, root } = cashFlowHarness();
+    const fixtures = [
+        ['Cash', 'chequing', 100, 200, 'is-positive', 'up', '$100.00'],
+        ['Reserve', 'saving', 100, 50, 'is-negative', 'down', '50%'],
+        ['Visa', 'credit', 100, 200, 'is-negative', 'up', '$100.00'],
+        ['Payment', 'credit', 100, 50, 'is-positive', 'down', '50%'],
+        ['Flat', 'other', 100, 100, 'is-neutral', null, '0%'],
+        ['Empty', 'credit', 0, 0, 'is-neutral', null, '0%'],
+        ['Tiny', 'saving', 100, 100.04, 'is-positive', 'up', '$0.04'],
+        ['Prepaid', 'credit', 10, -20, 'is-positive', 'down', '$30.00'],
+        ['Credit reserve', 'credit', -100, -50, 'is-negative', 'up', '$50.00'],
+        ['Overdrawn', 'chequing', -100, -50, 'is-positive', 'up', '$50.00'],
+        ['Crossing', 'chequing', -100, 20, 'is-positive', 'up', '$120.00']
+    ];
+    const accounts = fixtures.map(([name, type], index) => ({ id: String(index), name, type, isDefault: index === 0 }));
+    view.plugin = plugin(accounts);
+    view.plugin.transactions = fixtures.map(([, type, , amount], index) => ({
+        id: String(index), date: '2026-10-01', amount: Math.abs(amount),
+        type: (type === 'credit' ? amount > 0 : amount < 0) ? 'expense' : 'income',
+        account: models.formatAccountReference(accounts[index].type, accounts[index].name)
+    }));
+    view.getDefaultAccountBalanceThrough = () => 0;
+    view.getAccountBalanceThroughDateTime = (reference, date) => {
+        const index = accounts.findIndex(account => models.formatAccountReference(account.type, account.name) === reference);
+        return fixtures[index][date.getMonth() === 8 ? 2 : 3];
+    };
+    view.renderSummary(root);
+    root.querySelectorAll('.expensica-overview-card-balance').forEach(card => {
+        const [, type, , amount, state, direction, percentage] = fixtures.find(([name]) => name === modalText(card.querySelector('.expensica-card-title')).trim());
+        const pill = card.querySelector('.expensica-account-balances-comparison');
+        assert.ok(pill.hasClass(state));
+        assert.equal(modalText(pill).trim(), percentage);
+        const icon = pill.querySelector('svg');
+        if (!direction) assert.equal(icon, null);
+        else {
+            assert.ok(pill.querySelector('.expensica-card-trend-indicator').hasClass(state));
+            assert.equal(icon.querySelectorAll('polyline').at(-1).attrs.points,
+                direction === 'up' ? '16 7 22 7 22 13' : '16 17 22 17 22 11');
+        }
+        assert.equal(!!card.querySelector('.expensica-account-balances-owed'), type === 'credit' && amount > 0);
+    });
+    view.unload();
+});
+
+test('Cash Flow supports zero-baseline comparisons without Infinity or NaN', () => {
+    const { view, p, root } = cashFlowHarness();
+    p.transactions = p.transactions.filter(row => row.date.startsWith('2026-10'));
+    view.renderCashFlow(root);
+    assert.deepEqual(root.querySelectorAll('.expensica-cash-flow-comparison').map(pill => modalText(pill).trim()), ['$150.00', '$60.00', '$90.00']);
+});
+
+for (const [previous, current, expected] of [[0, 0, '0%'], [0, 25, '$25.00'], [0, -25, '$25.00'],
+    [-100, -50, '$50.00'], [-100, -150, '$50.00'], [-100, 25, '$125.00'], [0.0000005, 25, '$25.00'],
+    [0.001, 25, '$25.00'], [50, -25, '$75.00'], [50, 0, '$50.00'], [50, 25, '50%'], [50, 50, '0%'],
+    [100, 100.04, '$0.04'], [0, 0.0000001, '1e-7 USD']]) {
+    test(`Net Flow presents ${previous} to ${current} as ${expected} with accessible comparison details`, () => {
+        const { view, p, root } = cashFlowHarness(Math.max(0, current), Math.max(0, -current));
+        p.transactions = p.transactions.filter(row => !row.date.startsWith('2026-09'));
+        p.transactions.push({ id: 'prior-net', date: '2026-09-15', time: '12:00:00',
+            type: previous >= 0 ? 'income' : 'expense', amount: Math.abs(previous), account: 'chequing-cash' });
+        const before = JSON.stringify(p.transactions);
+        view.renderCashFlow(root);
+        const pill = root.querySelectorAll('.expensica-cash-flow-comparison')[2];
+        const delta = current - previous;
+        assert.equal(modalText(pill).trim(), expected);
+        assert.doesNotMatch(modalText(pill) + pill.attrs['aria-label'], /Infinity|NaN|good|bad/i);
+        assert.match(pill.attrs['aria-label'], /from Sep, 2026\.$/);
+        assert.ok(pill.attrs['aria-label'].startsWith(delta === 0 ? '0%' : delta > 0 ? 'More than' : 'Less than'));
+        if (delta !== 0) {
+            assert.ok(pill.hasClass(delta > 0 ? 'is-positive' : 'is-negative'));
+            assert.equal(pill.querySelectorAll('polyline').at(-1).attrs.points,
+                delta > 0 ? '16 7 22 7 22 13' : '16 17 22 17 22 11');
+        } else {
+            assert.ok(pill.hasClass('is-neutral'));
+            assert.equal(pill.querySelector('svg'), null);
+        }
+        for (const type of ['mouseenter', 'focus', 'click']) {
+            pill.dispatchEvent({ type, stopPropagation() {} });
+            assert.equal(focusedTooltips.at(-1).text, pill.attrs['aria-label']);
+            assert.equal(focusedTooltips.at(-1).options.classes[0], 'expensica-chart-tooltip');
+            pill.dispatchEvent({ type: 'mouseleave' });
+        }
+        assert.equal(JSON.stringify(p.transactions), before);
+    });
+}
+
+test('Cash Flow range controls use the existing shared selection and custom-range handlers', async () => {
+    const h = cashFlowHarness();
+    h.view.renderDateRangeSelector(h.root);
+    h.view.renderCashFlow(h.root);
+    const before = JSON.stringify(h.p.transactions);
+    for (const type of [DateRangeType.TODAY, DateRangeType.THIS_WEEK, DateRangeType.LAST_WEEK, DateRangeType.THIS_MONTH,
+        DateRangeType.LAST_MONTH, DateRangeType.THIS_YEAR, DateRangeType.LAST_YEAR, DateRangeType.ALL_TIME]) {
+        selectGlobalRange(h.view, h.root, type);
+        await new Promise(resolve => setImmediate(resolve));
+        assert.equal(h.view.dateRange.type, type);
+        const rows = h.view.getTransactionsForDateRange(h.view.dateRange);
+        const expected = models.TransactionAggregator.getTotalIncome(rows) - models.TransactionAggregator.getTotalExpenses(rows);
+        assert.equal(h.root.querySelectorAll('.expensica-card-currency-amount')[2].textContent, models.formatCurrency(expected, 'USD'));
+        assert.equal(h.root.querySelectorAll('.expensica-global-date-range').length, 1);
+        assert.equal(modalText(h.root.querySelector('.expensica-global-date-range')).trim(), selectedRangeLabel(h.view, type));
+    }
+    selectGlobalRange(h.view, h.root, DateRangeType.CUSTOM);
+    const modal = shownModals.at(-1);
+    assert.ok(modal instanceof DateRangePickerModal);
+    await modal.onConfirm(new Date(2026, 9, 1), new Date(2026, 9, 31));
+    assert.equal(h.view.dateRange.type, DateRangeType.CUSTOM);
+    assert.equal(h.root.querySelectorAll('.expensica-card-currency-amount')[2].textContent, '$90.00');
+    assert.deepEqual(h.effects, { shared: 9, saves: 9, animations: 9, renders: 9 });
+    assert.equal(JSON.stringify(h.p.transactions), before);
+});
+
+test('Cash Flow leaves account balance values, colors, comparisons and links unchanged', () => {
+    const { p, view, root } = cashFlowHarness();
+    const before = JSON.stringify(p.transactions);
+    view.renderSummary(root);
+    const snapshot = modalText(root);
+    const cards = root.querySelectorAll('.expensica-overview-card-balance');
+    assert.deepEqual(cards.map(card => card.querySelector('.expensica-card-currency-amount').textContent), ['$1,125.00', '$25.00']);
+    assert.deepEqual(cards.map(card => card.querySelector('.expensica-card-value').style.color), ['#123456', '#456789']);
+    assert.ok(cards.every(card => card.querySelector('.expensica-card-trend').attrs['aria-label'].includes('from Sep, 2026')));
+    assert.ok(cards.every(card => card.attrs.role === 'button' && card.attrs.tabindex === '0'));
+    view.renderCashFlow(new Element());
+    const after = new Element(); view.renderSummary(after);
+    assert.equal(modalText(after), snapshot);
+    assert.equal(JSON.stringify(p.transactions), before);
+});
+
+test('Overview account cards use shared debit, saving and credit ordering, oldest first', () => {
+    const { view, root } = cashFlowHarness();
+    const accounts = [
+        { id: 'default', name: 'Default', type: 'other', isDefault: true, createdAt: '2026-06-01T00:00:00Z' },
+        { id: 'credit-new', name: 'New Credit', type: 'credit', createdAt: '2026-02-01T00:00:00Z' },
+        { id: 'saving-new', name: 'New Saving', type: 'saving', createdAt: '2026-03-01T00:00:00Z' },
+        { id: 'debit-new', name: 'New Debit', type: 'chequing', createdAt: '2026-01-02T00:00:00Z' },
+        { id: 'credit-old', name: 'Old Credit', type: 'credit', createdAt: '2026-01-01T00:00:00Z' },
+        { id: 'other', name: 'Other', type: 'other', createdAt: '2024-01-01T00:00:00Z' },
+        { id: 'saving-old', name: 'Old Saving', type: 'saving', createdAt: '2025-12-31T00:00:00Z' },
+        { id: 'debit-old', name: 'Old Debit', type: 'chequing', createdAt: '2026-01-01T00:00:00Z' }
+    ];
+    view.plugin = plugin(accounts);
+    view.plugin.transactionsData = { accounts };
+    view.plugin.getAccounts = PersistencePlugin.prototype.getAccounts;
+    const before = JSON.stringify(accounts);
+    view.renderSummary(root);
+    assert.deepEqual(root.querySelectorAll('.expensica-card-title').map(title => modalText(title).trim()),
+        ['Old Debit', 'New Debit', 'Old Saving', 'New Saving', 'Old Credit', 'New Credit', 'Other', 'Default']);
+    assert.equal(JSON.stringify(accounts), before);
+    view.unload();
+});
+
+test('Account Balances renders debit, saving, credit and default icons, compact trends and account edit actions', () => {
+    const { view, root } = cashFlowHarness();
+    const accounts = [
+        { id: 'cash', name: 'Cash', type: 'chequing', color: '#123456' },
+        { id: 'save', name: 'Reserve', type: 'saving', color: '#345678' },
+        { id: 'card', name: 'Visa', type: 'credit', color: '#567890' },
+        { id: 'default', name: 'Default', type: 'other', isDefault: true, color: '#789012' }
+    ];
+    view.plugin = plugin(accounts);
+    const opened = [];
+    view.plugin.openTransactionsView = () => assert.fail('account card must not open transaction search');
+    view.switchDashboardTab = () => assert.fail('account editing must not switch tabs');
+    view.openAccountEditor = id => opened.push(id);
+    view.plugin.transactions = accounts.flatMap(account => ['2026-09-01', '2026-10-01'].map((date, index) => ({
+        id: account.id + index, date, type: 'income', amount: 100, account: `${account.type}-${account.name.toLowerCase()}`
+    })));
+    const before = JSON.stringify(view.plugin.transactions);
+    view.renderSummary(root);
+    const panel = root.querySelector('.expensica-account-balances-panel');
+    assert.equal(modalText(panel.querySelector('.expensica-chart-title')).trim(), 'Accounts & Balances');
+    assert.equal(panel.querySelector('.expensica-chart-range-buttons'), null);
+    const cards = panel.querySelectorAll('.expensica-overview-card-balance');
+    cards.forEach((card, index) => {
+        const title = card.querySelector('.expensica-card-title');
+        assert.equal(modalText(title).trim(), accounts[index].name);
+        assert.equal(title.style.color, undefined);
+        assert.equal(title.querySelector('.expensica-ui-icon').style.color, accounts[index].color);
+        const expectedIcon = new Element();
+        models.renderUiIcon(expectedIcon, models.getAccountIcon(accounts[index].type), '', accounts[index].color);
+        const shapes = svg => svg.children.map(child => ({ tag: child.tag, attrs: child.attrs }));
+        assert.deepEqual(shapes(title.querySelector('svg')), shapes(expectedIcon.querySelector('svg')), 'uses the existing account SVG');
+        const amount = card.querySelector('.expensica-card-value');
+        assert.equal(modalText(amount).trim(), index === 2 ? '-$200.00' : '$200.00');
+        assert.equal(amount.style.color, accounts[index].color);
+        const pill = card.querySelector('.expensica-card-trend');
+        assert.deepEqual(card.children, [title, amount, pill]);
+        assert.equal(modalText(pill).trim(), '$100.00');
+        assert.match(pill.attrs['aria-label'], /from Sep, 2026\.$/);
+        assert.equal(pill.attrs.title, undefined);
+        assert.ok(pill.querySelector('.expensica-card-trend-indicator').hasClass('is-positive'), 'falling credit debt is good news');
+        assert.equal(card.attrs.tabindex, '0');
+        assert.ok(card.attrs['aria-label'].startsWith(`Your ${accounts[index].name} balance is `));
+        assert.equal(card.attrs['aria-description'], 'Edit account');
+        const beforeFocus = focusedTooltips.length;
+        card.dispatchEvent({ type: 'focus' });
+        assert.equal(focusedTooltips.length, beforeFocus + 1, 'account tooltip is keyboard accessible');
+        pill.dispatchEvent({ type: 'focus' });
+        assert.equal(focusedTooltips.at(-1).text, pill.attrs['aria-label']);
+        assert.equal(focusedTooltips.at(-1).options.classes[0], 'expensica-chart-tooltip');
+        card.click();
+        for (const key of ['Enter', ' ']) card.dispatchEvent({ type: 'keydown', key, preventDefault() {} });
+        assert.deepEqual(opened.slice(-3), Array(3).fill(accounts[index].id));
+    });
+    assert.equal(JSON.stringify(view.plugin.transactions), before);
+    view.unload();
+});
+
+test('Account Balances footer uses signed positions including overdrafts and credit prepayments', () => {
+    const { view, root } = cashFlowHarness();
+    const accounts = [
+        { id: 'cash', name: 'Cash', type: 'chequing', isDefault: true },
+        { id: 'save', name: 'Reserve', type: 'saving' },
+        { id: 'card', name: 'Visa', type: 'credit' },
+        { id: 'prepaid', name: 'Prepaid', type: 'credit' }
+    ];
+    view.plugin = plugin(accounts);
+    view.plugin.transactions = accounts.map((account, index) => ({ id: account.id, date: '2026-10-01',
+        account: `${account.type}-${account.name.toLowerCase()}`, type: ['expense', 'income', 'expense', 'income'][index],
+        amount: [25, 150, 60, 10][index] }));
+    for (const currency of ['USD', 'CAD', 'JPY', 'KWD']) {
+        view.plugin.settings.defaultCurrency = currency;
+        root.empty(); view.renderSummary(root);
+        const footer = root.querySelector('.expensica-account-balances-footer');
+        assert.deepEqual(footer.querySelectorAll('.expensica-cash-flow-label').map(el => modalText(el).trim()), ['Assets:', 'Debts:', 'Net Balance:']);
+        assert.deepEqual(footer.querySelectorAll('.expensica-card-value').map(el => el.textContent), [160, 85, 75].map(value => models.formatCurrency(value, currency)));
+        assert.equal(view.getNetBalanceThrough(view.dateRange.endDate), 75);
+        assert.equal(root.querySelectorAll('.expensica-overview-card-balance').flatMap(card => card.querySelectorAll('.expensica-card-trend-indicator')).filter(icon => icon.hasClass('is-negative')).length, 2);
+    }
+    view.unload();
+});
+
+test('Account Balances supports disabled accounts, empty accounts and periods without comparisons', () => {
+    const { p, view, root } = cashFlowHarness();
+    p.settings.enableAccounts = false;
+    view.getPreviousPeriodComparisonRange = () => null;
+    view.renderSummary(root);
+    assert.equal(root.querySelectorAll('.expensica-overview-card-balance').length, 1);
+    assert.equal(modalText(root.querySelector('.expensica-card-title')).trim(), 'Running Balance');
+    assert.equal(root.querySelector('.expensica-card-trend'), null);
+    assert.deepEqual(root.querySelector('.expensica-account-balances-footer').querySelectorAll('.expensica-card-value').map(el => el.textContent), ['$1,125.00', '$0.00', '$1,125.00']);
+    p.settings.enableAccounts = true;
+    p.getAccounts = () => [];
+    root.empty(); view.renderSummary(root);
+    assert.equal(root.querySelectorAll('.expensica-overview-card-balance').length, 0);
+    assert.deepEqual(root.querySelector('.expensica-account-balances-footer').querySelectorAll('.expensica-card-value').map(el => el.textContent), ['$0.00', '$0.00', '$0.00']);
+    view.unload();
+});
+
+test('Account Balances footer omits label SVGs and preserves semantic value colors', () => {
+    for (const [assets, debts] of [[0, 0], [100, 0], [0, 100], [100, 100], [50, 75], [150, 25]]) {
+        const { view, root } = cashFlowHarness();
+        view.plugin = plugin([{ id: 'cash', name: 'Cash', type: 'chequing', isDefault: true },
+            { id: 'card', name: 'Card', type: 'credit' }]);
+        view.plugin.transactions = [
+            { id: 'assets', date: '2026-10-01', type: 'income', amount: assets, account: 'chequing-cash' },
+            { id: 'debts', date: '2026-10-01', type: 'expense', amount: debts, account: 'credit-card' }
+        ];
+        view.renderSummary(root);
+        const stats = root.querySelector('.expensica-account-balances-footer').children;
+        assert.deepEqual(stats.map(stat => modalText(stat.querySelector('.expensica-cash-flow-label')).trim()), ['Assets:', 'Debts:', 'Net Balance:']);
+        const net = assets - debts;
+        assert.deepEqual(stats.map(stat => stat.style['--expensica-cash-flow-color']), [
+            'var(--text-success)', debts > 0 ? 'var(--text-error)' : 'var(--text-normal)',
+            net === 0 ? 'var(--text-normal)' : net > 0 ? 'var(--text-success)' : 'var(--text-error)'
+        ]);
+        for (const stat of stats) {
+            assert.equal(stat.querySelector('.expensica-cash-flow-label').querySelector('svg'), null);
+            assert.ok(stat.hasClass('expensica-cash-flow-metric'));
+            assert.ok(stat.querySelector('.expensica-cash-flow-label').hasClass('expensica-cash-flow-label'));
+            assert.ok(stat.querySelector('.expensica-card-value').hasClass('expensica-card-value'));
+            assert.ok(stat.querySelector('.expensica-account-balances-comparison'));
+            assert.equal(stat.querySelectorAll('.expensica-card-trend').length, 1);
+            assert.ok(stat.children[0].hasClass('expensica-metric-total'));
+            assert.ok(stat.children[1].hasClass('expensica-card-trend'));
+        }
+        view.unload();
+    }
+});
+
+test('account rows render every account without carousel controls or scroll interception', () => {
+    const { view, root } = cashFlowHarness();
+    view.renderSummary(root);
+    const row = root.querySelector('.expensica-account-balances-row');
+    assert.equal(row.children.length, view.plugin.getAccounts().length);
+    assert.equal(row.attrs.role, 'region');
+    assert.equal(row.attrs.tabindex, undefined);
+    assert.equal(root.querySelector('.expensica-account-balances-scroll-button'), null);
+    assert.deepEqual(Object.keys(row.listeners), []);
+    view.unload();
+});
+
+test('Overview places current Account Balances before the combined Cash Flow panel and removes both on tab switches', () => {
+    const { view, p } = cashFlowHarness();
+    p.getAccounts = () => [];
+    Object.assign(view, { renderAccountWarnings() {}, renderPremiumVisualizations() {}, renderExpensesChart() {},
+        renderIncomeExpenseChart() {}, renderTransactionsTab() {}, renderAccountsTab() {}, renderBudgetTab() {}, renderCategoriesTab() {},
+        updateDashboardChartGridLayout() {}, resizeChartsToContainers() {},
+        consumeChartAnimationRequest() {}, clearSelectorListeners() {}, destroyCharts() {},
+        rememberScrollPosition() {}, restoreScrollPosition() {} });
+    const root = new Element(); root.createDiv('expensica-tabs');
+    view.containerEl = { children: [null, root] };
+    view.currentTab = 'overview'; view.renderCurrentTabContent(root);
+    for (const tab of ['overview', 'transactions', 'accounts', 'budget', 'categories', 'overview']) {
+        view.switchDashboardTab(tab);
+        assert.equal(root.querySelectorAll('.expensica-cash-flow-panel').length, tab === 'overview' ? 1 : 0, tab);
+        assert.equal(root.querySelectorAll('.expensica-account-balances-panel').length, tab === 'overview' ? 1 : 0, tab);
+        if (tab === 'overview') {
+            const pair = root.querySelector('.expensica-overview-panels');
+            assert.equal(root.children[1], pair);
+            assert.ok(pair.children[0].hasClass('expensica-account-balances-container'));
+            assert.ok(pair.children[1].hasClass('expensica-cash-flow-container'));
+            assert.ok(root.hasClass('expensica-overview'));
+        } else {
+            assert.equal(root.hasClass('expensica-overview'), false);
+        }
+    }
+    view.unload();
+});
+
+test('Cash Flow and Categories retain nine synchronized ranges; Transactions uses the global range in populated and empty states', () => {
+    const { view } = cashFlowHarness();
+    Object.assign(view, { destroyCharts() {}, scheduleChartInitialization() {}, syncChartsAfterCategoryLayoutChange() {},
+        renderCategoryChartTypeSelector(container) { container.createDiv('expensica-chart-header'); } });
+    for (const empty of [false, true]) {
+        if (empty) view.transactions = [];
+        for (const method of ['renderCashFlow', 'renderExpensesChart', 'renderIncomeExpenseChart']) {
+            const root = new Element(); view[method](root);
+            const row = root.querySelector('.expensica-chart-range-buttons');
+            if (method === 'renderIncomeExpenseChart') { assert.equal(row, null); continue; }
+            assert.equal(row.children.length, 9);
+            assert.deepEqual(row.children.map(button => button.textContent), ['TD', '1W', 'LW', '1M', 'LM', '1Y', 'LY', 'All', 'Range']);
+            assert.deepEqual(row.children.filter(button => button.hasClass('is-active')).map(button => button.textContent), ['1M']);
+        }
+    }
 });
 
 
 async function editorOwnershipHarness(entry = 'transactions') {
+    animationFrames.length = 0;
+    chartTimers.length = 0;
     const h = recoveryHarness();
     h.storage.fail = false;
     const original = { id: '20261015-120000-00000001', date: '2026-10-15', time: '12:00:00',
@@ -3478,7 +4459,8 @@ async function editorOwnershipHarness(entry = 'transactions') {
             owner.view.renderPremiumVisualizations(new Element());
             calendars.at(-1).onEdit(original);
         } else {
-            owner.view.renderTransactions(new Element());
+            h.p.renderDailyReviewTransactions(content(), owner.view.selectedCalendarDate,
+                transaction => owner.view.openTransactionModal(transaction));
             transactionCards.findLast(card => card.transaction.id === original.id).onEdit(original);
         }
         return shownModals.at(-1);
@@ -3486,7 +4468,7 @@ async function editorOwnershipHarness(entry = 'transactions') {
     return { ...h, original, other, owner, renderer, openEditor };
 }
 
-for (const entry of ['overview', 'transactions', 'calendar']) {
+for (const entry of ['daily review', 'transactions', 'calendar']) {
     for (const operation of ['add', 'edit', 'delete']) {
         test(`${entry} transaction ${operation} belongs to its containing dashboard and refreshes each dashboard once`, async () => {
             const h = await editorOwnershipHarness(entry);

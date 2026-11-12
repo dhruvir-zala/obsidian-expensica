@@ -28,6 +28,7 @@ class Element {
         this.ownerDocument = doc; this.tag = tag; this.children = []; this.listeners = new Map();
         this.classes = new Set((options.cls || '').split(' ')); this.attrs = { ...options.attr };
         this.textContent = options.text || ''; this.scrollTop = 0;
+        this.style = {};
     }
     get isConnected() { return this.root || !!this.parentElement?.isConnected; }
     get childElementCount() { return this.children.length; }
@@ -38,6 +39,7 @@ class Element {
     toggleClass(name, active) { active ? this.addClass(name) : this.removeClass(name); }
     setAttribute(name, value) { this.attrs[name] = value; }
     getAttribute(name) { return this.attrs[name]; }
+    removeAttribute(name) { delete this.attrs[name]; }
     appendChild(child) { this.children.push(child); child.parentElement = this; return child; }
     createEl(tag, options) { return this.appendChild(new Element(this.ownerDocument, tag, options)); }
     createDiv(options) { return this.createEl('div', options); }
@@ -83,6 +85,7 @@ function load(filename, dependencies = {}, globals = {}) {
     return exports;
 }
 const models = load('src/models.ts');
+const accountCards = load('src/account-card.ts', { './models': models });
 function setup() {
     const doc = new Document();
     let unrelated = 0;
@@ -98,6 +101,7 @@ function setup() {
     }
     const { ExpensicaDashboardView, DashboardTab } = load('src/dashboard-view.ts', {
         './models': models, obsidian: { Component, ItemView, Modal: class {}, setIcon() {} },
+        './account-card': accountCards,
         'chart.js': { Tooltip: { positioners: {} } }
     }, { document: doc, window: { removeEventListener() {}, clearTimeout() {}, cancelAnimationFrame() {} } });
     const plugin = { settings: { enableAccounts: true, enableBudgeting: true }, renderDataRecoveryWarning() {}, getAccounts: () => [] };
@@ -105,6 +109,7 @@ function setup() {
         const instance = new ExpensicaDashboardView({}, plugin);
         const counts = { saves: 0, changes: 0 };
         Object.assign(instance, {
+            renderCashFlow() {},
             counts, consumeChartAnimationRequest() {}, rememberScrollPosition() {}, restoreScrollPosition() {},
             persistDashboardState() { counts.saves++; },
             clearDashboardChartPanelHeights() {}, clearCategoryChartMeasurements() {}, clearIncomeExpenseChartLayoutConstraints() {},
@@ -115,11 +120,7 @@ function setup() {
             renderCategoriesTab(container) {
                 this.renderCategoryChartTypeSelector(container, () => { counts.changes++; this.refreshCurrentTabContent(); });
             },
-            renderBudgetTab(container) { container.createDiv('budget-content'); },
-            async applyDateRangeSelection(type) {
-                this.dateRange = { ...this.dateRange, type, label: `Selected ${type}` };
-                this.renderDashboard();
-            }
+            renderBudgetTab(container) { container.createDiv('budget-content'); }
         });
         instance.renderDashboard();
         return instance;
@@ -128,26 +129,23 @@ function setup() {
 }
 const root = view => view.containerEl.children[1];
 const controls = view => ({
-    date: root(view).querySelector('.shadcn-date-range-current'),
-    dateMenu: root(view).querySelector('.shadcn-date-range-options'),
     category: root(view).querySelector('.expensica-chart-type-current'),
     categoryMenu: root(view).querySelector('.expensica-chart-type-options')
 });
 
-test('repeated dashboard renders keep two current listeners and teardown returns to baseline', async () => {
+test('repeated dashboard renders keep one category listener and teardown returns to baseline', async () => {
     const h = setup();
     const view = h.view();
     for (let i = 0; i < 30; i++) {
         view.renderDashboard();
-        assert.equal(h.doc.count(), h.baseline + 2);
-        assert.equal(view.children.length, 2, 'obsolete child lifecycles are removed');
+        assert.equal(h.doc.count(), h.baseline + 1);
+        assert.equal(view.children.length, 1, 'obsolete child lifecycles are removed');
     }
     await view.onClose();
     await view.onClose();
     assert.equal(h.doc.count(), h.baseline);
     assert.equal(h.doc.count('keydown'), 1);
     assert.equal(view.children.length, 0);
-    assert.equal(view.dateRangeSelectorComponent, null);
     assert.equal(view.categoryChartTypeSelectorComponent, null);
     h.doc.fire(); h.doc.fire(h.doc.body, 'keydown');
     assert.equal(h.unrelated(), 2);
@@ -157,36 +155,47 @@ test('obsolete controls no longer respond to document clicks after replacement',
     const h = setup();
     const view = h.view();
     const old = controls(view);
-    await old.date.click(); await old.category.click();
-    old.dateMenu.removeClass('shadcn-date-range-hidden');
+    await old.category.click();
     view.renderDashboard();
-    assert.equal(old.date.isConnected, false);
+    assert.equal(old.category.isConnected, false);
     const current = controls(view);
-    await current.date.click(); await current.category.click();
+    await current.category.click();
     h.doc.fire();
-    assert.equal(current.dateMenu.hasClass('shadcn-date-range-hidden'), true);
     assert.equal(current.categoryMenu.hasClass('shadcn-date-range-hidden'), true);
-    assert.equal(old.dateMenu.hasClass('shadcn-date-range-hidden'), false);
     assert.equal(old.categoryMenu.hasClass('shadcn-date-range-hidden'), false);
     await view.onClose();
 });
 
-test('date selector preserves toggle, inside click, outside dismissal and selection behavior', async () => {
+test('dashboard starts with the restored date dropdown and cleans its outside listeners on dismissal and teardown', async () => {
     const h = setup();
     const view = h.view();
-    const current = controls(view);
-    await current.date.click();
-    assert.equal(current.dateMenu.hasClass('shadcn-date-range-hidden'), false);
-    h.doc.fire(current.date);
-    assert.equal(current.dateMenu.hasClass('shadcn-date-range-hidden'), false);
-    h.doc.fire();
-    assert.equal(current.dateMenu.hasClass('shadcn-date-range-hidden'), true);
-    await current.date.click();
-    await current.dateMenu.querySelector('.shadcn-date-range-option').click();
-    assert.equal(view.dateRange.type, 'today');
-    assert.equal(controls(view).dateMenu.hasClass('shadcn-date-range-hidden'), true);
+    assert.ok(root(view).children[0].hasClass('expensica-toolbar'));
+    assert.ok(root(view).children[0].children[0].hasClass('shadcn-date-range-container'));
+    assert.ok(root(view).children[0].querySelector('.expensica-global-date-range'));
+    assert.ok(root(view).children[0].children[1].hasClass('expensica-create-transaction'));
+    assert.ok(root(view).children[1].hasClass('expensica-tabs'));
+    for (const selector of ['.shadcn-header', '.shadcn-actions']) {
+        assert.equal(root(view).querySelector(selector), null);
+    }
+    assert.equal(view.renderHeader, undefined);
+    assert.equal(root(view).querySelectorAll('.expensica-global-date-range').length, 1);
+    assert.equal(view.dateRangeSelectorComponent, undefined);
+    assert.equal(h.doc.count(), h.baseline + 1);
+    const button = root(view).querySelector('.expensica-global-date-range');
+    const menu = root(view).querySelector('.expensica-date-range-options');
+    await button.click();
+    assert.equal(button.getAttribute('aria-expanded'), 'true');
     assert.equal(h.doc.count(), h.baseline + 2);
+    h.doc.fire();
+    assert.equal(menu.hasClass('shadcn-date-range-hidden'), true);
+    assert.equal(h.doc.count(), h.baseline + 1);
+    assert.equal(h.doc.count('focusin'), 0);
+    await button.click(); h.doc.fire(h.doc.body, 'focusin');
+    assert.equal(button.getAttribute('aria-expanded'), 'false');
+    await button.click();
     await view.onClose();
+    assert.equal(h.doc.count(), h.baseline);
+    assert.equal(h.doc.count('focusin'), 0);
 });
 
 test('category selector closes unchanged options and refreshes changed options once', async () => {
@@ -210,20 +219,20 @@ test('category selector closes unchanged options and refreshes changed options o
     await current.category.click();
     h.doc.fire();
     assert.equal(current.category.getAttribute('aria-expanded'), 'false');
-    assert.equal(h.doc.count(), h.baseline + 2);
+    assert.equal(h.doc.count(), h.baseline + 1);
     await view.onClose();
 });
 
-test('switching tabs removes category listeners and preserves the header selector', async () => {
+test('switching tabs removes and restores only the category listener', async () => {
     const h = setup();
     const view = h.view();
-    const date = controls(view).date;
+    const tabs = root(view).querySelector('.expensica-tabs');
     for (let i = 0; i < 15; i++) {
         view.switchDashboardTab(h.DashboardTab.BUDGET);
-        assert.equal(h.doc.count(), h.baseline + 1);
-        assert.equal(controls(view).date, date);
+        assert.equal(h.doc.count(), h.baseline);
+        assert.equal(root(view).querySelector('.expensica-tabs'), tabs);
         view.switchDashboardTab(h.DashboardTab.CATEGORIES);
-        assert.equal(h.doc.count(), h.baseline + 2);
+        assert.equal(h.doc.count(), h.baseline + 1);
     }
     await view.onClose();
     assert.equal(h.doc.count(), h.baseline);
@@ -232,13 +241,13 @@ test('switching tabs removes category listeners and preserves the header selecto
 test('partial category and tab renders replace only the category listener', async () => {
     const h = setup();
     const view = h.view();
-    const date = controls(view).date;
+    const tabs = root(view).querySelector('.expensica-tabs');
     for (let i = 0; i < 20; i++) {
         view.refreshCategoryChartOnly();
         view.refreshCurrentTabContent();
-        assert.equal(h.doc.count(), h.baseline + 2);
-        assert.equal(controls(view).date, date);
-        assert.equal(view.children.length, 2);
+        assert.equal(h.doc.count(), h.baseline + 1);
+        assert.equal(root(view).querySelector('.expensica-tabs'), tabs);
+        assert.equal(view.children.length, 1);
     }
     await view.onClose();
 });
@@ -247,15 +256,15 @@ test('listeners are removed while old controls are still attached, before DOM re
     const h = setup();
     const view = h.view();
     let old = controls(view), removals = 0;
-    h.doc.onRemove = () => { removals++; assert.equal(old.date.isConnected, true); assert.equal(old.category.isConnected, true); };
+    h.doc.onRemove = () => { removals++; assert.equal(old.category.isConnected, true); };
     view.renderDashboard();
-    assert.equal(removals, 2);
+    assert.equal(removals, 1);
     old = controls(view);
     view.refreshCategoryChartOnly();
-    assert.equal(removals, 3);
+    assert.equal(removals, 2);
     old = controls(view);
     view.switchDashboardTab(h.DashboardTab.BUDGET);
-    assert.equal(removals, 4);
+    assert.equal(removals, 3);
     h.doc.onRemove = null;
     await view.onClose();
 });
@@ -290,17 +299,17 @@ test('dashboard renders and tab switches destroy charts before removing their ca
 test('multiple dashboards dismiss independently and closing one leaves the other listeners intact', async () => {
     const h = setup();
     const first = h.view(), second = h.view();
-    assert.equal(h.doc.count(), h.baseline + 4);
-    const firstControls = controls(first), secondControls = controls(second);
-    await firstControls.date.click();
-    assert.equal(firstControls.dateMenu.hasClass('shadcn-date-range-hidden'), false);
-    await secondControls.date.click();
-    assert.equal(firstControls.dateMenu.hasClass('shadcn-date-range-hidden'), true);
-    assert.equal(secondControls.dateMenu.hasClass('shadcn-date-range-hidden'), false);
-    await first.onClose();
     assert.equal(h.doc.count(), h.baseline + 2);
+    const firstControls = controls(first), secondControls = controls(second);
+    await firstControls.category.click();
+    assert.equal(firstControls.categoryMenu.hasClass('shadcn-date-range-hidden'), false);
+    await secondControls.category.click();
+    assert.equal(firstControls.categoryMenu.hasClass('shadcn-date-range-hidden'), true);
+    assert.equal(secondControls.categoryMenu.hasClass('shadcn-date-range-hidden'), false);
+    await first.onClose();
+    assert.equal(h.doc.count(), h.baseline + 1);
     h.doc.fire();
-    assert.equal(secondControls.dateMenu.hasClass('shadcn-date-range-hidden'), true);
+    assert.equal(secondControls.categoryMenu.hasClass('shadcn-date-range-hidden'), true);
     await second.onClose();
     assert.equal(h.doc.count(), h.baseline);
     assert.ok(h.doc.listeners.get('click').has(h.external));
@@ -311,10 +320,9 @@ test('selectors bind outside clicks to their own document, including popout docu
     const view = h.view();
     const popout = new Document();
     const container = popout.body.createDiv();
-    view.renderDateRangeSelector(container);
     view.renderCategoryChartTypeSelector(container, () => {});
     assert.equal(h.doc.count(), h.baseline);
-    assert.equal(popout.count(), 2);
+    assert.equal(popout.count(), 1);
     const toggle = container.querySelector('.expensica-chart-type-current');
     await toggle.click();
     assert.equal(toggle.getAttribute('aria-expanded'), 'true');

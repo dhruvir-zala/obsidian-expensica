@@ -31,6 +31,7 @@ export class DataRecoveryModal extends Modal {
         if (this.dismissed) return;
         const { contentEl } = this;
         contentEl.empty();
+        contentEl.addClass('expensica-modal');
         const reconciliation = this.getReconcileAccounts?.();
         const failures = this.getFailures();
         const missingAccountsOnly = !this.getSaveFailure && reconciliation
@@ -103,8 +104,10 @@ export class DataRecoveryModal extends Modal {
         if (this.retryError) {
             contentEl.createEl('p', { text: `Recovery failed: ${this.retryError}` });
         }
-        const buttons = contentEl.createDiv('modal-button-container');
-        if (reconciliation) buttons.createEl('button', { text: 'Resolve accounts', cls: 'mod-cta' })
+        const buttons = contentEl.createDiv('expensica-form-footer modal-button-container');
+        if (reconciliation) buttons.createEl('button', {
+            text: 'Resolve accounts', cls: 'expensica-standard-button expensica-btn expensica-btn-primary', attr: { type: 'button' }
+        })
             .addEventListener('click', () => {
                 void (async () => {
                     try { await reconciliation.resolve(); }
@@ -115,10 +118,16 @@ export class DataRecoveryModal extends Modal {
                     }
                 })();
             });
-        const retryButton = buttons.createEl('button', { text: 'Retry', cls: reconciliation ? '' : 'mod-cta' });
+        const retryButton = buttons.createEl('button', {
+            text: 'Retry', cls: `expensica-standard-button expensica-btn ${reconciliation ? 'expensica-btn-secondary' : 'expensica-btn-primary'}`,
+            attr: { type: 'button' }
+        });
         retryButton.disabled = this.retrying;
         retryButton.addEventListener('click', voidAsync(() => this.handleRetry(retryButton, backButton)));
-        const backButton = buttons.createEl('button', { text: reconciliation ? 'Not now' : this.getSaveFailure && !importFailure ? 'Back to Editor' : 'Close' });
+        const backButton = buttons.createEl('button', {
+            text: reconciliation ? 'Not now' : this.getSaveFailure && !importFailure ? 'Back to Editor' : 'Close',
+            cls: 'expensica-standard-button expensica-btn expensica-btn-secondary', attr: { type: 'button' }
+        });
         backButton.disabled = !!this.getSaveFailure && this.retrying;
         backButton.addEventListener('click', () => this.close());
     }

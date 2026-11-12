@@ -1,13 +1,24 @@
-import { App, Modal, Setting } from 'obsidian';
+import { App, Modal, setIcon } from 'obsidian';
 import { showExpensicaNotice } from './notice';
 import { ExportOptions, ExportService } from './export-service';
-import { CategoryType, formatDate } from './models';
-import ExpensicaPlugin from '../main';
+import { renderUiIcon, renderPanelTitle, CategoryType, formatDate, parseLocalDate, INTERNAL_CATEGORY_ID } from './models';
+import type { UiIcon } from './models';
+import { renderCategoryChip } from './category-chip';
+import { DateRangePickerModal, DateRangeType, getDateRangeOptions, resolveDateRange } from './dashboard-view';
+import type { DateRange } from './dashboard-view';
+import type ExpensicaPlugin from '../main';
 
 export class ExportModal extends Modal {
   private plugin: ExpensicaPlugin;
   private exportOptions: ExportOptions;
-  private categoryCheckboxes: Map<string, HTMLInputElement> = new Map();
+  private categoryChips = new Map<string, HTMLElement>();
+  private selectedCategories = new Set<string>();
+  private categoryGroups: { ids: string[]; checkbox: HTMLInputElement }[] = [];
+  private dateRange: DateRange;
+  private dateRangePicker: DateRangePickerModal | null = null;
+  private dropdownCleanups: (() => void)[] = [];
+  private activeDropdown: (() => void) | null = null;
+  private dismissed = false;
   
   constructor(app: App, plugin: ExpensicaPlugin) {
     super(app);
@@ -16,167 +27,111 @@ export class ExportModal extends Modal {
     // Generate default filename based on date
     const today = new Date();
     const formattedDate = formatDate(today);
+    const sharedRange = plugin.getSharedDateRangeState();
+    this.dateRange = sharedRange
+      ? { type: sharedRange.type, startDate: parseLocalDate(sharedRange.startDate),
+          endDate: parseLocalDate(sharedRange.endDate), label: '' }
+      : resolveDateRange(DateRangeType.THIS_MONTH);
     
     // Initialize with default export options
     this.exportOptions = {
       format: 'csv',
-      dateFrom: null,
-      dateTo: null,
+      dateFrom: this.dateRange.type === DateRangeType.ALL_TIME ? null : formatDate(this.dateRange.startDate),
+      dateTo: this.dateRange.type === DateRangeType.ALL_TIME ? null : formatDate(this.dateRange.endDate),
       includeExpenses: true,
       includeIncome: true,
+      includeInternal: true,
       categories: null, // null means all categories
       filename: `expensica-export-${formattedDate}`
     };
   }
   
   onOpen() {
+    this.dismissed = false;
+    this.categoryChips.clear();
+    this.selectedCategories.clear();
+    this.categoryGroups = [];
     const {contentEl} = this;
     contentEl.empty();
     contentEl.addClass('expensica-modal', 'expensica-export-modal');
     
     // Modal header
     const modalTitle = contentEl.createEl('h2', { cls: 'expensica-modal-title' });
-    modalTitle.createSpan({ cls: 'expensica-modal-title-icon', text: '📤' });
+    renderUiIcon(modalTitle, 'export', 'expensica-modal-title-icon');
     modalTitle.appendText(' Export Transactions');
     
     // Create form container
     const form = contentEl.createEl('form', { cls: 'expensica-form' });
     
     // Export format
-    new Setting(form)
-      .setName('Export Format')
-      .setDesc('Choose the format for your exported data')
-      .addDropdown(dropdown => dropdown
-        .addOption('csv', 'CSV (Excel, Google Sheets)')
-        .addOption('json', 'JSON (Data backup)')
-        .addOption('pdf', 'PDF (Beautiful report)')
-        .setValue(this.exportOptions.format)
-        .onChange(value => {
-          this.exportOptions.format = value as 'csv' | 'json' | 'pdf';
-          // Update filename extension
-          const filename = this.exportOptions.filename;
-          // Remove old extension if exists
-          const nameWithoutExt = filename.includes('.') 
-            ? filename.substring(0, filename.lastIndexOf('.')) 
-            : filename;
-          this.exportOptions.filename = `${nameWithoutExt}.${value}`;
-        }));
+    const formatContainer = form.createDiv('expensica-export-section expensica-export-panel-row');
+    this.renderFieldLabel(formatContainer, 'Format', 'file');
+    const formatDropdown = this.renderDropdown(formatContainer, 'Format', [
+      { value: 'csv' as const, label: 'CSV' },
+      { value: 'json' as const, label: 'JSON' },
+      { value: 'pdf' as const, label: 'PDF' }
+    ], this.exportOptions.format, value => {
+      this.exportOptions.format = value;
+      this.exportOptions.filename = this.exportOptions.filename.replace(/\.(csv|json|pdf)$/i, '');
+      formatDropdown.setValue(value);
+    });
     
     // Date range
-    const dateRangeContainer = form.createDiv('expensica-setting-group');
-    dateRangeContainer.createEl('h3', { text: 'Date Range', cls: 'expensica-setting-group-title' });
-    
-    new Setting(dateRangeContainer)
-      .setName('From Date')
-      .setDesc('Export transactions from this date (optional)')
-      .addText(text => text
-        .setPlaceholder('YYYY-MM-DD')
-        .setValue(this.exportOptions.dateFrom || '')
-        .onChange(value => {
-          this.exportOptions.dateFrom = value ? value : null;
-        }));
-    
-    new Setting(dateRangeContainer)
-      .setName('To Date')
-      .setDesc('Export transactions until this date (optional)')
-      .addText(text => text
-        .setPlaceholder('YYYY-MM-DD')
-        .setValue(this.exportOptions.dateTo || '')
-        .onChange(value => {
-          this.exportOptions.dateTo = value ? value : null;
-        }));
-    
-    // Transaction Types
-    const typeContainer = form.createDiv('expensica-setting-group');
-    typeContainer.createEl('h3', { text: 'Transaction Types', cls: 'expensica-setting-group-title' });
-    
-    new Setting(typeContainer)
-      .setName('Include Expenses')
-      .addToggle(toggle => toggle
-        .setValue(this.exportOptions.includeExpenses)
-        .onChange(value => {
-          this.exportOptions.includeExpenses = value;
-        }));
-    
-    new Setting(typeContainer)
-      .setName('Include Income')
-      .addToggle(toggle => toggle
-        .setValue(this.exportOptions.includeIncome)
-        .onChange(value => {
-          this.exportOptions.includeIncome = value;
-        }));
+    const dateRangeContainer = form.createDiv('expensica-export-section expensica-export-panel-row');
+    const dateRangeHeading = dateRangeContainer.createDiv('expensica-export-panel-heading');
+    this.renderFieldLabel(dateRangeHeading, 'Date Range', 'calendar');
+    const dateDescription = dateRangeHeading.createEl('p', { cls: 'expensica-export-date-description' });
+    const dateDropdown = this.renderDropdown(dateRangeContainer, 'Date range',
+      getDateRangeOptions().map(option => ({ value: option.type, label: option.label })),
+      this.dateRange.type, type => {
+        if (type === DateRangeType.CUSTOM) {
+          this.dateRangePicker?.close();
+          this.dateRangePicker = new DateRangePickerModal(this.app, this.dateRange.startDate, this.dateRange.endDate,
+            (start, end) => {
+              if (this.dismissed) return;
+              this.dateRange = resolveDateRange(type, start, end);
+              updateDateRange();
+            });
+          this.dateRangePicker.open();
+        } else {
+          this.dateRange = resolveDateRange(type);
+          updateDateRange();
+        }
+      }, 'calendar');
+    const updateDateRange = () => {
+      const allTime = this.dateRange.type === DateRangeType.ALL_TIME;
+      this.exportOptions.dateFrom = allTime ? null : formatDate(this.dateRange.startDate);
+      this.exportOptions.dateTo = allTime ? null : formatDate(this.dateRange.endDate);
+      const description = allTime ? 'All transactions' : `${this.exportOptions.dateFrom} to ${this.exportOptions.dateTo}`;
+      dateDescription.textContent = description;
+      dateDropdown.setValue(this.dateRange.type);
+      dateDropdown.button.setAttribute('aria-description', description);
+    };
+    updateDateRange();
     
     // Categories
-    const categoriesContainer = form.createDiv('expensica-setting-group');
-    categoriesContainer.createEl('h3', { text: 'Categories to Include', cls: 'expensica-setting-group-title' });
-    
-    // Add a "Select All" checkbox
-    const selectAllContainer = categoriesContainer.createDiv('expensica-select-all');
-    const selectAllCheckbox = selectAllContainer.createEl('input', { 
-      type: 'checkbox',
-      attr: { id: 'select-all-categories' }
-    });
-    selectAllContainer.createEl('label', { 
-      text: 'Select All Categories',
-      attr: { for: 'select-all-categories' }
-    });
-    selectAllCheckbox.checked = true;
-    
-    // Add event listener for "Select All"
-    selectAllCheckbox.addEventListener('change', () => {
-      const checked = selectAllCheckbox.checked;
-      this.categoryCheckboxes.forEach(checkbox => {
-        checkbox.checked = checked;
-      });
-      
-      // Update export options
-      if (checked) {
-        this.exportOptions.categories = null; // All categories
-      } else {
-        this.exportOptions.categories = []; // No categories
-      }
-    });
+    const categoriesContainer = form.createDiv('expensica-export-section');
     
     // Create categories section
     const categoryList = categoriesContainer.createDiv('expensica-category-list');
     
-    // Expense categories
-    const expenseCategoriesContainer = categoryList.createDiv('expensica-category-group');
-    expenseCategoriesContainer.createEl('h4', { text: 'Expense Categories' });
-    this.renderCategoryCheckboxes(expenseCategoriesContainer, CategoryType.EXPENSE);
-    
-    // Income categories
-    const incomeCategoriesContainer = categoryList.createDiv('expensica-category-group');
-    incomeCategoriesContainer.createEl('h4', { text: 'Income Categories' });
-    this.renderCategoryCheckboxes(incomeCategoriesContainer, CategoryType.INCOME);
-    
-    // Add filename setting with default name
-    const filenameContainer = form.createDiv('expensica-setting-group');
-    filenameContainer.createEl('h3', { text: 'Filename', cls: 'expensica-setting-group-title' });
-    
-    new Setting(filenameContainer)
-      .setName('Export Filename')
-      .setDesc('Enter the name for your export file')
-      .addText(text => text
-        .setValue(this.exportOptions.filename)
-        .onChange(value => {
-          if (value) {
-            this.exportOptions.filename = value;
-          }
-        }));
+    this.renderCategoryGroup(categoryList, 'Expenses categories', 'expense', this.plugin.getCategories(CategoryType.EXPENSE));
+    this.renderCategoryGroup(categoryList, 'Income categories', 'income', this.plugin.getCategories(CategoryType.INCOME));
+    this.renderCategoryGroup(categoryList, 'Internal categories', 'internal', [{ id: INTERNAL_CATEGORY_ID, name: 'Internal' }]);
+    this.syncCategorySelection();
     
     // Buttons
     const formFooter = form.createDiv('expensica-form-footer');
     const cancelBtn = formFooter.createEl('button', {
       text: 'Cancel',
-      cls: 'expensica-btn expensica-btn-secondary',
+      cls: 'expensica-standard-button expensica-btn expensica-btn-secondary',
       attr: { type: 'button' }
     });
     
-    const exportBtn = formFooter.createEl('button', {
+    formFooter.createEl('button', {
       text: 'Export',
-      cls: 'expensica-btn expensica-btn-primary',
-      attr: { type: 'button' }
+      cls: 'expensica-standard-button expensica-btn expensica-btn-primary',
+      attr: { type: 'submit' }
     });
     
     // Button event listeners
@@ -184,34 +139,16 @@ export class ExportModal extends Modal {
       this.close();
     });
     
-    exportBtn.addEventListener('click', () => {
+    form.addEventListener('submit', event => {
+      event.preventDefault();
       this.performExport();
     });
   }
   
   private performExport() {
-    // Validate export options
-    if (!this.exportOptions.includeExpenses && !this.exportOptions.includeIncome) {
-      showExpensicaNotice('Please include at least one transaction type (Expenses or Income)');
+    if (this.selectedCategories.size === 0) {
+      showExpensicaNotice('Please select at least one category');
       return;
-    }
-    
-    // Get selected categories if not using "select all"
-    const selectAllCheckbox = this.contentEl.querySelector<HTMLInputElement>('#select-all-categories');
-    if (selectAllCheckbox && !selectAllCheckbox.checked) {
-      const selectedCategories: string[] = [];
-      this.categoryCheckboxes.forEach((checkbox, categoryId) => {
-        if (checkbox.checked) {
-          selectedCategories.push(categoryId);
-        }
-      });
-      
-      if (selectedCategories.length === 0) {
-        showExpensicaNotice('Please select at least one category');
-        return;
-      }
-      
-      this.exportOptions.categories = selectedCategories;
     }
     
     // Ensure filename has correct extension
@@ -285,38 +222,153 @@ export class ExportModal extends Modal {
     }, 100);
   }
   
-  private renderCategoryCheckboxes(container: HTMLElement, type: CategoryType) {
-    const categories = this.plugin.getCategories(type);
-    
-    // Create a grid for checkboxes
-    const grid = container.createDiv('expensica-category-checkbox-grid');
-    
-    categories.forEach(category => {
-      const categoryContainer = grid.createDiv('expensica-category-checkbox');
-      
-      // Create checkbox
-      const checkbox = categoryContainer.createEl('input', {
-        type: 'checkbox',
-        attr: {
-          id: `category-${category.id}`,
-          checked: true
-        }
-      });
-      
-      // Store reference to the checkbox
-      this.categoryCheckboxes.set(category.id, checkbox);
-      
-      // Create label
-      const label = categoryContainer.createEl('label', {
-        attr: { for: `category-${category.id}` },
-        cls: 'expensica-category-checkbox-label'
-      });
-      label.createSpan({ cls: 'category-emoji', text: this.plugin.getCategoryEmoji(category.id) });
-      label.appendText(` ${category.name}`);
+  private renderFieldLabel(container: HTMLElement, text: string, icon: UiIcon) {
+    const label = container.createDiv('expensica-export-label');
+    renderUiIcon(label, icon);
+    label.createSpan({ text });
+  }
+
+  private renderCategoryGroup(container: HTMLElement, label: string, icon: UiIcon, categories: { id: string; name: string }[]) {
+    const group = container.createDiv('expensica-category-group');
+    const header = group.createDiv('expensica-export-category-group-header');
+    renderPanelTitle(header, label, icon, 'h3', 'expensica-chart-title expensica-setting-group-title');
+    const selectAll = header.createEl('label', { cls: 'expensica-select-all expensica-export-group-select-all' });
+    const checkbox = selectAll.createEl('input', {
+      attr: { type: 'checkbox', 'aria-label': `Select all ${label.toLowerCase()}` }
     });
+    selectAll.createSpan({ text: 'Select All' });
+    const ids = categories.map(category => category.id);
+    this.categoryGroups.push({ ids, checkbox });
+    checkbox.addEventListener('change', () => {
+      ids.forEach(id => {
+        if (checkbox.checked) this.selectedCategories.add(id);
+        else this.selectedCategories.delete(id);
+      });
+      this.syncCategorySelection();
+    });
+    const grid = group.createDiv('expensica-category-chip-grid expensica-donut-category-legend expensica-export-category-grid');
+    categories.forEach(category => this.renderCategoryPill(grid, category.id, category.name));
+  }
+
+  private renderCategoryPill(container: HTMLElement, id: string, name: string) {
+    const color = this.plugin.getCategoryColor(id, name);
+    const chip = renderCategoryChip(container, {
+      text: name, emoji: this.plugin.getCategoryEmoji(id), color, swatchColor: color, interactive: true
+    });
+    this.categoryChips.set(id, chip);
+    this.selectedCategories.add(id);
+    chip.addEventListener('click', () => {
+      if (this.selectedCategories.has(id)) this.selectedCategories.delete(id);
+      else this.selectedCategories.add(id);
+      this.syncCategorySelection();
+    });
+  }
+
+  private syncCategorySelection() {
+    this.categoryChips.forEach((chip, id) => {
+      const selected = this.selectedCategories.has(id);
+      chip.toggleClass('is-hidden', !selected);
+      chip.setAttribute('aria-pressed', String(selected));
+    });
+    const allSelected = this.selectedCategories.size === this.categoryChips.size;
+    this.categoryGroups.forEach(({ ids, checkbox }) => {
+      const count = ids.filter(id => this.selectedCategories.has(id)).length;
+      checkbox.disabled = ids.length === 0;
+      checkbox.checked = ids.length > 0 && count === ids.length;
+      checkbox.indeterminate = count > 0 && count < ids.length;
+    });
+    this.exportOptions.categories = allSelected ? null : [...this.selectedCategories];
+  }
+
+  private renderDropdown<T extends string>(container: HTMLElement, label: string,
+    options: { value: T; label: string }[], selectedValue: T, onSelect: (value: T) => void, iconName?: UiIcon) {
+    let currentValue = selectedValue;
+    const wrapper = container.createDiv('shadcn-date-range-container expensica-export-dropdown');
+    const selector = wrapper.createDiv('shadcn-date-range-selector');
+    const button = selector.createEl('button', {
+      cls: 'expensica-standard-button shadcn-date-range-current',
+      attr: { type: 'button', 'aria-label': label, 'aria-haspopup': 'menu', 'aria-expanded': 'false' }
+    });
+    if (iconName) renderUiIcon(button, iconName);
+    const text = button.createSpan({ cls: 'shadcn-date-range-text' });
+    const icon = button.createSpan({ cls: 'shadcn-date-range-icon', attr: { 'aria-hidden': 'true' } });
+    setIcon(icon, 'chevron-down');
+    const menu = selector.createDiv({
+      cls: 'shadcn-date-range-options expensica-date-range-options shadcn-date-range-hidden',
+      attr: { role: 'menu', 'aria-label': label }
+    });
+    const doc = button.ownerDocument;
+    const outside = (event: Event) => {
+      if (!selector.contains(event.target as Node)) hide();
+    };
+    const hide = () => {
+      menu.addClass('shadcn-date-range-hidden');
+      icon.removeClass('dropdown-icon-open');
+      button.setAttribute('aria-expanded', 'false');
+      doc.removeEventListener('click', outside);
+      doc.removeEventListener('focusin', outside);
+      if (this.activeDropdown === hide) this.activeDropdown = null;
+    };
+    this.dropdownCleanups.push(hide);
+    const show = () => {
+      this.activeDropdown?.();
+      this.activeDropdown = hide;
+      menu.removeClass('shadcn-date-range-hidden');
+      icon.addClass('dropdown-icon-open');
+      button.setAttribute('aria-expanded', 'true');
+      doc.addEventListener('click', outside);
+      doc.addEventListener('focusin', outside);
+    };
+    const items = options.map(option => {
+      const item = menu.createEl('button', {
+        text: option.label, cls: 'shadcn-date-range-option expensica-date-range-option',
+        attr: { type: 'button', role: 'menuitemradio', tabindex: '-1' }
+      });
+      item.addEventListener('click', () => {
+        hide();
+        button.focus();
+        onSelect(option.value);
+      });
+      return item;
+    });
+    const setValue = (value: T) => {
+      currentValue = value;
+      text.textContent = options.find(option => option.value === value)?.label || '';
+      items.forEach((item, index) => {
+        const selected = options[index].value === value;
+        item.toggleClass('shadcn-date-range-option-active', selected);
+        item.setAttribute('aria-checked', String(selected));
+      });
+    };
+    setValue(selectedValue);
+    button.addEventListener('click', () => {
+      if (menu.hasClass('shadcn-date-range-hidden')) show();
+      else hide();
+    });
+    selector.addEventListener('keydown', event => {
+      if (event.key === 'Escape') { hide(); button.focus(); event.preventDefault(); event.stopPropagation(); return; }
+      if (event.key === 'Tab') { hide(); return; }
+      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const index = items.indexOf(event.target as HTMLButtonElement);
+      const selected = options.findIndex(option => option.value === currentValue);
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+        : index < 0 ? Math.max(0, selected) : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+      if (menu.hasClass('shadcn-date-range-hidden')) show();
+      items[next].focus();
+    });
+    return { button, setValue };
   }
   
   onClose() {
+    this.dismissed = true;
+    this.dropdownCleanups.forEach(cleanup => cleanup());
+    this.dropdownCleanups = [];
+    this.dateRangePicker?.close();
+    this.dateRangePicker = null;
+    this.categoryChips.clear();
+    this.selectedCategories.clear();
+    this.categoryGroups = [];
     const {contentEl} = this;
     contentEl.empty();
   }

@@ -1,14 +1,10 @@
-import { Transaction, TransactionType, formatCurrency, ColorScheme, parseLocalDate, sortTransactionsByDateTimeDesc } from '../models';
+import { calendarDate, createCalendarNavigation, createCalendarGrid, monthFormatter, renderCalendarDays, MIN_YEAR, MAX_YEAR } from '../calendar-ui';
+import { renderUiIcon, renderPanelTitle, Transaction, TransactionType, TransactionAggregator, formatCurrency, ColorScheme, formatDate, parseLocalDate, sortTransactionsByDateTimeDesc, getAccountColor, getAccountIcon, formatAccountReference } from '../models';
 import { getRunningBalanceByTransactionIdForAccount } from '../account-calculations';
 import ExpensicaPlugin from '../../main';
 import * as d3 from 'd3';
-import { renderTransactionCard } from '../transaction-card';
-
-function formatRunningBalanceLabel(plugin: ExpensicaPlugin, balance: number, accountReference?: string): string {
-    const amount = formatCurrency(balance, plugin.settings.defaultCurrency);
-    if (!accountReference) return amount;
-    return `${plugin.getTransactionAccountDisplay(accountReference).name}: ${amount}`;
-}
+import { setChartTooltip } from '../chart-tooltip';
+import { formatFinancialAmount, isEffectivelyZero, renderFinancialMetric, renderTrend, TREND_PERCENTAGE_LIMIT } from '../financial-metrics';
 
 interface DayData {
     date: Date;
@@ -19,33 +15,30 @@ interface DayData {
     formattedDate: string;
 }
 
+export interface DailyReviewRange {
+    startDate: Date;
+    endDate: Date;
+    label: string;
+    transactions: Transaction[];
+}
+
 export class CalendarHeatmap {
     private container: HTMLElement;
     private transactions: Transaction[];
     private plugin: ExpensicaPlugin;
     private currentDate: Date;
     private calendarData: DayData[] = [];
-    private svg: d3.Selection<SVGSVGElement, unknown, null, undefined>;
-    private width = 0;
-    private height = 0;
-    private tooltipDiv: d3.Selection<HTMLDivElement, unknown, null, undefined>;
     private detailsContainer: HTMLElement;
     private calendarContainer: HTMLElement;
-    private cellSize = 48;
-    private cellGap = 6;
+    private days: HTMLElement;
     private maxAmount = 0;
-    private readonly defaultCellSize: number = 48;
-    private readonly minimumCellScale: number = 0.75;
-    private weekNumberWidth = 32; // Reserve one day-column width for week numbers.
-    private calendarHorizontalPadding = 8;
-    private lastRenderedLayoutKey = '';
-    private lastMeasuredContainerSizeKey = '';
     private selectedDate: Date | null;
     private onSelectedDateChange?: (date: Date) => void;
     private onTransactionEdit?: (transaction: Transaction) => void;
     private allTransactions: Transaction[] = [];
     private monthlyExpenseTotal = 0;
     private runningBalanceCache = new Map<string, Record<string, number>>();
+    private releaseDailyTransactions: (() => void) | undefined;
 
     constructor(
         container: HTMLElement,
@@ -54,7 +47,9 @@ export class CalendarHeatmap {
         currentDate: Date,
         selectedDate: Date | null = null,
         onSelectedDateChange?: (date: Date) => void,
-        onTransactionEdit?: (transaction: Transaction) => void
+        onTransactionEdit?: (transaction: Transaction) => void,
+        private readonly onMonthChange?: (offset: number) => void,
+        private readonly getReviewRange?: () => DailyReviewRange
     ) {
         this.container = container;
         this.plugin = plugin;
@@ -64,73 +59,45 @@ export class CalendarHeatmap {
         this.onSelectedDateChange = onSelectedDateChange;
         this.onTransactionEdit = onTransactionEdit;
         this.setupContainers();
-        this.createTooltip();
     }
 
     private setupContainers() {
         // Clear any existing content
+        this.destroy();
         this.container.empty();
         this.container.removeClass('expensica-calendar-container');
         this.container.addClass('expensica-calendar-flex-container');
 
         // Keep the calendar grid and day details as independent sibling panels.
-        const calendarContainer = this.container.createDiv('expensica-calendar-container expensica-calendar-grid-container');
+        const calendarContainer = this.container.createDiv('expensica-calendar-container expensica-calendar-grid-container expensica-chart-container');
         this.calendarContainer = calendarContainer;
-        
-        // Create the details container for transaction details
-        this.detailsContainer = this.container.createDiv('expensica-calendar-details-container');
-        this.detailsContainer.createEl('h3', { 
-            text: 'Click on a day to see transactions', 
-            cls: 'expensica-calendar-details-title' 
-        });
-
-        const renderableWidth = this.getRenderableWidth(this.container) ?? this.getNaturalCalendarWidth();
-        this.updateCalendarHorizontalPadding(renderableWidth);
-        this.updateStackedLayout(renderableWidth);
-
-        // Size the SVG to the actual calendar grid instead of the full panel width.
-        this.width = this.getCalendarGridWidth();
-
-        // Calculate additional width for week numbers if enabled
-        const weekNumbersOffset = this.getWeekNumbersOffset();
-        
-        // Calculate height based on number of weeks in the month
-        const weeksInMonth = this.getWeeksInMonth(this.currentDate.getFullYear(), this.currentDate.getMonth());
-        const calendarHeight = (weeksInMonth + 1) * (this.cellSize + this.cellGap) + 50; // Calendar height
-        
-        // Add extra space at the bottom for the legend (90px instead of 75px)
-        this.height = calendarHeight + 90;
-
-        // Create the SVG inside the calendar container
-        this.svg = d3.select(calendarContainer)
-            .append('svg')
-            .attr('width', this.width + weekNumbersOffset)
-            .attr('height', this.height)
-            .attr('viewBox', `0 0 ${this.width + weekNumbersOffset} ${this.height}`)
-            .attr('class', 'expensica-calendar-svg');
-
-        this.updateCalendarScaleBounds(this.width + weekNumbersOffset);
-        this.updateDetailsPanelHeight();
-        this.lastRenderedLayoutKey = this.getLayoutKey(this.width + weekNumbersOffset, this.height);
-        this.lastMeasuredContainerSizeKey = this.getContainerSizeKey(this.container);
+        this.calendarContainer.addClass('expensica-heatmap');
+        const header = calendarContainer.createDiv('expensica-chart-header');
+        renderPanelTitle(header, 'Spending Heatmap Calendar', 'calendar', 'h2', 'expensica-chart-title');
+        const navigation = createCalendarNavigation(calendarContainer, offset => this.onMonthChange?.(offset));
+        for (const button of [navigation.previousButton, navigation.nextButton]) {
+            setChartTooltip(button, button.getAttribute('aria-label') || '');
+        }
+        const year = this.currentDate.getFullYear();
+        const month = this.currentDate.getMonth();
+        navigation.monthLabel.textContent = monthFormatter.format(this.currentDate);
+        navigation.yearLabel.textContent = String(year);
+        navigation.previousButton.disabled = year === MIN_YEAR && month === 0;
+        navigation.nextButton.disabled = year === MAX_YEAR && month === 11;
+        this.days = createCalendarGrid(calendarContainer, this.plugin.settings.showWeekNumbers).days;
+        this.detailsContainer = this.container.createDiv('expensica-calendar-details-container expensica-chart-container');
     }
 
-    private createTooltip() {
-        this.tooltipDiv = d3.select(this.container)
-            .append('div')
-            .attr('class', 'expensica-calendar-tooltip')
-            .style('opacity', 0);
-    }
-
-    public render(animateCells = false) {
+    public render() {
         this.prepareData();
-        this.renderCalendar(animateCells);
+        this.renderCalendar();
+        this.resize();
     }
 
     private prepareData() {
         const year = this.currentDate.getFullYear();
         const month = this.currentDate.getMonth();
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const daysInMonth = calendarDate(year, month + 1, 0).getDate();
 
         this.calendarData = [];
         this.maxAmount = 0;
@@ -156,7 +123,8 @@ export class CalendarHeatmap {
         const defaultAccountReference = this.plugin.normalizeTransactionAccountReference(undefined);
         const runningBalances = this.getRunningBalanceMap(defaultAccountReference);
         const balancesByDate = new Map<string, number>();
-        const monthStart = new Date(year, month, 1);
+        const monthStart = calendarDate(year, month, 1);
+        monthStart.setHours(0, 0, 0, 0);
         let carriedBalance = 0;
         sortTransactionsByDateTimeDesc(this.allTransactions, this.allTransactions)
             .reverse()
@@ -170,7 +138,7 @@ export class CalendarHeatmap {
             });
 
         for (let day = 1; day <= daysInMonth; day++) {
-            const date = new Date(year, month, day);
+            const date = calendarDate(year, month, day);
             const dateKey = this.getDateKey(date);
             const dateStr = this.formatDate(date);
             const dayTransactions = monthlyTransactionsByDate.get(dateKey) ?? [];
@@ -216,28 +184,14 @@ export class CalendarHeatmap {
         return balances;
     }
 
-    private formatDate(date: Date): string {
+    private formatDate(date: Date, month: 'long' | 'short' = 'long'): string {
         return date.toLocaleDateString('en-US', { 
-            month: 'short', 
+            month,
             day: 'numeric', 
             year: 'numeric' 
         });
     }
 
-    private getWeeksInMonth(year: number, month: number): number {
-        const firstDay = new Date(year, month, 1).getDay();
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-        return Math.ceil((firstDay + daysInMonth) / 7);
-    }
-    
-    // Get the week number for a given date (ISO week number)
-    private getWeekNumber(date: Date): number {
-        const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-        return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-    }
-    
     // Get the color scale based on the selected color scheme
     private getColorScale(maxValue: number): d3.ScaleSequential<string> {
         if (maxValue <= 0) {
@@ -290,369 +244,50 @@ export class CalendarHeatmap {
         return `rgba(${parsedColor.r}, ${parsedColor.g}, ${parsedColor.b}, ${alpha})`;
     }
 
-    private renderCalendar(animateCells = false) {
-        // Clear SVG
-        this.svg.selectAll('*').remove();
-        
-        const monthLabel = this.currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-        
-        // Calculate week numbers offset if enabled
-        const weekNumbersOffset = this.getWeekNumbersOffset();
-        
-        // Calculate calendar height (without the legend space)
-        const weeksInMonth = this.getWeeksInMonth(this.currentDate.getFullYear(), this.currentDate.getMonth());
-        const calendarHeight = (weeksInMonth + 1) * (this.cellSize + this.cellGap) + 50;
-        
-        // Add month label with Notion-inspired styling
-        this.svg.append('text')
-            .attr('class', 'month-label')
-            .attr('x', (this.width + weekNumbersOffset) / 2)
-            .attr('y', 25)
-            .attr('text-anchor', 'middle')
-            .attr('font-size', '16px')
-            .attr('font-weight', '500')
-            .attr('fill', 'var(--text-normal)')
-            .text(monthLabel);
-        
-        // Days of the week - Shorter Notion-like format
-        const daysOfWeek = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-        
-        this.svg.selectAll('.day-of-week')
-            .data(daysOfWeek)
-            .enter()
-            .append('text')
-            .attr('class', 'day-of-week')
-            .attr('x', (d: string, i: number) => this.calendarHorizontalPadding + weekNumbersOffset + i * (this.cellSize + this.cellGap) + this.cellSize / 2)
-            .attr('y', 60)
-            .attr('text-anchor', 'middle')
-            .attr('font-size', '12px')
-            .attr('fill', 'var(--text-muted)')
-            .text((d: string) => d);
-        
-        // Calculate colorscale based on max expense amount using the selected color scheme
-        const colorScale = this.getColorScale(this.maxAmount);
-        
-        // Create day cells
-        const year = this.currentDate.getFullYear();
-        const month = this.currentDate.getMonth();
-        const firstDayOfMonth = new Date(year, month, 1).getDay();
-        
-        // Get current day for today's highlight
+    private renderCalendar() {
         const today = new Date();
-        const isCurrentMonth = today.getMonth() === month && today.getFullYear() === year;
-        const todayDate = today.getDate();
-        
-        // Track selected cell for reference
-        let selectedCell: d3.Selection<SVGRectElement, DayData, d3.BaseType, unknown> | null = null;
-        
-        // Add week numbers if enabled
-        if (this.plugin.settings.showWeekNumbers) {
-            // Add "Week" header
-            this.svg.append('text')
-                .attr('class', 'week-label')
-                .attr('x', this.calendarHorizontalPadding + this.weekNumberWidth / 2)
-                .attr('y', 60)
-                .attr('text-anchor', 'middle')
-                .attr('font-size', '11px')
-                .attr('fill', 'var(--text-faint)')
-                .text('Wk');
-                
-            // Add week numbers
-            const weeksInMonth = this.getWeeksInMonth(year, month);
-            
-            for (let week = 0; week < weeksInMonth; week++) {
-                // Calculate the date for the first day of this week
-                const weekStart = new Date(year, month, 1 + (week * 7) - firstDayOfMonth);
-                
-                // Get week number
-                const weekNumber = this.getWeekNumber(weekStart);
-                
-                this.svg.append('text')
-                    .attr('class', 'week-number')
-                    .attr('x', this.calendarHorizontalPadding + this.weekNumberWidth / 2)
-                    .attr('y', (week + 1) * (this.cellSize + this.cellGap) + 60)
-                    .attr('text-anchor', 'middle')
-                    .attr('dominant-baseline', 'middle')
-                    .attr('font-size', '11px')
-                    .attr('fill', 'var(--text-faint)')
-                    .text(weekNumber);
-            }
-        }
-        
-        const dayCells = this.svg.selectAll<SVGGElement, DayData>('.day-cell')
-            .data(this.calendarData)
-            .enter()
-            .append('g')
-            .attr('class', 'day-cell')
-            .attr('transform', (d: DayData, i: number) => {
-                const dayOfMonth = d.date.getDate();
-                const dayOfWeek = d.date.getDay();
-                const weekOfMonth = Math.floor((dayOfMonth + firstDayOfMonth - 1) / 7);
-                
-                // Calculate position with added gap between cells
-                const xPos = this.calendarHorizontalPadding + weekNumbersOffset + dayOfWeek * (this.cellSize + this.cellGap);
-                const yPos = (weekOfMonth + 1) * (this.cellSize + this.cellGap) + 40;
-                
-                return `translate(${xPos}, ${yPos})`;
-            });
-        
-        // Add cell background with Notion-inspired visual design
-        dayCells.append('rect')
-            .attr('width', this.cellSize - 4)
-            .attr('height', this.cellSize - 4)
-            .attr('rx', 4) // Subtle rounded corners like Notion
-            .attr('ry', 4)
-            .attr('fill', (d: DayData) => d.totalAmount > 0 ? colorScale(d.totalAmount) : 'transparent')
-            .attr('stroke', (d: DayData) => {
-                // Highlight today's date with a special border
-                if (isCurrentMonth && d.date.getDate() === todayDate) {
-                    return 'var(--interactive-accent)';
+        const selected = this.calendarData.find(day => this.selectedDate && this.isSameDate(day.date, this.selectedDate))
+            ?? this.calendarData.find(day => this.isSameDate(day.date, today))
+            ?? this.calendarData.find(day => day.totalAmount > 0);
+        const colorScale = this.getColorScale(this.maxAmount);
+        renderCalendarDays(this.days, this.currentDate.getFullYear(), this.currentDate.getMonth(), {
+            selectedDate: selected ? formatDate(selected.date) : null,
+            today: formatDate(today), showWeekNumbers: this.plugin.settings.showWeekNumbers,
+            onSelect: value => this.selectDate(parseLocalDate(value, 12)),
+            decorateDay: (button, date) => {
+                const day = this.calendarData[date.getDate() - 1];
+                button.empty();
+                const content = button.createDiv('expensica-heatmap-day-content');
+                content.createSpan({ text: String(date.getDate()) });
+                button.setCssProps({
+                    '--expensica-day-color': day.totalAmount > 0 ? colorScale(day.totalAmount) : 'transparent',
+                    '--expensica-day-text': day.totalAmount > 0 ? this.getTextColor(day.totalAmount, colorScale) : 'var(--text-normal)'
+                });
+                if (day.totalAmount > 0) {
+                    content.createSpan({ text: formatCurrency(day.totalAmount, this.plugin.settings.defaultCurrency, true),
+                        cls: 'expensica-heatmap-amount' });
                 }
-                return 'var(--background-modifier-border)'; // Using a more visible border color from Obsidian
-            })
-            .attr('stroke-width', (d: DayData) => {
-                return isCurrentMonth && d.date.getDate() === todayDate ? 2 : 1.5;
-            })
-            .attr('opacity', (d: DayData) => {
-                // More subtle opacity for Notion-like aesthetic
-                const isWeekend = d.date.getDay() === 0 || d.date.getDay() === 6;
-                if (d.totalAmount > 0) {
-                    return 1.0; // Full opacity for cells with expenses
-                }
-                return isWeekend ? 0.7 : 0.6; // Subtle distinction for weekend days
-            })
-            .classed('has-expenses', (d: DayData) => d.totalAmount > 0)
-            .classed('is-today', (d: DayData) => isCurrentMonth && d.date.getDate() === todayDate)
-            .on('mouseover', (event: MouseEvent, d: DayData) => {
-                const cellNode = event.currentTarget as SVGRectElement;
-                // Highlight the cell
-                const cell = d3.select<SVGRectElement, DayData>(cellNode);
-                cell.transition()
-                    .duration(100) // Faster transition for better responsiveness
-                    .attr('stroke', 'var(--interactive-accent)')
-                    .attr('stroke-width', 2) // Consistent with non-selected cells
-                    .attr('opacity', 1);
-                
-                // Show tooltip
-                this.tooltipDiv.transition()
-                    .duration(100)
-                    .style('opacity', .9);
-                
-                // Count only expense transactions
-                const expenseTransactions = d.transactions.filter(t => t.type === TransactionType.EXPENSE);
-                
-                // Calculate percentage of monthly expenses for this day
-                const monthlyTotal = this.transactions
-                    .filter(t => t.type === TransactionType.EXPENSE)
-                    .reduce((sum, t) => sum + t.amount, 0);
-                
-                const percentage = monthlyTotal > 0 ? ((d.totalAmount / monthlyTotal) * 100).toFixed(1) : '0';
-                
-                // Determine if this day is above average
-                const daysInMonth = new Date(year, month + 1, 0).getDate();
-                
-                const dailyAverage = monthlyTotal / daysInMonth;
-                const comparedToAverage = dailyAverage > 0
-                    ? ((d.totalAmount - dailyAverage) / dailyAverage) * 100
-                    : 0;
-                const roundedComparison = Number(comparedToAverage.toFixed(0));
-                let comparisonText: { className: string; text: string } | null = null;
-                if (d.totalAmount > 0) {
-                    if (roundedComparison > 20) {
-                        comparisonText = {
-                            className: 'tooltip-comparison tooltip-higher',
-                            text: `▲ ${roundedComparison}% above daily average`
-                        };
-                    } else if (roundedComparison < -20) {
-                        comparisonText = {
-                            className: 'tooltip-comparison tooltip-lower',
-                            text: `▼ ${Math.abs(roundedComparison)}% below daily average`
-                        };
+                const incomeAccounts = new Map(day.transactions
+                    .filter(transaction => transaction.type === TransactionType.INCOME)
+                    .map(transaction => {
+                        const account = this.plugin.getTransactionAccountDisplay(transaction.account);
+                        return [account.id, account] as const;
+                    }));
+                if (incomeAccounts.size > 0) {
+                    const dots = button.createDiv({ cls: 'expensica-heatmap-income-dots', attr: { 'aria-hidden': 'true' } });
+                    for (const account of incomeAccounts.values()) {
+                        dots.createSpan('expensica-heatmap-income-dot')
+                            .setCssProps({ '--expensica-income-dot-color': getAccountColor(account) });
                     }
                 }
-
-                this.tooltipDiv.selectAll('*').remove();
-                this.tooltipDiv.append('div')
-                    .attr('class', 'tooltip-title')
-                    .text(d.formattedDate);
-                this.tooltipDiv.append('div')
-                    .attr('class', 'tooltip-value')
-                    .text(formatCurrency(d.totalAmount, this.plugin.settings.defaultCurrency, true));
-                this.tooltipDiv.append('div')
-                    .attr('class', 'tooltip-hint')
-                    .text(`${expenseTransactions.length} expense(s) · ${percentage}% of monthly spend`);
-                if (comparisonText) {
-                    this.tooltipDiv.append('div')
-                        .attr('class', comparisonText.className)
-                        .text(comparisonText.text);
-                }
-
-                this.tooltipDiv
-                    .style('left', (event.pageX + 10) + 'px')
-                    .style('top', (event.pageY - 28) + 'px');
-            })
-            .on('mouseout', (event: MouseEvent, d: DayData) => {
-                const cellNode = event.currentTarget as SVGRectElement;
-                // Don't reset if this is the selected cell
-                if (selectedCell && selectedCell.node() === cellNode) {
-                    return;
-                }
-                
-                // Reset the cell with Notion styling
-                d3.select<SVGRectElement, DayData>(cellNode)
-                    .transition()
-                    .duration(100) // Faster transition for better responsiveness
-                    .attr('stroke', (d: DayData) => {
-                        // Maintain today's highlight
-                        if (isCurrentMonth && d.date.getDate() === todayDate) {
-                            return 'var(--interactive-accent)';
-                        }
-                        return 'var(--background-modifier-border)'; // Using a more visible border color from Obsidian
-                    })
-                    .attr('stroke-width', (d: DayData) => {
-                        return isCurrentMonth && d.date.getDate() === todayDate ? 2 : 1.5;
-                    })
-                    .attr('opacity', (d: DayData) => {
-                        // Notion-like opacity values
-                        const isWeekend = d.date.getDay() === 0 || d.date.getDay() === 6;
-                        if (d.totalAmount > 0) {
-                            return 1.0; // Full opacity for cells with expenses
-                        }
-                        return isWeekend ? 0.7 : 0.6; // Subtle distinction for weekend days
-                    });
-                
-                // Hide tooltip with subtle fade
-                this.tooltipDiv.transition()
-                    .duration(100)
-                    .style('opacity', 0);
-            })
-            .on('click', (event: MouseEvent, d: DayData) => {
-                const cellNode = event.currentTarget as SVGRectElement;
-                // Remove previous selection
-                if (selectedCell) {
-                    selectedCell
-                        .attr('stroke', (d: DayData) => {
-                            // Maintain today's highlight with Notion styling
-                            if (isCurrentMonth && d.date.getDate() === todayDate) {
-                                return 'var(--interactive-accent)';
-                            }
-                            return 'var(--background-modifier-border)'; // Using a more visible border color from Obsidian
-                        })
-                        .attr('stroke-width', (d: DayData) => {
-                            return isCurrentMonth && d.date.getDate() === todayDate ? 2 : 1.5;
-                        });
-                }
-                
-                // Highlight the selected cell with a Notion-like subtle highlight
-                selectedCell = d3.select<SVGRectElement, DayData>(cellNode);
-                selectedCell
-                    .attr('stroke', 'var(--interactive-accent)')
-                    .attr('stroke-width', 2.5); // Increased thickness for better visibility
-                this.selectedDate = d.date;
-                this.onSelectedDateChange?.(d.date);
-                
-                // Show transaction details with a nice transition
-                this.showDayDetails(d);
-            });
-        
-        // Add day number with Notion-inspired styling
-        dayCells.append('text')
-            .attr('x', this.cellSize / 2 - 2)
-            .attr('y', this.cellSize / 2 - 6)
-            .attr('text-anchor', 'middle')
-            .attr('dominant-baseline', 'middle')
-            .attr('font-size', '13px')
-            .attr('font-weight', (d: DayData) => d.totalAmount > 0 ? '500' : '400')
-            .attr('pointer-events', 'none')
-            .attr('fill', (d: DayData) => {
-                if (d.totalAmount > 0) {
-                    return this.getTextColor(d.totalAmount, colorScale);
-                }
-                return 'var(--text-normal)';
-            })
-            .text((d: DayData) => d.date.getDate());
-        
-        // Add spending amount for days with expenses with Notion-like styling
-        dayCells.filter((d: DayData) => d.totalAmount > 0)
-            .append('text')
-            .attr('x', this.cellSize / 2 - 2)
-            .attr('y', this.cellSize / 2 + 12)
-            .attr('text-anchor', 'middle')
-            .attr('font-size', '10px')
-            .attr('font-weight', '500')
-            .attr('pointer-events', 'none')
-            .attr('fill', (d: DayData) => this.getTextColor(d.totalAmount, colorScale))
-            .text((d: DayData) => {
-                return formatCurrency(d.totalAmount, this.plugin.settings.defaultCurrency, true);
-            });
-        
-        // Add tiny indicator for days with income
-        dayCells.filter((d: DayData) => d.transactions.some(t => t.type === TransactionType.INCOME))
-            .append('circle')
-            .attr('cx', this.cellSize - 12)
-            .attr('cy', 10)
-            .attr('r', 3.5)
-            .attr('fill', 'var(--expensica-success)')
-            .attr('pointer-events', 'none')
-            .attr('opacity', 0.8);
-        
-        // Add color legend
-        this.renderColorLegend(colorScale, weekNumbersOffset, calendarHeight);
-        
-        if (animateCells) {
-            // Only animate when month/data changes, not during resize or workspace focus refreshes.
-            dayCells
-                .style('opacity', 0)
-                .transition()
-                .duration(500)
-                .delay((d: DayData, i: number) => {
-                    const dayOfMonth = d.date.getDate();
-                    const dayOfWeek = d.date.getDay();
-                    const weekOfMonth = Math.floor((dayOfMonth + firstDayOfMonth - 1) / 7);
-                    return (weekOfMonth * 7 + dayOfWeek) * 20;
-                })
-                .style('opacity', 1);
-        }
-        
-        const selectedDate = this.selectedDate;
-        const selectedData = selectedDate
-            ? this.calendarData.find(d => this.isSameDate(d.date, selectedDate))
-            : null;
-
-        if (selectedData) {
-            this.showDayDetails(selectedData);
-            const selectedDateCell = this.svg.selectAll<SVGRectElement, DayData>('.day-cell rect')
-                .filter((d: DayData) => this.isSameDate(d.date, selectedData.date));
-            selectedDateCell.attr('stroke', 'var(--interactive-accent)')
-                .attr('stroke-width', 2.5);
-            selectedCell = selectedDateCell;
-        } else if (isCurrentMonth) {
-            const todayData = this.calendarData.find(d => d.date.getDate() === todayDate);
-            if (todayData) {
-                this.showDayDetails(todayData);
-                // Also visually select today's cell
-                const todayCell = this.svg.selectAll<SVGRectElement, DayData>('.day-cell rect')
-                    .filter((d: DayData) => d.date.getDate() === todayDate);
-                todayCell.attr('stroke', 'var(--interactive-accent)')
-                    .attr('stroke-width', 2);
-                selectedCell = todayCell;
+                button.setAttribute('aria-description', button.getAttribute('aria-label') || '');
+                button.removeAttribute('aria-label');
             }
-        } else {
-            // Find the first day with expenses as fallback
-            const firstDayWithExpenses = this.calendarData.find(d => d.totalAmount > 0);
-            if (firstDayWithExpenses) {
-                this.showDayDetails(firstDayWithExpenses);
-                // Also visually select this cell
-                const firstExpenseCell = this.svg.selectAll<SVGRectElement, DayData>('.day-cell rect')
-                    .filter((d: DayData) => d.date.getDate() === firstDayWithExpenses.date.getDate());
-                firstExpenseCell.attr('stroke', 'var(--interactive-accent)')
-                    .attr('stroke-width', 2);
-                selectedCell = firstExpenseCell;
-            } else {
-                // Default to first day of month if no expenses
-                this.showDayDetails(this.calendarData[0]);
-            }
-        }
+        });
+        this.days.setAttribute('aria-description', this.days.getAttribute('aria-label') || '');
+        this.days.removeAttribute('aria-label');
+        this.renderColorLegend(colorScale);
+        this.showDayDetails(selected ?? this.calendarData[0]);
     }
 
     private isSameDate(left: Date, right: Date): boolean {
@@ -675,522 +310,235 @@ export class CalendarHeatmap {
         return luminance > 160 ? 'var(--text-normal)' : 'var(--text-on-accent)';
     }
 
-    private renderColorLegend(colorScale: d3.ScaleSequential<string>, weekNumbersOffset: number, calendarHeight: number) {
-        // Create a centered legend at the bottom with improved Notion-inspired styling
-        const legendWidth = 220; // Wider legend for better visibility
-        const legendHeight = 16; // Taller bar for better visibility
-        const legendY = calendarHeight + 35; // Increased from 20px to 35px for more space at the top
-        
-        const legend = this.svg.append('g')
-            .attr('class', 'legend')
-            .attr('transform', `translate(${(this.width + weekNumbersOffset - legendWidth) / 2}, ${legendY})`);
-        
-        // Add legend title with improved styling
-        legend.append('text')
-            .attr('x', legendWidth / 2)
-            .attr('y', -15)
-            .attr('text-anchor', 'middle')
-            .attr('font-size', '13px')
-            .attr('font-weight', '500')
-            .attr('fill', 'var(--text-normal)')
-            .text('Spending Intensity');
-        
-        // Create gradient
-        const defs = this.svg.append('defs');
-        const gradient = defs.append('linearGradient')
-            .attr('id', 'legend-gradient')
-            .attr('x1', '0%')
-            .attr('y1', '0%')
-            .attr('x2', '100%')
-            .attr('y2', '0%');
-        
-        // Add color stops
-        const steps = 10;
-        for (let i = 0; i <= steps; i++) {
-            const offset = i / steps;
-            const value = offset * this.maxAmount;
-            gradient.append('stop')
-                .attr('offset', `${offset * 100}%`)
-                .attr('stop-color', colorScale(value));
+    private renderColorLegend(colorScale: d3.ScaleSequential<string>) {
+        this.calendarContainer.querySelector('.expensica-heatmap-legend')?.remove();
+        const legend = this.calendarContainer.createDiv('expensica-heatmap-legend');
+        legend.createSpan({ text: 'Spending Intensity', cls: 'expensica-heatmap-legend-title' });
+        const stops = Array.from({ length: 11 }, (_, i) => `${colorScale(i / 10 * this.maxAmount)} ${i * 10}%`);
+        legend.createDiv('expensica-heatmap-gradient').setCssProps({ '--expensica-heatmap-gradient': `linear-gradient(to right, ${stops.join(', ')})` });
+        const labels = legend.createDiv('expensica-heatmap-legend-labels');
+        for (const [label, amount] of [['Minimum', 0], ['Maximum', this.maxAmount]] as const) {
+            const item = labels.createDiv();
+            item.createSpan({ text: formatCurrency(amount, this.plugin.settings.defaultCurrency) });
+            item.createSpan({ text: label });
         }
-        
-        // Draw the gradient rect with improved styling
-        legend.append('rect')
-            .attr('width', legendWidth)
-            .attr('height', legendHeight)
-            .attr('fill', 'url(#legend-gradient)')
-            .attr('rx', 4) // More noticeable rounding
-            .attr('ry', 4)
-            .attr('stroke', 'var(--background-modifier-border)') // Match cell border color
-            .attr('stroke-width', 1.5); // Match cell border thickness
-        
-        // Add min and max labels with improved styling
-        legend.append('text')
-            .attr('x', 0)
-            .attr('y', legendHeight + 16)
-            .attr('text-anchor', 'start')
-            .attr('font-size', '12px')
-            .attr('font-weight', '500')
-            .attr('fill', 'var(--text-muted)')
-            .text(formatCurrency(0, this.plugin.settings.defaultCurrency));
-        
-        legend.append('text')
-            .attr('x', legendWidth)
-            .attr('y', legendHeight + 16)
-            .attr('text-anchor', 'end')
-            .attr('font-size', '12px')
-            .attr('font-weight', '500')
-            .attr('fill', 'var(--text-muted)')
-            .text(formatCurrency(this.maxAmount, this.plugin.settings.defaultCurrency));
-            
-        // Add "min" and "max" labels for clarity
-        legend.append('text')
-            .attr('x', 0)
-            .attr('y', legendHeight + 32)
-            .attr('text-anchor', 'start')
-            .attr('font-size', '10px')
-            .attr('fill', 'var(--text-faint)')
-            .text('Minimum');
-            
-        legend.append('text')
-            .attr('x', legendWidth)
-            .attr('y', legendHeight + 32)
-            .attr('text-anchor', 'end')
-            .attr('font-size', '10px')
-            .attr('fill', 'var(--text-faint)')
-            .text('Maximum');
+    }
+
+    private renderDailyReviewMetrics(dayData: DayData) {
+        let metrics: HTMLElement | null = null;
+        const currency = this.plugin.settings.defaultCurrency;
+        const range = this.getReviewRange?.() ?? {
+            startDate: calendarDate(this.currentDate.getFullYear(), this.currentDate.getMonth(), 1),
+            endDate: calendarDate(this.currentDate.getFullYear(), this.currentDate.getMonth() + 1, 0),
+            label: this.currentDate.toLocaleDateString(undefined, { month: 'short' }),
+            transactions: this.transactions
+        };
+        const days = Math.max(1, (Date.parse(formatDate(range.endDate)) - Date.parse(formatDate(range.startDate))) / 86400000 + 1);
+        for (const metric of [
+            { label: 'Income', total: TransactionAggregator.getTotalIncome, color: 'var(--text-success)' },
+            { label: 'Expenses', total: TransactionAggregator.getTotalExpenses, color: 'var(--text-error)' }
+        ]) {
+            const current = metric.total(dayData.transactions);
+            if (isEffectivelyZero(current)) continue;
+            metrics ??= this.detailsContainer.createDiv('expensica-cash-flow-metrics expensica-daily-review-metrics');
+            const average = metric.total(range.transactions) / days;
+            const item = renderFinancialMetric(metrics, metric.label, current, currency, metric.color, this.formatDate(dayData.date, 'short'));
+            const pill = item.createDiv('expensica-card-trend expensica-cash-flow-comparison');
+            const formatAmount = (value: number) => formatFinancialAmount(value, currency);
+            renderTrend(pill, current, average, currency, range.label, metric.label === 'Expenses', trend => {
+                const difference = trend.useAmount ? trend.amount : `${trend.percentage}% (${trend.amount})`;
+                const comparison = trend.change === 0
+                    ? `At daily average (${formatAmount(current)}) of ${range.label}.`
+                    : `${trend.change > 0 ? 'Above' : 'Below'} daily average by ${difference} of ${range.label}.`;
+                const share = Number((current / average * 100).toFixed(1));
+                const rangeShare = average >= 1 && current >= 0 && Number.isFinite(share) && share < TREND_PERCENTAGE_LIMIT && (current === 0 || share > 0)
+                    ? ` This represents ${share}% (${formatAmount(current)}) of the ${range.label} average.`
+                    : ` The ${range.label} average is ${formatAmount(average)}.`;
+                return {
+                    label: trend.useAmount ? trend.amount : `${trend.percentage}%`,
+                    tooltip: `${comparison}${rangeShare}`
+                };
+            });
+        }
+    }
+
+    private renderDailyAccountBalances(container: HTMLElement, dayData: DayData) {
+        const panel = container.createDiv('expensica-category-breakdown expensica-daily-account-balances');
+        const header = panel.createDiv('expensica-breakdown-title-container');
+        renderPanelTitle(header, 'Account Running Balances', 'balance', 'h3', 'expensica-breakdown-title');
+        const cards = panel.createDiv('expensica-daily-account-cards');
+        const accounts = this.plugin.settings.enableAccounts
+            ? this.plugin.getAccounts() : [this.plugin.getTransactionAccountDisplay(undefined)];
+        const lastTransaction = sortTransactionsByDateTimeDesc(this.allTransactions, this.allTransactions)
+            .find(transaction => parseLocalDate(transaction.date) <= dayData.date);
+        for (const account of accounts) {
+            const reference = this.plugin.normalizeTransactionAccountReference(this.plugin.settings.enableAccounts
+                ? formatAccountReference(account.type, account.name) : undefined);
+            const balance = lastTransaction ? this.getRunningBalanceMap(reference)[lastTransaction.id] ?? 0 : 0;
+            const color = getAccountColor(account, accounts);
+            const card = cards.createDiv({
+                cls: 'expensica-card expensica-overview-card-balance expensica-daily-account-card',
+                attr: { role: 'button', tabindex: '0' }
+            });
+            renderUiIcon(card, this.plugin.settings.enableAccounts ? getAccountIcon(account.type) : 'wallet', '', color);
+            card.createSpan({ text: account.name, cls: 'expensica-card-title' });
+            const value = card.createSpan({
+                text: formatCurrency(balance, this.plugin.settings.defaultCurrency),
+                cls: 'expensica-card-value expensica-card-currency-amount'
+            });
+            value.style.color = color;
+            setChartTooltip(card, `${account.name}'s running balance as of ${this.formatDate(dayData.date, 'short')}`, true);
+        }
+    }
+
+    private renderDailyCategoryBreakdown(container: HTMLElement, transactions: Transaction[]) {
+        const groups = [
+            { type: TransactionType.EXPENSE, label: 'Expenses', color: 'var(--text-error)' },
+            { type: TransactionType.INCOME, label: 'Income', color: 'var(--text-success)' }
+        ].map(group => {
+            const rows = transactions.filter(transaction => transaction.type === group.type);
+            return { ...group, rows, total: rows.reduce((sum, transaction) => sum + transaction.amount, 0) };
+        }).filter(group => !isEffectivelyZero(group.total));
+        if (groups.length === 0) return;
+        const panel = container.createDiv('expensica-category-breakdown');
+        const header = panel.createDiv('expensica-breakdown-title-container');
+        renderPanelTitle(header, 'Category Breakdown', 'budget', 'h3', 'expensica-breakdown-title');
+        const chart = panel.createDiv('expensica-breakdown-chart');
+        const ownerWindow = container.ownerDocument.defaultView ?? window;
+        const reducedMotion = ownerWindow.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+        // Match the donut's 500ms shape transition and 450ms cubic-out counter.
+        const duration = reducedMotion ? 0 : 500;
+        const shapeEasing = d3.easePolyOut.exponent(4);
+        for (const group of groups) {
+            const categories = new Map<string, { amount: number; color: string }>();
+            for (const transaction of group.rows) {
+                const categoryId = transaction.category;
+                const category = this.plugin.getCategoryById(categoryId);
+                const name = category?.name ?? (group.type === TransactionType.INCOME ? 'Other Income' : 'Other Expenses');
+                const existing = categories.get(name);
+                if (existing) existing.amount += transaction.amount;
+                else categories.set(name, { amount: transaction.amount,
+                    color: this.plugin.getCategoryColor(categoryId, name) });
+            }
+            const row = chart.createDiv('expensica-category-bar-row');
+            const swatch = row.createSpan({ cls: 'expensica-chart-legend-swatch', attr: { role: 'button', tabindex: '0' } });
+            swatch.setCssProps({ 'background-color': group.color });
+            setChartTooltip(swatch, group.label, true);
+            const bar = row.createDiv({ cls: 'expensica-category-bar', attr: {
+                'data-transaction-type': group.type, role: 'group', 'aria-description': group.label
+            } });
+            if (duration) {
+                d3.select(bar).style('clip-path', 'inset(-15% 100% -15% 0)').transition()
+                    .duration(duration).ease(shapeEasing).style('clip-path', 'inset(-15% 0% -15% 0)')
+                    .on('end', () => bar.style.removeProperty('clip-path'));
+            }
+            for (const [name, { amount, color }] of Array.from(categories).sort((a, b) => b[1].amount - a[1].amount)) {
+                if (isEffectivelyZero(amount)) continue;
+                const percentage = amount / group.total * 100;
+                const percentageLabel = `${Number(percentage.toFixed(2))}%`;
+                const formattedAmount = formatCurrency(amount, this.plugin.settings.defaultCurrency);
+                const segment = bar.createDiv({ cls: 'expensica-category-segment', attr: {
+                    role: 'button', tabindex: '0', 'aria-description': group.label
+                } });
+                setChartTooltip(segment, `${name}: ${formattedAmount} (${percentageLabel})`, true);
+                segment.setCssProps({
+                    height: '100%',
+                    '--category-percentage': `${Math.max(0, Math.min(100, percentage))}%`,
+                    '--category-color': color
+                });
+                const label = segment.createSpan({ cls: 'expensica-category-segment-percentage' });
+                const countPercentage = () => {
+                    const counter = d3.select(label).interrupt();
+                    label.textContent = duration ? '0%' : percentageLabel;
+                    if (duration) counter.transition().duration(450).ease(d3.easeCubicOut)
+                        .tween('text', () => progress => { label.textContent = `${Number((percentage * progress).toFixed(2))}%`; });
+                };
+                countPercentage();
+                let active = false;
+                const updateActive = () => {
+                    const next = segment.getAttribute('aria-expanded') === 'true' || segment.matches(':hover, :focus-visible');
+                    if (next === active) return;
+                    active = next;
+                    segment.classList.toggle('is-active', active);
+                    const shape = d3.select(segment).interrupt();
+                    const height = active ? '130%' : '100%';
+                    if (duration) shape.transition().duration(duration).ease(shapeEasing).style('height', height);
+                    else shape.style('height', height);
+                    if (active) countPercentage();
+                };
+                for (const event of ['mouseenter', 'mouseleave', 'focus', 'blur', 'click', 'keydown']) {
+                    segment.addEventListener(event, updateActive);
+                }
+            }
+        }
     }
 
     private showDayDetails(dayData: DayData) {
+        this.releaseDailyTransactions?.();
+        this.releaseDailyTransactions = undefined;
+        d3.select(this.detailsContainer).selectAll('.expensica-category-bar, .expensica-category-segment, .expensica-category-segment-percentage').interrupt();
         this.detailsContainer.empty();
-        
-        // Get expense transactions
-        const expenseTransactions = dayData.transactions.filter(t => 
-            t.type === TransactionType.EXPENSE
-        );
-        
-        // Get total expenses
-        const totalExpenses = expenseTransactions.reduce((sum, t) => sum + t.amount, 0);
-        const defaultAccountReference = this.plugin.normalizeTransactionAccountReference(undefined);
-        const dayBalance = dayData.dayBalance;
         
         // Add title with day of week
         const dayOfWeek = dayData.date.toLocaleDateString('en-US', { weekday: 'long' });
-        this.detailsContainer.createEl('h3', { 
-            text: `${dayOfWeek}, ${dayData.formattedDate}`,
-            cls: 'expensica-calendar-details-title' 
-        });
+        const header = this.detailsContainer.createDiv('expensica-chart-header');
+        renderPanelTitle(header, `${dayOfWeek}, ${dayData.formattedDate}`, 'calendar', 'h2', 'expensica-chart-title');
 
-        // If no expense transactions, show message without the spending summary.
-        if (expenseTransactions.length === 0) {
+        this.renderDailyReviewMetrics(dayData);
+        const details = this.detailsContainer.createDiv('expensica-daily-review-details');
+        this.renderDailyAccountBalances(details, dayData);
+
+        this.renderDailyCategoryBreakdown(details, dayData.transactions);
+
+        // Create transaction list with header
+        const transactionHeader = this.detailsContainer.createDiv('expensica-breakdown-title-container expensica-transactions-header');
+        renderPanelTitle(transactionHeader, 'Transactions', 'file', 'h3', 'expensica-breakdown-title expensica-transactions-title');
+        if (dayData.transactions.length === 0) {
             const emptyStateEl = this.detailsContainer.createDiv('expensica-calendar-empty-state');
-            emptyStateEl.createDiv({ text: '✨', cls: 'expensica-calendar-empty-icon' });
+            renderUiIcon(emptyStateEl, 'sparkles', 'expensica-calendar-empty-icon');
             emptyStateEl.createEl('p', {
-                text: 'No expenses recorded for this day.',
+                text: 'No transactions recorded for this day',
                 cls: 'expensica-calendar-empty-message'
             });
-            
             return;
         }
-        
-        // Create summary container
-        const summaryContainer = this.detailsContainer.createDiv('expensica-calendar-summary');
-        const metricsContainer = summaryContainer.createDiv('expensica-calendar-details-metrics');
-        
-        // Display spending and balance
-        const totalEl = metricsContainer.createDiv('expensica-calendar-details-total');
-        
-        // Left side with label and icon
-        const labelContainer = totalEl.createDiv('expensica-calendar-details-label');
-        // Add currency icon (similar to Notion's approach with icons)
-        labelContainer.createSpan({
-            cls: 'expensica-calendar-details-icon',
-            text: '💰'
-        });
-        
-        labelContainer.createSpan({
-            text: 'Total Spent',
-            cls: 'expensica-calendar-details-text'
-        });
-        
-        // Right side with amount
-        totalEl.createSpan({
-            text: formatCurrency(totalExpenses, this.plugin.settings.defaultCurrency),
-            cls: 'expensica-calendar-details-amount expensica-expense'
-        });
 
-        const balanceEl = metricsContainer.createDiv('expensica-calendar-details-total');
-        const balanceLabelContainer = balanceEl.createDiv('expensica-calendar-details-label');
-
-        balanceLabelContainer.createSpan({
-            cls: 'expensica-calendar-details-icon',
-            text: '💸'
-        });
-
-        balanceLabelContainer.createSpan({
-            text: 'Running Balance',
-            cls: 'expensica-calendar-details-text'
-        });
-
-        balanceEl.createSpan({
-            text: formatCurrency(dayBalance, this.plugin.settings.defaultCurrency),
-            cls: 'expensica-calendar-details-amount expensica-calendar-details-balance-amount'
-        });
-        
-        // Calculate and show additional insights if there are expenses
-        if (totalExpenses > 0) {
-            // Monthly context
-            const monthlyTotal = this.monthlyExpenseTotal;
-            
-            // Only show insights if we have some monthly spending
-            if (monthlyTotal > 0) {
-                const percentage = ((totalExpenses / monthlyTotal) * 100).toFixed(1);
-                const insightEl = summaryContainer.createDiv('expensica-calendar-insight');
-                insightEl.createSpan({ 
-                    text: `This represents ${percentage}% of your monthly spending.`, 
-                    cls: 'expensica-calendar-insight-text' 
-                });
-                
-                // Daily average comparison
-                const daysInMonth = new Date(
-                    this.currentDate.getFullYear(), 
-                    this.currentDate.getMonth() + 1, 
-                    0
-                ).getDate();
-                
-                const dailyAverage = monthlyTotal / daysInMonth;
-                const percentDiff = ((totalExpenses - dailyAverage) / dailyAverage) * 100;
-                
-                if (Math.abs(percentDiff) > 10) {
-                    const comparisonEl = summaryContainer.createDiv('expensica-calendar-comparison');
-                    
-                    if (percentDiff > 0) {
-                        comparisonEl.createSpan({ 
-                            text: `${percentDiff.toFixed(0)}% above `, 
-                            cls: 'expensica-trend-down' // Down is bad for expenses
-                        });
-                    } else {
-                        comparisonEl.createSpan({ 
-                            text: `${Math.abs(percentDiff).toFixed(0)}% below `, 
-                            cls: 'expensica-trend-up' // Up is good for expenses
-                        });
-                    }
-                    
-                    comparisonEl.createSpan({ 
-                        text: `your daily average of ${formatCurrency(dailyAverage, this.plugin.settings.defaultCurrency)}`
-                    });
-                }
-                
-                // Add category breakdown if there are multiple categories
-                const categories = new Map<string, { amount: number; color: string }>();
-                
-                expenseTransactions.forEach(t => {
-                    const category = this.plugin.getCategoryById(t.category);
-                    const categoryName = category ? category.name : 'Other Expenses';
-                    const categoryColor = category
-                        ? this.plugin.getCategoryColor(category.id, category.name)
-                        : this.plugin.getCategoryColor(t.category, categoryName);
-                    
-                    if (!categories.has(categoryName)) {
-                        categories.set(categoryName, {
-                            amount: 0,
-                            color: categoryColor
-                        });
-                    }
-                    
-                    const existingCategory = categories.get(categoryName);
-                    if (existingCategory) existingCategory.amount += t.amount;
-                });
-                
-                if (categories.size > 1) {
-                    const breakdownEl = summaryContainer.createDiv('expensica-category-breakdown');
-                    
-                    // Create title container with icon
-                    const titleContainer = breakdownEl.createDiv('expensica-breakdown-title-container');
-                    
-                    // Add icon
-                    titleContainer.createSpan({
-                        cls: 'expensica-breakdown-icon',
-                        text: '📊'
-                    });
-                    
-                    // Add title text
-                    titleContainer.createEl('h4', { 
-                        text: 'Category Breakdown', 
-                        cls: 'expensica-breakdown-title' 
-                    });
-                    
-                    const breakdownChart = breakdownEl.createDiv('expensica-breakdown-chart');
-                    
-                    // Sort categories by amount
-                    const sortedCategories = Array.from(categories.entries())
-                        .sort((a, b) => b[1].amount - a[1].amount);
-                    
-                    // Calculate bar widths based on percentage
-                    sortedCategories.forEach(([categoryName, categoryData]) => {
-                        const amount = categoryData.amount;
-                        const percentage = (amount / totalExpenses) * 100;
-                        const categoryBar = breakdownChart.createDiv('expensica-category-bar');
-                        
-                        // Create the color bar
-                        const colorBar = categoryBar.createDiv('expensica-bar-fill color-bar-fill color-bar-hue');
-                        colorBar.setCssProps({
-                            '--color-bar-percentage': `${percentage}%`,
-                            '--category-color': categoryData.color
-                        });
-
-                        // Label with amount and percentage
-                        const labelEl = categoryBar.createDiv('expensica-bar-label');
-                        labelEl.createSpan({ 
-                            text: categoryName, 
-                            cls: 'expensica-bar-category' 
-                        });
-                        
-                        labelEl.createSpan({ 
-                            text: `${formatCurrency(amount, this.plugin.settings.defaultCurrency)} (${percentage.toFixed(0)}%)`, 
-                            cls: 'expensica-bar-amount' 
-                        });
-                    });
-                }
-            }
-        }
-        
-        // Create transaction list with header
-        const transactionHeader = this.detailsContainer.createDiv('expensica-transactions-header');
-        transactionHeader.createEl('h4', { text: 'Expenses', cls: 'expensica-transactions-title' });
-        
-        const transactionList = this.detailsContainer.createDiv('expensica-calendar-transaction-list');
-        
-        // Use the same chronology and canonical source ties as the other transaction views.
-        const sortedTransactions = sortTransactionsByDateTimeDesc(expenseTransactions, this.allTransactions);
-        const runningBalances = this.getRunningBalanceMap(defaultAccountReference);
-        const internalBalanceMaps = new Map<string, Record<string, number>>();
-        const ensureBalanceMap = (accountReference: string): Record<string, number> => {
-            const existing = internalBalanceMaps.get(accountReference);
-            if (existing) {
-                return existing;
-            }
-
-            const balances = accountReference === defaultAccountReference
-                ? runningBalances
-                : this.getRunningBalanceMap(accountReference);
-            internalBalanceMaps.set(accountReference, balances);
-            return balances;
-        };
-        
-        // Add each transaction
-        sortedTransactions.forEach((transaction, index) => {
-            const transactionAccountReference = this.plugin.settings.enableAccounts
-                ? this.plugin.normalizeTransactionAccountReference(transaction.account)
-                : defaultAccountReference;
-            const transactionBalances = ensureBalanceMap(transactionAccountReference);
-            let runningBalanceLabel = formatRunningBalanceLabel(
-                this.plugin,
-                transactionBalances[transaction.id] ?? 0
-            );
-            let secondaryRunningBalanceLabel: string | undefined;
-
-            if (this.plugin.settings.enableAccounts && transaction.type === TransactionType.INTERNAL) {
-                const fromAccountReference = this.plugin.normalizeTransactionAccountReference(transaction.fromAccount);
-                const toAccountReference = this.plugin.normalizeTransactionAccountReference(transaction.toAccount);
-                const fromBalances = ensureBalanceMap(fromAccountReference);
-                const toBalances = ensureBalanceMap(toAccountReference);
-                runningBalanceLabel = formatRunningBalanceLabel(
-                    this.plugin,
-                    fromBalances[transaction.id] ?? 0,
-                    fromAccountReference
-                );
-                secondaryRunningBalanceLabel = formatRunningBalanceLabel(
-                    this.plugin,
-                    toBalances[transaction.id] ?? 0,
-                    toAccountReference
-                );
-            }
-
-            const transactionEl = renderTransactionCard(transactionList, {
-                plugin: this.plugin,
-                transaction,
-                runningBalanceLabel,
-                secondaryRunningBalanceLabel,
-                onEdit: this.onTransactionEdit,
-                onCategoryChange: async (transaction, categoryId) => {
-                    await this.updateTransactionCategory(transaction, categoryId);
-                }
-            });
-
-            transactionEl.addClass('expensica-calendar-transaction-item');
-            transactionEl.addClass('transaction-animate-delay');
-            transactionEl.classList.add(`transaction-delay-${index * 50}`);
-            transactionEl.classList.add('expensica-transaction-animate');
-
-            if (sortedTransactions.length > 1) {
-                const amountEl = transactionEl.querySelector<HTMLElement>('.expensica-transaction-amount');
-                amountEl?.createSpan({
-                    text: `${((transaction.amount / totalExpenses) * 100).toFixed(0)}%`,
-                    cls: 'expensica-percentage'
-                });
-            }
-
-            // Add animation delay for staggered entrance
-            transactionEl.setCssProps({ '--transaction-delay': `${index * 50}ms` });
-        });
+        this.releaseDailyTransactions = this.plugin.renderDailyReviewTransactions(
+            this.detailsContainer.createDiv('expensica-daily-review-transactions'), dayData.date,
+            transaction => this.onTransactionEdit?.(transaction)
+        );
     }
 
-    private async updateTransactionCategory(transaction: Transaction, categoryId: string) {
-        await this.plugin.updateTransaction({
-            ...transaction,
-            category: categoryId
-        });
-
-        const year = this.currentDate.getFullYear();
-        const month = this.currentDate.getMonth();
-        this.transactions = this.plugin.getTransactionsForMonth(year, month);
-        this.prepareData();
-
-        const selectedDayData = this.calendarData.find(dayData => this.isSameDate(dayData.date, parseLocalDate(transaction.date)));
-        if (selectedDayData) {
-            this.showDayDetails(selectedDayData);
-        }
-    }
-    
     public selectDate(date: Date) {
         if (this.selectedDate && this.isSameDate(this.selectedDate, date)) return;
-        this.svg.selectAll<SVGRectElement, DayData>('.day-cell rect')
-            .filter((day: DayData) => this.isSameDate(day.date, date))
-            .dispatch('click');
+        const day = this.calendarData.find(day => this.isSameDate(day.date, date));
+        if (!day) return;
+        this.selectedDate = day.date;
+        this.days.querySelectorAll<HTMLButtonElement>('[data-date]').forEach(button => {
+            const selected = button.getAttribute('data-date') === formatDate(day.date);
+            button.toggleClass('is-selected', selected);
+            button.setAttribute('aria-pressed', String(selected));
+        });
+        this.onSelectedDateChange?.(day.date);
+        this.showDayDetails(day);
+    }
+
+    public destroy() {
+        d3.select(this.container).selectAll('.expensica-category-bar, .expensica-category-segment, .expensica-category-segment-percentage').interrupt();
+        this.releaseDailyTransactions?.();
+        this.releaseDailyTransactions = undefined;
     }
 
     public updateMonth(newDate: Date, transactions: Transaction[], selectedDate?: Date) {
         this.currentDate = newDate;
         if (selectedDate) this.selectedDate = selectedDate;
         this.transactions = transactions;
-        this.maxAmount = 0;
         this.setupContainers();
-        this.render(true);
+        this.render();
     }
 
     public resize(): boolean {
-        const containerSizeKey = this.getContainerSizeKey(this.container);
-        if (containerSizeKey === this.lastMeasuredContainerSizeKey) {
-            return false;
-        }
-
-        const width = this.getRenderableWidth(this.container);
-        if (!width) {
-            this.updateCalendarHorizontalPadding(0);
-            this.updateStackedLayout(0);
-            this.lastMeasuredContainerSizeKey = this.getContainerSizeKey(this.container);
-            return false;
-        }
-
-        this.updateCalendarHorizontalPadding(width);
-        this.updateStackedLayout(width);
-        this.updateDetailsPanelHeight();
-        this.lastMeasuredContainerSizeKey = this.getContainerSizeKey(this.container);
+        // CSS stretches sibling panels to the tallest content without constraining the review.
         return false;
-    }
-
-    private updateCalendarHorizontalPadding(availableWidth: number) {
-        this.calendarHorizontalPadding = this.isMobileLayout() ? 8 : 16;
-    }
-
-    private updateStackedLayout(availableWidth: number) {
-        const detailsMinimumWidth = 300;
-        const panelGap = 16;
-        const weekNumbersOffset = this.getWeekNumbersOffset();
-        const calendarWidth = this.getCalendarGridWidth() + weekNumbersOffset;
-        const isStacked = this.isMobileLayout() || availableWidth < calendarWidth + detailsMinimumWidth + panelGap;
-
-        this.container.toggleClass('expensica-calendar-stacked', isStacked);
-
-        if (isStacked && this.detailsContainer) {
-            this.detailsContainer.style.removeProperty('height');
-            this.detailsContainer.style.removeProperty('max-height');
-        }
-    }
-
-    private updateCalendarScaleBounds(svgWidth: number) {
-        const minimumSvgWidth = svgWidth * this.minimumCellScale;
-        this.calendarContainer.setCssProps({
-            '--expensica-panel-natural-width': `${svgWidth}px`,
-            '--expensica-panel-min-width': `${minimumSvgWidth}px`
-        });
-    }
-
-    private getCalendarGridWidth() {
-        return (7 * this.cellSize) + (6 * this.cellGap) + (this.calendarHorizontalPadding * 2);
-    }
-
-    private getNaturalCalendarWidth() {
-        return (7 * this.defaultCellSize) + (6 * this.cellGap) + (this.calendarHorizontalPadding * 2) + this.getWeekNumbersOffset();
-    }
-
-    private updateDetailsPanelHeight() {
-        if (!this.detailsContainer || this.isMobileLayout() || this.container.hasClass('expensica-calendar-stacked')) {
-            this.detailsContainer?.style.removeProperty('height');
-            this.detailsContainer?.style.removeProperty('max-height');
-            return;
-        }
-
-        const calendarHeight = this.calendarContainer.getBoundingClientRect().height;
-        const detailsHeight = calendarHeight > 0 ? calendarHeight : this.height;
-
-        this.detailsContainer.setCssStyles({
-            boxSizing: 'border-box',
-            height: `${detailsHeight}px`,
-            maxHeight: `${detailsHeight}px`
-        });
-    }
-
-    private getLayoutKey(svgWidth: number, svgHeight: number) {
-        return [
-            Math.round(svgWidth),
-            Math.round(svgHeight),
-            this.cellGap,
-            this.calendarHorizontalPadding,
-            this.getWeekNumbersOffset()
-        ].join(':');
-    }
-
-    private getContainerSizeKey(calendarContainer: HTMLElement | null | undefined) {
-        if (!calendarContainer) {
-            return '';
-        }
-
-        const rect = calendarContainer.getBoundingClientRect();
-        return [
-            Math.round(rect.width),
-            this.plugin.settings.showWeekNumbers ? 'weeks' : 'no-weeks',
-            this.isMobileLayout() ? 'mobile' : 'desktop'
-        ].join(':');
-    }
-
-    private isMobileLayout() {
-        return document.body.classList.contains('is-mobile') || !!this.container.closest('.is-mobile');
-    }
-
-    private getWeekNumbersOffset() {
-        return this.plugin.settings.showWeekNumbers ? this.weekNumberWidth : 0;
-    }
-
-    private getRenderableWidth(calendarContainer: HTMLElement | null | undefined): number | null {
-        if (!calendarContainer) {
-            return null;
-        }
-
-        const candidates = [
-            calendarContainer,
-            calendarContainer.parentElement,
-            calendarContainer.parentElement?.parentElement,
-            this.container,
-            this.container.parentElement,
-            this.container.parentElement?.parentElement
-        ];
-        const widths = candidates
-            .filter((element): element is HTMLElement => !!element)
-            .map(element => element.getBoundingClientRect().width)
-            .filter(width => width > 0);
-
-        return widths.length > 0 ? Math.min(...widths) : null;
     }
 }

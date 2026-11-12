@@ -18,7 +18,7 @@ const accountCalculations = load('src/account-calculations.ts', { './models': mo
 const importer = load('src/transaction-import.ts', { './models': models });
 const exposed = '\nexport { getRunningBalanceByTransactionIdForAccount };';
 const dashboard = load('src/dashboard-view.ts', { './models': models, obsidian: { Modal: class {}, ItemView: class {} },
-    'chart.js': { Tooltip: { positioners: {} } } }, exposed);
+    'chart.js': { Tooltip: { positioners: {} } } });
 const transactions = load('src/transactions-view.ts', { './models': models, './dashboard-view': dashboard,
     obsidian: { Modal: class {} } }, exposed);
 const calendar = load('src/visualizations/calendar-view.ts', { '../models': models }, exposed);
@@ -42,7 +42,7 @@ for (const reference of references) {
             const entry = Object.freeze(transfer({ fromAccount: reference, toAccount: destination }));
             const source = Object.freeze([entry]);
             const before = JSON.stringify(source);
-            for (const view of [dashboard, transactions, calendar]) for (const target of references) {
+            for (const view of [transactions, calendar]) for (const target of references) {
                 assert.equal(accountCalculations.getAccountTransactionAmount(plugin(source), entry, target), 0);
                 assert.equal(view.getRunningBalanceByTransactionIdForAccount(plugin(source), target, source)[entry.id], 0);
             }
@@ -57,7 +57,7 @@ test('normal transfers preserve debit, savings and credit account signs across v
         [card, cash, [25, 25, 0]], [card, savings, [0, 25, 25]]
     ]) {
         const entry = transfer({ fromAccount, toAccount });
-        for (const view of [dashboard, transactions, calendar]) {
+        for (const view of [transactions, calendar]) {
             assert.deepEqual(references.map(target => accountCalculations.getAccountTransactionAmount(plugin([entry]), entry, target)), effects);
         }
     }
@@ -70,7 +70,7 @@ test('running balances retain historical self-transfer rows without changing inc
         ...references.map((reference, index) => transfer({ id: `self-${index}`, fromAccount: reference, toAccount: reference.toUpperCase() }))];
     const before = JSON.stringify(source);
     for (const [target, expected] of [[cash, 80], [card, 60], [savings, 0]]) {
-        for (const view of [dashboard, transactions, calendar]) {
+        for (const view of [transactions, calendar]) {
             const balances = view.getRunningBalanceByTransactionIdForAccount(plugin(source), target,
                 models.sortTransactionsByDateTimeDesc(source, source));
             for (const entry of source.slice(3)) assert.equal(balances[entry.id], expected);
@@ -83,7 +83,7 @@ test('running balances retain historical self-transfer rows without changing inc
 });
 
 test('missing endpoints never resolve to the default account in transfer balances', () => {
-    for (const view of [dashboard, transactions, calendar]) {
+    for (const view of [transactions, calendar]) {
         const missing = transfer({ fromAccount: undefined, toAccount: undefined });
         assert.equal(accountCalculations.getAccountTransactionAmount(plugin([missing]), missing, cash), 0);
         const partial = transfer({ fromAccount: undefined });

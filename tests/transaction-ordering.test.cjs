@@ -12,7 +12,7 @@ function load(filename, dependencies = {}, extraSource = '') {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
     }).outputText;
     vm.runInNewContext(compiled, { exports, Date, Intl, console,
-        require: name => dependencies[name] || (name.endsWith('/account-calculations') ? load('src/account-calculations.ts', { './models': dependencies['./models'] || dependencies['../models'] }) : undefined) || {}
+        require: name => dependencies[name] || (name.endsWith('/calendar-ui') ? load('src/calendar-ui.ts', { './models': dependencies['./models'] || dependencies['../models'], obsidian: { setIcon() {} } }) : undefined) || (name.endsWith('/account-calculations') ? load('src/account-calculations.ts', { './models': dependencies['./models'] || dependencies['../models'] }) : undefined) || {}
     });
     return exports;
 }
@@ -119,17 +119,18 @@ const transactionCards = { renderTransactionCard(container, options) {
 const obsidian = { Modal: class {}, ItemView: class {} };
 const dashboard = load('src/dashboard-view.ts', { './models': models, obsidian,
     'chart.js': { Tooltip: { positioners: {} } }, './transaction-card': transactionCards
-}, '\nexport { getRunningBalanceByTransactionIdForAccount };');
+});
 const transactions = load('src/transactions-view.ts', { './models': models, obsidian,
     './dashboard-view': dashboard
 }, '\nexport { getRunningBalanceByTransactionIdForAccount };');
-const calendar = load('src/visualizations/calendar-view.ts', { '../models': models, '../transaction-card': transactionCards },
+const calendar = load('src/visualizations/calendar-view.ts', { '../models': models, '../transaction-card': transactionCards, d3: { select: () => ({ selectAll() { return this; }, interrupt() { return this; } }) } },
     '\nexport { getRunningBalanceByTransactionIdForAccount };');
 
 function plugin(source) {
     return {
         settings: { enableAccounts: true, defaultCurrency: 'USD' },
         getAllTransactions: () => [...source],
+        getCategoryById: () => null, getCategoryColor: () => '#888888',
         normalizeTransactionAccountReference: reference => reference || 'chequing-cash',
         findAccountByReference: reference => ({ type: reference === 'credit-card' ? 'credit' : 'chequing' })
     };
@@ -148,7 +149,7 @@ test('all view balance helpers agree after sorting, reversing, cloning and repea
         transfer: 83, 'card-expense': 83, equal: 80, evening: 73 };
     const expectedCard = { 'untimed-first': 0, 'untimed-last': 0, morning: 0,
         transfer: -10, 'card-expense': 10, equal: 10, evening: 10 };
-    for (const view of [dashboard, transactions, calendar]) {
+    for (const view of [transactions, calendar]) {
         for (const rows of [source, sort(source, source), [...source].reverse().map(row => ({ ...row }))]) {
             assert.deepEqual({ ...view.getRunningBalanceByTransactionIdForAccount(p, 'chequing-cash', rows) }, expectedCash);
             assert.deepEqual({ ...view.getRunningBalanceByTransactionIdForAccount(p, 'credit-card', rows) }, expectedCard);
@@ -156,29 +157,27 @@ test('all view balance helpers agree after sorting, reversing, cloning and repea
     }
 });
 
-test('dashboard, Transactions and calendar render the same order and balances on repeated renders', async () => {
+test('Transactions and calendar render the same order and balances on repeated renders', async () => {
     const source = [row('opening', '12:00:00', { date: '2026-10-14', type: 'income', amount: 100 }), ...mixed()];
     const original = JSON.stringify(source);
     const p = plugin(source);
     const visible = source.slice(1).reverse().map(row => ({ ...row }));
     const expected = [['evening', '$40.00'], ['equal-first', '$50.00'], ['morning', '$60.00'],
         ['midnight', '$70.00'], ['untimed-last', '$80.00'], ['untimed-first', '$90.00']];
-    const overview = Object.assign(Object.create(dashboard.ExpensicaDashboardView.prototype), {
-        plugin: p, transactions: visible, selectedTransactionIds: new Set(),
-        renderViewAllTransactionsButton() {}, renderTransactionBulkFooter() {}, renderTransactionGroupTitle() {}
-    });
     const list = Object.assign(Object.create(transactions.ExpensicaTransactionsView.prototype), {
         plugin: p, selectedAccountReferences: [], applyFilters() {}, renderTransactionGroupTitle() {},
         renderTransactionCardWithEditHandler(container, transaction, label) { cards.push([transaction.id, label]); }
     });
+    p.renderDailyReviewTransactions = (container, date) => {
+        const visibleDay = list.transactions.filter(row => models.formatDate(models.parseLocalDate(row.date)) === models.formatDate(date));
+        list.renderTransactionsToContainer(container, visibleDay, undefined, false);
+    };
     const heatmap = Object.assign(Object.create(calendar.CalendarHeatmap.prototype), {
         plugin: p, transactions: visible, currentDate: new Date(2026, 9, 1),
-        runningBalanceCache: new Map(), detailsContainer: new Element()
+        runningBalanceCache: new Map(), detailsContainer: new Element(),
+        renderDailyReviewMetrics() {}, renderDailyAccountBalances() {}, renderDailyCategoryBreakdown() {}
     });
     for (let attempt = 0; attempt < 2; attempt++) {
-        cards.length = 0;
-        overview.renderTransactions(new Element());
-        assert.deepEqual(cards, expected);
         cards.length = 0;
         await list.loadTransactionsData();
         assert.deepEqual(ids(list.transactions), [...expected.map(([id]) => id), 'opening']);

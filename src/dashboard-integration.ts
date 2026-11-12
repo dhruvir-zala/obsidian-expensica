@@ -1,150 +1,60 @@
-import { CalendarHeatmap } from './visualizations/calendar-view';
+import { moveCalendarMonth } from './calendar-ui';
+import { CalendarHeatmap, DailyReviewRange } from './visualizations/calendar-view';
 import ExpensicaPlugin from '../main';
 import { Transaction } from './models';
 
 export class PremiumVisualizations {
-    private container: HTMLElement;
-    private plugin: ExpensicaPlugin;
-    private currentDate: Date;
-    private selectedDate: Date | null;
-    private onSelectedDateChange?: (date: Date) => void;
-    private onTodayClick?: () => void;
-    private onTransactionEdit?: (transaction: Transaction) => void;
     private calendarHeatmap: CalendarHeatmap | null = null;
 
     constructor(
-        container: HTMLElement,
-        plugin: ExpensicaPlugin,
-        currentDate: Date,
-        selectedDate: Date | null = null,
-        onSelectedDateChange?: (date: Date) => void,
-        onTodayClick?: () => void,
-        onTransactionEdit?: (transaction: Transaction) => void
-    ) {
-        this.container = container;
-        this.plugin = plugin;
-        this.currentDate = currentDate;
-        this.selectedDate = selectedDate;
-        this.onSelectedDateChange = onSelectedDateChange;
-        this.onTodayClick = onTodayClick;
-        this.onTransactionEdit = onTransactionEdit;
-    }
+        private container: HTMLElement,
+        private plugin: ExpensicaPlugin,
+        private currentDate: Date,
+        private selectedDate: Date | null = null,
+        private onSelectedDateChange?: (date: Date) => void,
+        private onTransactionEdit?: (transaction: Transaction) => void,
+        private getReviewRange?: () => DailyReviewRange
+    ) {}
 
     render() {
-        // Clear container
+        this.destroy();
         this.container.empty();
         this.container.addClass('expensica-premium-viz-container');
-
-        // Create visualization header
-        const header = this.container.createDiv('expensica-premium-viz-header');
-        
-        // Create header content container
-        const headerContent = header.createDiv('expensica-calendar-header-content');
-
-        headerContent.createEl('h2', {
-            text: 'Spending Heatmap Calendar',
-            cls: 'expensica-calendar-title'
-        });
-        
-        // Add navigation buttons
-        const navContainer = headerContent.createDiv('expensica-calendar-nav');
-        
-        // Previous month button
-        const prevButton = navContainer.createEl('button', {
-            cls: 'expensica-standard-button expensica-calendar-nav-button',
-            text: '<'
-        });
-        prevButton.onclick = () => {
-            const newDate = new Date(this.currentDate);
-            newDate.setMonth(newDate.getMonth() - 1, 1);
-            const lastDay = new Date(newDate);
-            lastDay.setMonth(lastDay.getMonth() + 1, 0);
-            newDate.setDate(Math.min(this.currentDate.getDate(), lastDay.getDate()));
-            this.updateDate(newDate);
-        };
-        
-        // Today button
-        const todayButton = navContainer.createEl('button', {
-            cls: 'expensica-standard-button expensica-calendar-nav-button',
-            text: 'Today'
-        });
-        todayButton.onclick = () => {
-            if (this.onTodayClick) {
-                this.onTodayClick();
-            } else {
-                this.updateDate(new Date(), true);
-            }
-        };
-        
-        // Next month button
-        const nextButton = navContainer.createEl('button', {
-            cls: 'expensica-standard-button expensica-calendar-nav-button',
-            text: '>'
-        });
-        nextButton.onclick = () => {
-            const newDate = new Date(this.currentDate);
-            newDate.setMonth(newDate.getMonth() + 1, 1);
-            const lastDay = new Date(newDate);
-            lastDay.setMonth(lastDay.getMonth() + 1, 0);
-            newDate.setDate(Math.min(this.currentDate.getDate(), lastDay.getDate()));
-            this.updateDate(newDate);
-        };
-
-        // Create the Calendar heatmap container
         const calendarContainer = this.container.createDiv('expensica-calendar-wrapper');
-        
-        // Get transactions for current month
-        const year = this.currentDate.getFullYear();
-        const month = this.currentDate.getMonth();
-        const transactions = this.plugin.getTransactionsForMonth(year, month);
-        
-        // Initialize Calendar heatmap
+        const transactions = this.plugin.getTransactionsForMonth(this.currentDate.getFullYear(), this.currentDate.getMonth());
         this.calendarHeatmap = new CalendarHeatmap(
-            calendarContainer, 
-            this.plugin, 
-            transactions, 
-            this.currentDate,
-            this.selectedDate,
+            calendarContainer, this.plugin, transactions, this.currentDate, this.selectedDate,
             (selectedDate) => {
                 this.selectedDate = selectedDate;
                 this.onSelectedDateChange?.(selectedDate);
             },
-            this.onTransactionEdit
+            this.onTransactionEdit,
+            (offset) => this.changeMonth(offset),
+            this.getReviewRange
         );
         this.calendarHeatmap.render();
     }
 
-    public updateDate(newDate: Date, selectDate = false) {
-        const sameMonth = this.currentDate.getFullYear() === newDate.getFullYear()
-            && this.currentDate.getMonth() === newDate.getMonth();
+    private changeMonth(offset: number) {
+        this.updateDate(moveCalendarMonth(this.currentDate, offset));
+    }
+
+    public updateDate(newDate: Date) {
         this.currentDate = newDate;
-        if (selectDate) {
-            this.selectedDate = newDate;
-            if (sameMonth && this.calendarHeatmap) {
-                this.calendarHeatmap.selectDate(newDate);
-                return;
-            }
-        }
-        
-        // Get transactions for the new date
-        const year = this.currentDate.getFullYear();
-        const month = this.currentDate.getMonth();
-        const transactions = this.plugin.getTransactionsForMonth(year, month);
-        
-        // Update the calendar heatmap
+        const transactions = this.plugin.getTransactionsForMonth(newDate.getFullYear(), newDate.getMonth());
         if (this.calendarHeatmap) {
-            this.calendarHeatmap.updateMonth(this.currentDate, transactions, selectDate ? newDate : undefined);
+            this.calendarHeatmap.updateMonth(newDate, transactions);
         } else {
-            this.render(); // Re-render if the heatmap doesn't exist
+            this.render();
         }
     }
 
     public resize(): boolean {
-        // Resize the calendar heatmap
-        if (this.calendarHeatmap) {
-            return this.calendarHeatmap.resize();
-        }
+        return this.calendarHeatmap?.resize() ?? false;
+    }
 
-        return false;
+    public destroy() {
+        this.calendarHeatmap?.destroy();
+        this.calendarHeatmap = null;
     }
 }

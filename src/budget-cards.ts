@@ -1,9 +1,8 @@
-import { type Budget, formatCurrency } from './models';
+import { renderUiIcon, type Budget, formatCurrency } from './models';
 
 interface BudgetCardOptions {
     budget: Budget;
     categoryName: string;
-    categoryEmoji: string;
     categoryColor?: string;
     currencyCode: string;
     spent: number;
@@ -21,7 +20,6 @@ export function renderBudgetCard(container: HTMLElement, options: BudgetCardOpti
     const {
         budget,
         categoryName,
-        categoryEmoji,
         categoryColor,
         currencyCode,
         spent,
@@ -53,10 +51,8 @@ export function renderBudgetCard(container: HTMLElement, options: BudgetCardOpti
         });
     }
 
-    const iconEl = budgetEl.createDiv('expensica-budget-card-icon');
-    iconEl.setText(categoryEmoji);
+    const iconEl = renderUiIcon(budgetEl, 'budget', 'expensica-budget-card-icon', categoryColor);
     if (categoryColor) {
-        iconEl.style.color = categoryColor;
         iconEl.style.borderColor = categoryColor;
     }
 

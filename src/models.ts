@@ -183,11 +183,11 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   [AccountType.OTHER]: 'Other'
 };
 
-const ACCOUNT_TYPE_EMOJIS: Record<AccountType, string> = {
-  [AccountType.CHEQUING]: '🏦',
-  [AccountType.SAVING]: '🏦',
-  [AccountType.CREDIT]: '💳',
-  [AccountType.OTHER]: '🏦'
+const ACCOUNT_TYPE_ICONS: Record<AccountType, UiIcon> = {
+  [AccountType.CHEQUING]: 'bank',
+  [AccountType.SAVING]: 'piggy-bank',
+  [AccountType.CREDIT]: 'credit-card',
+  [AccountType.OTHER]: 'bank'
 };
 
 let hasWarnedAboutIdFallback = false;
@@ -252,8 +252,8 @@ export function getAccountTypeLabel(type: AccountType): string {
   return ACCOUNT_TYPE_LABELS[type];
 }
 
-export function getAccountEmoji(type: AccountType): string {
-  return ACCOUNT_TYPE_EMOJIS[type];
+export function getAccountIcon(type: AccountType): UiIcon {
+  return ACCOUNT_TYPE_ICONS[type];
 }
 
 export function normalizePaletteColor(color?: string | null): string | null {
@@ -306,18 +306,10 @@ export function getNextAccountColor(accounts: Account[]): string {
 }
 
 export function compareAccounts(a: Account, b: Account): number {
-  if (a.isDefault && !b.isDefault) {
-    return -1;
-  }
-
-  if (!a.isDefault && b.isDefault) {
-    return 1;
-  }
-
   const order = {
     [AccountType.CHEQUING]: 1,
-    [AccountType.CREDIT]: 2,
-    [AccountType.SAVING]: 3,
+    [AccountType.SAVING]: 2,
+    [AccountType.CREDIT]: 3,
     [AccountType.OTHER]: 4
   };
 
@@ -979,6 +971,41 @@ function fallbackRandomIdPart(): string {
       return byMonth;
     }
   }
+
+const UI_ICON_PATHS = {
+  'chevron-left': 'm15 18-6-6 6-6',
+  'chevron-right': 'm9 18 6-6-6-6',
+  income: 'M7 7v10h10 M7 17 17 7',
+  expense: 'M7 7h10v10 M7 17 17 7',
+  internal: 'M3 7h18l-4-4 M21 17H3l4 4',
+  balance: 'M12 3v18 M6 21h12 M3 7h18 M6 7l-4 8h8L6 7 M18 7l-4 8h8l-4-8',
+  bank: 'M3 9h18L12 3 3 9 M5 9v12 M10 9v12 M14 9v12 M19 9v12 M3 21h18',
+  'piggy-bank': 'M5 8C7 6 12 5 16 7L20 4v6l2 1v5h-3l-2 3v3h-3v-3H9v3H6v-4C3 16 2 12 5 8Z M3 11C1 9 1 13 3 13 M8 9h5 M17 10h.01',
+  'credit-card': 'M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z M2 10h20',
+  budget: 'M5 3h14v4H5Z M6 7c0 2-2 2-2 5v6a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-6c0-3-2-3-2-5 M8 3v4 M12 3v4 M16 3v4 M7 12v5',
+  wallet: 'M20 8V5H4a2 2 0 0 0 0 4h18v12H4a2 2 0 0 1-2-2V7 M22 13h-6v4h6',
+  calendar: 'M8 2v4 M16 2v4 M3 10h18 M3 4h18v18H3Z',
+  file: 'M14 2H4v20h16V8l-6-6v6h6 M8 13h8 M8 17h6',
+  folder: 'M3 5h6l2 2h10v14H3Z',
+  export: 'M12 3v12 M7 8l5-5 5 5 M3 15v6h18v-6',
+  tag: 'M3 3h8l10 10-8 8L3 11V3Z M7 7h.01',
+  sparkles: 'm12 3 3 6 6 3-6 3-3 6-3-6-6-3 6-3 3-6Z'
+};
+export type UiIcon = keyof typeof UI_ICON_PATHS;
+
+export function renderUiIcon(parent: HTMLElement, name: UiIcon, cls = '', color?: string): HTMLElement {
+  const icon = parent.createSpan({ cls: `expensica-ui-icon ${cls}`.trim(), attr: { 'aria-hidden': 'true' } });
+  icon.style.color = color || 'var(--text-muted)';
+  appendSvgIcon(icon, { size: 18, strokeWidth: '2', ariaHidden: true }, [{ tag: 'path', attrs: { d: UI_ICON_PATHS[name] } }]);
+  return icon;
+}
+
+export function renderPanelTitle(parent: HTMLElement, text: string, name: UiIcon, tag: 'h2' | 'h3' | 'h4' = 'h3', cls = 'expensica-chart-title'): HTMLElement {
+  const title = parent.createEl(tag, { cls });
+  renderUiIcon(title, name, 'expensica-panel-title-icon');
+  title.createSpan({ text });
+  return title;
+}
 
 export interface SvgIconShape {
   tag: 'path' | 'polyline' | 'circle' | 'rect' | 'line';

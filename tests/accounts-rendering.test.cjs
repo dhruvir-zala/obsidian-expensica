@@ -23,6 +23,7 @@ class Element {
     createEl(tag, options) { const child = new Element(tag, options); this.children.push(child); return child; }
     createDiv(options) { return this.createEl('div', options); }
     createSpan(options) { return this.createEl('span', options); }
+    createSvg(tag, options) { return this.createEl(tag, options); }
     addClass(name) { this.classes.push(name); }
     setAttribute(key, value) { this.attrs[key] = value; }
     addEventListener(name, callback) { (this.listeners[name] ||= []).push(callback); }
@@ -45,7 +46,7 @@ models.sortTransactionsByDateTimeDesc = (...args) => {
 };
 const accountCards = load('src/account-card.ts', { './models': models });
 function dashboard(source) {
-    return load('src/dashboard-view.ts', { './models': models, obsidian,
+    return load('src/dashboard-view.ts', { './models': models, obsidian, './chart-tooltip': { setChartTooltip(element, text) { element.setAttribute('aria-label', text); } },
         'chart.js': { Tooltip: { positioners: {} } }, './modal-utils': { preventBackdropDismissal() {} },
         './account-card': { ...accountCards,
             renderAccountCard(container, options) { capture.cards.push(options); return accountCards.renderAccountCard(container, options); },
@@ -112,6 +113,24 @@ test('Accounts tab sorts once and reuses known metadata without account referenc
     assert.deepEqual(result.output.cards.map(card => card.account.id), [...accounts].sort(models.compareAccounts).map(account => account.id));
     assert.equal(result.output.create.length, 1);
     assert.equal(JSON.stringify({ source, accounts }), original);
+});
+
+test('shared account provider and Accounts tab put Saving before Credit, oldest first within each type', () => {
+    const accounts = [
+        { id: 'default', name: 'Default', type: 'other', isDefault: true, createdAt: '2026-06-01' },
+        { id: 'credit-new', name: 'Credit New', type: 'credit', createdAt: '2026-02-01' },
+        { id: 'saving-new', name: 'Saving New', type: 'saving', createdAt: '2026-02-01' },
+        { id: 'debit-new', name: 'Debit New', type: 'chequing', createdAt: '2026-02-01' },
+        { id: 'credit-old', name: 'Credit Old', type: 'credit', createdAt: '2026-01-01' },
+        { id: 'saving-old', name: 'Saving Old', type: 'saving', createdAt: '2026-01-01' },
+        { id: 'debit-old', name: 'Debit Old', type: 'chequing', createdAt: '2026-01-01' }
+    ];
+    const h = harness(current, [], accounts);
+    const before = JSON.stringify(h.p.transactionsData.accounts);
+    const expected = ['debit-old', 'debit-new', 'saving-old', 'saving-new', 'credit-old', 'credit-new', 'default'];
+    assert.deepEqual(Array.from(h.p.getAccounts(), account => account.id), expected);
+    assert.deepEqual(h.render().output.cards.map(card => card.account.id), expected);
+    assert.equal(JSON.stringify(h.p.transactionsData.accounts), before);
 });
 
 test('account cards retain transfer/credit signs, activity dates, limits, colors, and currency precision', () => {
