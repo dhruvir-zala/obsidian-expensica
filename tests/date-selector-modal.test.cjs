@@ -19,6 +19,7 @@ function loadModule(filename, dependencies = {}, globals = {}) {
         Intl,
         ...globals,
         require(name) {
+            if (name === './calendar-ui') return loadModule('calendar-ui.ts', dependencies, globals);
             assert.ok(Object.hasOwn(dependencies, name), `Unexpected dependency: ${name}`);
             return dependencies[name];
         }

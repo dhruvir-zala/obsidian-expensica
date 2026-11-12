@@ -13,7 +13,7 @@ function load(filename, dependencies = {}, extraSource = '') {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
     }).outputText;
     vm.runInNewContext(compiled, { exports, Date, Intl, console,
-        require: name => dependencies[name] || (name.endsWith('/account-calculations') ? load('src/account-calculations.ts', { './models': dependencies['./models'] || dependencies['../models'] }) : undefined) || {}
+        require: name => dependencies[name] || (name.endsWith('/calendar-ui') ? load('src/calendar-ui.ts', { './models': dependencies['./models'] || dependencies['../models'], obsidian: { setIcon() {} } }) : undefined) || (name.endsWith('/account-calculations') ? load('src/account-calculations.ts', { './models': dependencies['./models'] || dependencies['../models'] }) : undefined) || {}
     });
     return exports;
 }
@@ -23,7 +23,7 @@ const extraSource = '\nexport { getRunningBalanceByTransactionIdForAccount };';
 const obsidian = { Modal: class {}, ItemView: class {} };
 const dashboard = load('src/dashboard-view.ts', { './models': models, obsidian,
     'chart.js': { Tooltip: { positioners: {} } }
-}, extraSource);
+});
 const transactions = load('src/transactions-view.ts', { './models': models, obsidian,
     './dashboard-view': dashboard
 }, extraSource);
@@ -31,6 +31,7 @@ const row = (id, date, fields = {}) => ({ id, date, time: '12:00:00', amount: 10
     type: 'expense', description: 'ENTRY', category: 'food', account: 'chequing-cash', ...fields });
 const dayKey = row => models.formatDate(models.parseLocalDate(row.date));
 const ids = rows => Array.from(rows, row => row.id);
+
 
 function plugin(source, defaultReference = 'chequing-cash') {
     return {
@@ -58,105 +59,18 @@ function calendar(p, month = '2026-10-01') {
 }
 const dailyBalances = instance => Array.from(instance.calendarData, day => day.dayBalance);
 
-test('calendar chart hover uses compact currency while leaving raw day values and details intact', () => {
-    const handlers = {};
-    const tooltipNodes = [];
-    const chain = {};
-    for (const method of ['selectAll', 'remove', 'data', 'enter', 'append', 'attr', 'classed', 'text', 'filter', 'transition', 'duration', 'style']) {
-        chain[method] = () => chain;
-    }
-    chain.on = (name, callback) => { handlers[name] = callback; return chain; };
-    const tooltip = {
-        transition() { return this; },
-        duration() { return this; },
-        style() { return this; },
-        selectAll(selector) {
-            assert.equal(selector, '*');
-            return { remove() { tooltipNodes.length = 0; } };
-        },
-        append(tag) {
-            const node = { tag, attributes: {}, textContent: '' };
-            tooltipNodes.push(node);
-            return {
-                attr(name, value) { node.attributes[name] = value; return this; },
-                text(value) { node.textContent = value; return this; }
-            };
-        }
-    };
-    const { CalendarHeatmap } = load('src/visualizations/calendar-view.ts', { '../models': models, d3: { select: () => chain } });
-    const entry = row('original', '2026-10-15', { amount: 1540.89 });
-    const day = { date: models.parseLocalDate(entry.date), dateKey: entry.date, formattedDate: 'Oct 15',
-        totalAmount: entry.amount, dayBalance: -entry.amount, transactions: [entry] };
-    const original = JSON.stringify(day);
-    const p = plugin([entry]);
-    p.settings.defaultCurrency = 'CAD';
-    const instance = Object.assign(Object.create(CalendarHeatmap.prototype), {
-        plugin: p, svg: chain, tooltipDiv: tooltip, currentDate: models.parseLocalDate('2026-10-01'),
-        calendarData: [day], transactions: [entry], maxAmount: entry.amount, cellSize: 30, cellGap: 4,
-        getColorScale: () => () => '#fff', renderColorLegend() {}, showDayDetails() {}
-    });
-    instance.renderCalendar();
-    for (const value of [0, 0.49, -0.49, 999.49, 999.5, 1000, 1540.89, -1540.89, 1000000]) {
-        handlers.mouseover.call({}, { currentTarget: {}, pageX: 10, pageY: 20 }, { ...day, totalAmount: value });
-        const expectedNodes = [
-            { tag: 'div', attributes: { class: 'tooltip-title' }, textContent: 'Oct 15' },
-            { tag: 'div', attributes: { class: 'tooltip-value' }, textContent: models.formatCurrency(value, 'CAD', true) },
-            {
-                tag: 'div',
-                attributes: { class: 'tooltip-hint' },
-                textContent: `1 expense(s) · ${((value / entry.amount) * 100).toFixed(1)}% of monthly spend`
-            }
-        ];
-        const dailyAverage = entry.amount / 31;
-        const roundedComparison = dailyAverage > 0
-            ? Number((((value - dailyAverage) / dailyAverage) * 100).toFixed(0))
-            : 0;
-        if (value > 0 && roundedComparison > 20) {
-            expectedNodes.push({
-                tag: 'div',
-                attributes: { class: 'tooltip-comparison tooltip-higher' },
-                textContent: `▲ ${roundedComparison}% above daily average`
-            });
-        } else if (value > 0 && roundedComparison < -20) {
-            expectedNodes.push({
-                tag: 'div',
-                attributes: { class: 'tooltip-comparison tooltip-lower' },
-                textContent: `▼ ${Math.abs(roundedComparison)}% below daily average`
-            });
-        }
-        assert.deepEqual(tooltipNodes.map(({ tag, attributes, textContent }) => ({ tag, attributes, textContent })), expectedNodes);
-        assert.equal(tooltipNodes.every(node => node.tag === 'div'), true);
-    }
-    assert.equal(JSON.stringify(day), original);
-    assert.equal(models.formatCurrency(day.dayBalance, 'CAD'), '-$1,540.89');
-});
-
-test('programmatic calendar selection reuses the day click and ignores an unchanged selection', () => {
-    const first = models.parseLocalDate('2026-10-01');
+test('programmatic calendar selection updates details once and ignores missing dates', () => {
+    const instance = calendar(plugin([]));
     const target = models.parseLocalDate('2026-10-15');
-    const rows = [{ date: first }, { date: target }, { date: models.parseLocalDate('2026-11-15') }];
-    const clicks = [];
-    let queries = 0;
-    const instance = Object.assign(Object.create(CalendarHeatmap.prototype), {
-        selectedDate: first,
-        svg: { selectAll(selector) {
-            assert.equal(selector, '.day-cell rect');
-            queries++;
-            return { filter(predicate) {
-                return { dispatch(event) {
-                    assert.equal(event, 'click');
-                    for (const day of rows.filter(predicate)) {
-                        clicks.push(models.formatDate(day.date));
-                        instance.selectedDate = day.date;
-                    }
-                } };
-            } };
-        } }
-    });
+    const selected = [], details = [];
+    instance.days = { querySelectorAll: () => [] };
+    instance.onSelectedDateChange = date => selected.push(models.formatDate(date));
+    instance.showDayDetails = day => details.push(day.dateKey);
     instance.selectDate(target);
     instance.selectDate(new Date(target));
-    assert.deepEqual(clicks, ['2026-10-15']);
-    assert.equal(queries, 1);
+    instance.selectDate(models.parseLocalDate('2026-11-15'));
+    assert.deepEqual(selected, ['2026-10-15']);
+    assert.deepEqual(details, ['2026-10-15']);
 });
 
 test('changing calendar month sets the requested selection before rendering', () => {
@@ -165,9 +79,8 @@ test('changing calendar month sets the requested selection before rendering', ()
     let renders = 0;
     const instance = Object.assign(Object.create(CalendarHeatmap.prototype), {
         selectedDate: models.parseLocalDate('2026-09-01'), setupContainers() {},
-        render(animate) {
+        render() {
             renders++;
-            assert.equal(animate, true);
             assert.equal(this.selectedDate, target);
             assert.equal(this.currentDate, target);
             assert.equal(this.transactions, rows);
@@ -282,7 +195,7 @@ test('opening and daily balances agree across views for debit, savings, credit a
         const p = plugin(source, reference);
         const instance = calendar(p);
         const calendarBalances = instance.getRunningBalanceMap(reference);
-        for (const view of [dashboard, transactions]) {
+        for (const view of [transactions]) {
             const rows = models.sortTransactionsByDateTimeDesc(source, source).map(row => ({ ...row }));
             assert.deepEqual({ ...view.getRunningBalanceByTransactionIdForAccount(p, reference, rows) }, { ...calendarBalances });
         }

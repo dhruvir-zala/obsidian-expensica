@@ -1,27 +1,13 @@
 import { App, Modal, setIcon } from 'obsidian';
 import { formatDate, parseLocalDate } from './models';
+import { MIN_YEAR, MAX_YEAR, calendarDate, moveCalendarMonth, monthFormatter, createCalendarNavigation, createCalendarGrid, renderCalendarDays } from './calendar-ui';
 
-const MIN_YEAR = 1;
-const MAX_YEAR = 9999;
 const YEARS_PER_PAGE = 12;
 
 // Labels use the system language and the same calendar as Date and stored ISO dates.
 const dateFormatter = new Intl.DateTimeFormat('en-US', {
     calendar: 'gregory', year: 'numeric', month: 'short', day: 'numeric'
 });
-const monthFormatter = new Intl.DateTimeFormat(undefined, { calendar: 'gregory', month: 'long' });
-const weekdayFormatter = new Intl.DateTimeFormat(undefined, { calendar: 'gregory', weekday: 'short' });
-const dayFormatter = new Intl.DateTimeFormat(undefined, {
-    calendar: 'gregory', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-});
-
-// Local noon avoids midnight DST transitions. setFullYear also handles years 1–99.
-function calendarDate(year: number, month: number, day: number): Date {
-    const date = new Date(0);
-    date.setHours(12, 0, 0, 0);
-    date.setFullYear(year, month, day);
-    return date;
-}
 
 export function parseDateInput(value: string): Date | null {
     const input = value.trim();
@@ -109,28 +95,15 @@ export class DateSelectorModal extends Modal {
             this.toggleEditing();
         });
 
-        this.navigation = this.contentEl.createDiv('expensica-date-selector-navigation');
-        this.previousButton = this.createIconButton(this.navigation, 'expensica-date-selector-previous', 'chevron-left', 'Previous month');
-        this.previousButton.addEventListener('click', () => this.navigate(-1));
-        const heading = this.navigation.createDiv('expensica-date-selector-heading');
-        this.monthLabel = heading.createSpan('expensica-date-selector-month');
-        this.yearButton = heading.createEl('button', {
-            cls: 'expensica-date-selector-year', attr: { type: 'button' }
-        });
-        this.yearButton.addEventListener('click', () => this.toggleYears());
-        this.nextButton = this.createIconButton(this.navigation, 'expensica-date-selector-next', 'chevron-right', 'Next month');
-        this.nextButton.addEventListener('click', () => this.navigate(1));
-
-        this.calendar = this.contentEl.createDiv('expensica-date-selector-calendar');
-        const weekdays = this.calendar.createDiv('expensica-date-selector-weekdays');
-        weekdays.setAttribute('aria-hidden', 'true');
-        for (let weekday = 0; weekday < 7; weekday++) {
-            weekdays.createSpan({
-                text: weekdayFormatter.format(calendarDate(2024, 0, 7 + weekday)),
-                cls: 'expensica-date-selector-weekday'
-            });
-        }
-        this.days = this.calendar.createDiv({ cls: 'expensica-date-selector-days', attr: { role: 'group' } });
+        const navigation = createCalendarNavigation(this.contentEl, direction => this.navigate(direction), () => this.toggleYears());
+        this.navigation = navigation.navigation;
+        this.previousButton = navigation.previousButton;
+        this.nextButton = navigation.nextButton;
+        this.monthLabel = navigation.monthLabel;
+        this.yearButton = navigation.yearLabel as HTMLButtonElement;
+        const grid = createCalendarGrid(this.contentEl);
+        this.calendar = grid.calendar;
+        this.days = grid.days;
         this.years = this.contentEl.createDiv({
             cls: 'expensica-date-selector-years', attr: { role: 'group', 'aria-label': 'Choose year' }
         });
@@ -227,7 +200,7 @@ export class DateSelectorModal extends Modal {
             if (start < MIN_YEAR || start > MAX_YEAR) return;
             this.yearStart = this.focusedYear = start;
         } else {
-            const month = calendarDate(this.viewYear, this.viewMonth + direction, 1);
+            const month = moveCalendarMonth(calendarDate(this.viewYear, this.viewMonth, 1), direction);
             if (month.getFullYear() < MIN_YEAR || month.getFullYear() > MAX_YEAR) return;
             this.viewYear = month.getFullYear();
             this.viewMonth = month.getMonth();
@@ -276,30 +249,11 @@ export class DateSelectorModal extends Modal {
     }
 
     private renderDays() {
-        this.days.empty();
-        this.days.setAttribute('aria-label', `${this.monthLabel.textContent} ${this.viewYear}`);
-        const offset = calendarDate(this.viewYear, this.viewMonth, 1).getDay();
-        for (let index = 0; index < 42; index++) {
-            const date = calendarDate(this.viewYear, this.viewMonth, index - offset + 1);
-            const valid = date.getFullYear() >= MIN_YEAR && date.getFullYear() <= MAX_YEAR && date.getMonth() === this.viewMonth;
-            if (!valid) {
-                this.days.createSpan({ cls: 'expensica-date-selector-empty', attr: { 'aria-hidden': 'true' } });
-                continue;
-            }
-            const value = formatDate(date);
-            const button = this.days.createEl('button', {
-                text: String(date.getDate()), cls: 'expensica-date-selector-day',
-                attr: { type: 'button', tabindex: value === this.focusedDate ? '0' : '-1' }
-            });
-            button.setAttribute('data-date', value);
-            button.setAttribute('aria-label', dayFormatter.format(date));
-            button.setAttribute('aria-pressed', String(value === this.selectedDate));
-            button.toggleClass('is-selected', value === this.selectedDate);
-            button.toggleClass('is-today', value === this.today);
-            if (value === this.today) button.setAttribute('aria-current', 'date');
-            button.addEventListener('click', () => this.selectDate(value));
-            button.addEventListener('keydown', event => this.handleDayKey(event, value));
-        }
+        renderCalendarDays(this.days, this.viewYear, this.viewMonth, {
+            selectedDate: this.selectedDate, focusedDate: this.focusedDate, today: this.today,
+            onSelect: value => this.selectDate(value),
+            onKeyDown: (event, value) => this.handleDayKey(event, value)
+        });
     }
 
     private renderYears() {
@@ -329,9 +283,7 @@ export class DateSelectorModal extends Modal {
             next = calendarDate(date.getFullYear(), date.getMonth(), date.getDate() + steps[event.key]);
         } else if (event.key === 'PageUp' || event.key === 'PageDown') {
             const delta = (event.key === 'PageUp' ? -1 : 1) * (event.shiftKey ? 12 : 1);
-            const month = calendarDate(date.getFullYear(), date.getMonth() + delta, 1);
-            const lastDay = calendarDate(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-            next = calendarDate(month.getFullYear(), month.getMonth(), Math.min(date.getDate(), lastDay));
+            next = moveCalendarMonth(date, delta);
         } else return;
         event.preventDefault();
         event.stopPropagation();

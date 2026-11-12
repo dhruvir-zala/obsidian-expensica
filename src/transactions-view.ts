@@ -1,5 +1,5 @@
 import { App, Modal } from 'obsidian';
-import {
+import { renderUiIcon,
     CategoryType,
     Transaction,
     TransactionType,
@@ -7,7 +7,7 @@ import {
     formatDate,
     formatAccountReference,
     getAccountColor,
-    getAccountEmoji,
+    getAccountIcon,
     parseLocalDate,
     sortTransactionsByDateTimeDesc
 } from './models';
@@ -26,6 +26,7 @@ import { voidAsync } from './modal-utils';
 import { renderTransactionCard, showTransactionBulkCategoryMenu } from './transaction-card';
 import { renderCategoryChip } from './category-chip';
 import { showCategoryQuickMenu } from './category-quick-menu';
+import { setChartTooltip } from './chart-tooltip';
 
 type SvgIconShape = {
     tag: 'circle' | 'line' | 'path' | 'polygon' | 'polyline' | 'rect';
@@ -189,6 +190,8 @@ export class ExpensicaTransactionsView {
     private hasRenderedView = false;
     private embeddedContentEl: HTMLElement | null = null;
     private selectedTransactionIds = new Set<string>();
+    private dailyReviewEdit: ((transaction: Transaction) => void) | null = null;
+    private closePageSizeMenu: (() => void) | null = null;
 
     // Date range properties
     dateRange: DateRange;
@@ -196,13 +199,14 @@ export class ExpensicaTransactionsView {
     customEndDate: Date | null = null;
     dateRangeUpdatedAt = 0;
 
-    constructor(app: App, plugin: ExpensicaPlugin, private readonly editorHost: TransactionEditorHost) {
+    constructor(app: App, plugin: ExpensicaPlugin, private readonly editorHost: TransactionEditorHost | null) {
         this.app = app;
         this.plugin = plugin;
         this.dateRange = this.getDateRange(DateRangeType.THIS_MONTH);
     }
 
     renderDashboardTab(container: HTMLElement, preserveFocus = false) {
+        this.dailyReviewEdit = null;
         const restoreFocus = preserveFocus && this.inputFocused;
         this.deactivate();
         this.inputFocused = restoreFocus;
@@ -220,7 +224,20 @@ export class ExpensicaTransactionsView {
         this.renderTransactionsBody(container, preserveFocus);
     }
 
+    renderDailyReview(container: HTMLElement, date: Date, onEdit: (transaction: Transaction) => void) {
+        this.deactivate();
+        this.dailyReviewEdit = onEdit;
+        this.embeddedContentEl = container;
+        const start = new Date(date);
+        start.setHours(0, 0, 0, 0);
+        this.dateRange = this.getDateRange(DateRangeType.CUSTOM, start, start);
+        this.pageSize = Number.MAX_SAFE_INTEGER;
+        this.loadTransactionsData(true);
+        this.renderTransactionsList(container);
+    }
+
     deactivate() {
+        this.closePageSizeMenu?.();
         if (this._debounceTimeout !== null) window.clearTimeout(this._debounceTimeout);
         if (this._focusTimeout !== null) window.clearTimeout(this._focusTimeout);
         if (this._scrollRestoreFrame !== null) window.cancelAnimationFrame(this._scrollRestoreFrame);
@@ -246,6 +263,20 @@ export class ExpensicaTransactionsView {
         // Search bar section
         const searchSection = container.createDiv('expensica-search-section');
         const searchControls = searchSection.createDiv('expensica-search-controls');
+        const selectPageLabel = searchControls.createEl('label', { cls: 'expensica-select-page' });
+        const selectPageCheckbox = selectPageLabel.createEl('input', {
+            cls: 'expensica-select-page-checkbox',
+            attr: { type: 'checkbox', 'aria-label': 'Select all transactions on this page' }
+        });
+        selectPageCheckbox.addEventListener('change', () => {
+            this.getVisiblePageTransactions().forEach(transaction => {
+                if (selectPageCheckbox.checked) this.selectedTransactionIds.add(transaction.id);
+                else this.selectedTransactionIds.delete(transaction.id);
+            });
+            if (selectPageCheckbox.checked) this.maybeShowMixedTransactionTypeSelectionNotice();
+            this.syncVisibleTransactionSelectionState();
+            this.syncBulkSelectionFooter();
+        });
         const searchContainer = searchControls.createDiv('expensica-search-container expensica-custom-search');
         const searchInput = searchContainer.createEl('input', {
             type: 'text',
@@ -410,9 +441,9 @@ export class ExpensicaTransactionsView {
     private renderTypeFilterOptions(container: HTMLElement) {
         const optionsHost = container.createDiv('expensica-filter-submenu-options');
         const options = [
-            { value: TransactionType.INCOME, label: 'Income', emoji: '💰' },
-            { value: TransactionType.EXPENSE, label: 'Expenses', emoji: '💸' },
-            { value: TransactionType.INTERNAL, label: 'Internal', emoji: '🔁' }
+            { value: TransactionType.INCOME, label: 'Income', icon: 'income' as const },
+            { value: TransactionType.EXPENSE, label: 'Expenses', icon: 'expense' as const },
+            { value: TransactionType.INTERNAL, label: 'Internal', icon: 'internal' as const }
         ];
 
         options.forEach(option => {
@@ -425,7 +456,7 @@ export class ExpensicaTransactionsView {
                     'data-filter-type': option.value
                 }
             });
-            button.createSpan({ text: option.emoji, cls: 'expensica-filter-category-emoji' });
+            renderUiIcon(button, option.icon, '', option.value === TransactionType.INCOME ? 'var(--text-success)' : option.value === TransactionType.EXPENSE ? 'var(--text-error)' : undefined);
             button.createSpan({ text: option.label, cls: 'expensica-filter-category-name' });
             button.addEventListener('click', (event) => {
                 event.stopPropagation();
@@ -458,7 +489,7 @@ export class ExpensicaTransactionsView {
                 }
             });
             button.style.setProperty('color', getAccountColor(account, accounts));
-            button.createSpan({ text: getAccountEmoji(account.type), cls: 'expensica-filter-category-emoji' });
+            renderUiIcon(button, getAccountIcon(account.type), '', getAccountColor(account, accounts));
             button.createSpan({ text: account.name, cls: 'expensica-filter-category-name' });
             button.addEventListener('click', (event) => {
                 event.stopPropagation();
@@ -767,6 +798,7 @@ export class ExpensicaTransactionsView {
     }
 
     persistTransactionsState() {
+        if (this.dailyReviewEdit) return;
         if (!this.embeddedContentEl) return;
         this.rememberScrollPosition();
         this.app.workspace.requestSaveLayout();
@@ -961,14 +993,15 @@ export class ExpensicaTransactionsView {
     }
 
     renderTransactionsList(container: HTMLElement) {
+        this.syncPageSelectionCheckbox();
         const transactionsSection = container.createDiv('expensica-transactions-section');
         
         if (this.filteredTransactions.length === 0) {
             // No transactions found
             const emptyState = transactionsSection.createDiv('expensica-empty-state');
-            emptyState.createDiv({ text: '📋', cls: 'expensica-empty-state-icon' });
+            renderUiIcon(emptyState, 'file', 'expensica-empty-state-icon');
             emptyState.createEl('p', {
-                text: 'No transactions found matching your filters.',
+                text: this.dailyReviewEdit ? 'No transactions recorded for this day' : 'No transactions found matching your filters.',
                 cls: 'expensica-empty-state-message'
             });
             return;
@@ -983,7 +1016,7 @@ export class ExpensicaTransactionsView {
         
         // Get current page transactions
         const pageTransactions = this.filteredTransactions.slice(startIdx, endIdx);
-        this.renderTransactionsToContainer(transactionsContainer, pageTransactions);
+        this.renderTransactionsToContainer(transactionsContainer, pageTransactions, undefined, !this.dailyReviewEdit);
         this.renderBulkSelectionFooter(transactionsSection);
     }
 
@@ -1046,6 +1079,11 @@ export class ExpensicaTransactionsView {
             runningBalanceLabel,
             secondaryRunningBalanceLabel,
             onEdit: (transaction) => {
+                if (this.dailyReviewEdit) {
+                    this.dailyReviewEdit(transaction);
+                    return;
+                }
+                if (!this.editorHost) return;
                 const modal = new TransactionModal(this.app, this.plugin, this.editorHost, transaction, transaction.type);
                 modal.open();
             },
@@ -1185,6 +1223,9 @@ export class ExpensicaTransactionsView {
         deleteButton.addEventListener('click', () => {
             void this.deleteSelectedTransactions();
         });
+        footer.querySelectorAll<HTMLElement>('button[title], button[aria-label]').forEach(button => {
+            setChartTooltip(button, button.getAttribute('title') || button.getAttribute('aria-label') || '', false, { focusTarget: button });
+        });
     }
 
     private getSelectedTransactions(): Transaction[] {
@@ -1273,12 +1314,23 @@ export class ExpensicaTransactionsView {
     }
 
     private syncBulkSelectionFooter() {
+        this.syncPageSelectionCheckbox();
         const container = this.getActiveContentEl().querySelector<HTMLElement>('.expensica-transactions-section');
         if (!container) {
             return;
         }
 
         this.renderBulkSelectionFooter(container);
+    }
+
+    private syncPageSelectionCheckbox() {
+        const checkbox = this.embeddedContentEl?.querySelector<HTMLInputElement>('.expensica-select-page-checkbox');
+        if (!checkbox) return;
+        const visibleTransactions = this.getVisiblePageTransactions();
+        const selectedCount = visibleTransactions.filter(transaction => this.selectedTransactionIds.has(transaction.id)).length;
+        checkbox.disabled = visibleTransactions.length === 0;
+        checkbox.checked = visibleTransactions.length > 0 && selectedCount === visibleTransactions.length;
+        checkbox.indeterminate = selectedCount > 0 && selectedCount < visibleTransactions.length;
     }
 
     private syncVisibleTransactionSelectionState() {
@@ -1361,6 +1413,16 @@ export class ExpensicaTransactionsView {
 
         const optionsContainer = selector.createDiv('expensica-date-range-options expensica-date-range-hidden');
 
+        const doc = selector.ownerDocument;
+        const hide = () => {
+            optionsContainer.addClass('expensica-date-range-hidden');
+            doc.removeEventListener('click', outside);
+            if (this.closePageSizeMenu === hide) this.closePageSizeMenu = null;
+        };
+        const outside = (event: MouseEvent) => {
+            if (!selector.contains(event.target as Node)) hide();
+        };
+
         [10, 20, 50, 100].forEach(size => {
             const optionItem = optionsContainer.createDiv('expensica-date-range-option');
             optionItem.textContent = String(size);
@@ -1381,14 +1443,11 @@ export class ExpensicaTransactionsView {
         currentSelection.addEventListener('click', (event) => {
             event.stopPropagation();
             const isHidden = optionsContainer.hasClass('expensica-date-range-hidden');
-            optionsContainer.toggleClass('expensica-date-range-hidden', !isHidden);
-
+            this.closePageSizeMenu?.();
             if (isHidden) {
-                window.setTimeout(() => {
-                    document.addEventListener('click', () => {
-                        optionsContainer.addClass('expensica-date-range-hidden');
-                    }, { once: true });
-                }, 0);
+                optionsContainer.removeClass('expensica-date-range-hidden');
+                this.closePageSizeMenu = hide;
+                doc.addEventListener('click', outside);
             }
         });
     }
@@ -1457,13 +1516,19 @@ export class ExpensicaTransactionsView {
 
         // Items per page selector container
         const itemsPerPageContainer = paginationSection.createDiv('expensica-items-per-page');
-        itemsPerPageContainer.createSpan({ text: 'Per Page:' });
         this.renderPageSizeSelector(itemsPerPageContainer);
     }
 
     refreshTransactionsListOnly(preserveScroll = true) {
+        this.closePageSizeMenu?.();
         const container = this.embeddedContentEl;
         if (!container) return;
+        if (this.dailyReviewEdit) {
+            if (!container.isConnected) return;
+            container.empty();
+            this.renderTransactionsList(container);
+            return;
+        }
         if (preserveScroll) {
             this.rememberScrollPosition();
         }
@@ -1657,7 +1722,8 @@ export class ExpensicaTransactionsView {
     renderTransactionsToContainer(
         container: HTMLElement,
         transactions: Transaction[],
-        runningBalances?: Record<string, number>
+        runningBalances?: Record<string, number>,
+        groupByDate = true
     ) {
         let currentMonthKey = '';
         let currentDayKey = '';
@@ -1685,13 +1751,13 @@ export class ExpensicaTransactionsView {
             const monthKey = this.getTransactionMonthKey(transaction);
             const dayKey = this.getTransactionDayKey(transaction);
 
-            if (monthKey !== currentMonthKey) {
+            if (groupByDate && monthKey !== currentMonthKey) {
                 currentMonthKey = monthKey;
                 currentDayKey = '';
                 this.renderTransactionGroupTitle(container, this.getTransactionMonthLabel(transaction), 'month');
             }
 
-            if (dayKey !== currentDayKey) {
+            if (groupByDate && dayKey !== currentDayKey) {
                 currentDayKey = dayKey;
                 this.renderTransactionGroupTitle(container, this.getTransactionDayLabel(transaction), 'day');
             }

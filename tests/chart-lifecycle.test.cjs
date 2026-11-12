@@ -30,6 +30,7 @@ class Element {
     }
     createDiv(options) { return this.createEl('div', options); }
     createSpan(options) { return this.createEl('span', options); }
+    createSvg(tag, options) { return this.createEl(tag, options); }
     contains(element) { return element === this || this.children.some(child => child.contains(element)); }
     querySelectorAll(selector) {
         return this.children.flatMap(child => [
@@ -84,7 +85,7 @@ function setup(t) {
     };
     const { ExpensicaDashboardView, DashboardTab } = load('src/dashboard-view.ts', {
         './models': models, obsidian: { Component, ItemView, Modal: class {} },
-        'chart.js/auto': { default: Chart }, 'chart.js': { Tooltip }, './categories-cards': { renderCategoryCards() {} }
+        'chart.js/auto': { default: Chart }, 'chart.js': { ...require('chart.js'), Tooltip }, './categories-cards': { renderCategoryCards() {} }
     }, { window, document: { body }, performance: { now: () => 0 },
         getComputedStyle: () => ({ fontFamily: 'sans-serif', color: '#000', getPropertyValue: () => '' }) });
     const entries = [{ name: 'Food', amount: 12, color: '#888888' }];
@@ -94,6 +95,9 @@ function setup(t) {
         const instance = new ExpensicaDashboardView({}, plugin);
         Object.assign(instance, {
             app: { workspace: { on() {} } }, setupPaneResizeObserver() {}, setupThemeObserver() {},
+            renderCashFlow(container) {
+                this.renderCumulativeExpensesChart(container.createDiv('expensica-chart-container expensica-cash-flow-panel'));
+            },
             transactions: [{ type: 'expense', amount: 12 }],
             renderHeader(container) { container.createDiv('header'); },
             renderTabNavigation(container) { container.createDiv('expensica-tabs'); },
@@ -111,7 +115,7 @@ function setup(t) {
             renderOverviewTab(container) {
                 this.renderExpensesChart(container.createDiv('expensica-expenses-chart-container'));
                 this.renderIncomeExpenseChart(container.createDiv('expensica-income-expense-chart-container'));
-                this.renderCumulativeExpensesChart(container.createDiv('expensica-cumulative-expenses-chart-container'));
+                this.renderCashFlow(container);
             },
             // Keep real Chart.js ownership/disposal while isolating financial calculations covered elsewhere.
             createIncomeExpenseChart(canvas) { this.incomeExpenseChart = new Chart(canvas, { type: 'line', data: { datasets: [] }, options: { responsive: false, animation: false } }); },
@@ -126,6 +130,35 @@ function setup(t) {
     t.after(() => { for (const chart of created) if (chart.ctx) chart.destroy(); });
     return { view, timers, frames, created, flush, DashboardTab, ExpensicaDashboardView };
 }
+
+test('initial and data refresh renders animate; cosmetic renders and pane focus do not rearm entrances', async t => {
+    const h = setup(t), view = h.view();
+    const flags = () => [view.animateExpensesChartThisRender, view.animateIncomeExpenseChartThisRender,
+        view.animateCumulativeExpensesChartThisRender];
+    const ledger = [{ date: '2026-11-01', type: 'expense', amount: 12, category: 'food' }];
+    view.plugin.getAllTransactions = () => ledger;
+    view.plugin.getTransactionsForMonth = () => ledger;
+    await view.loadTransactionsData();
+    view.renderDashboard(); assert.deepEqual(flags(), [true, true, true]); h.flush();
+    view.renderDashboard(); assert.deepEqual(flags(), [false, false, false]); h.flush();
+    view.isDashboardVisible = () => true;
+    view.plugin.settings.showChartGrid = false;
+    ledger[0].description = 'Cosmetic description edit';
+    await view.refreshData(); assert.deepEqual(flags(), [false, false, false]); h.flush();
+    ledger[0].amount = 24;
+    await view.refreshData(); assert.deepEqual(flags(), [true, true, true]); h.flush();
+    view.renderDashboard(); assert.deepEqual(flags(), [false, false, false]); h.flush();
+    view.wasDashboardVisible = true;
+    view.resizeChartsToContainers = () => false;
+    view.handleWorkspaceVisibilityChange();
+    assert.deepEqual(flags(), [false, false, false]);
+    assert.equal(view.shouldAnimateExpensesChartOnNextRender, false);
+    assert.equal(view.shouldAnimateIncomeExpenseChartOnNextRender, false);
+    assert.equal(view.shouldAnimateCumulativeExpensesChartOnNextRender, false);
+    assert.equal(h.timers.size, 0, 'completion does not need an animation reset timer');
+    await view.onClose();
+    assert.equal(h.timers.size, 0);
+});
 
 test('rapid tab switching cancels obsolete initialization and only creates current charts', t => {
     const h = setup(t), view = h.view();
@@ -175,7 +208,7 @@ test('closing while initial data loads cannot render charts or attach observers 
 for (const [key, render, selector] of [
     ['expensesChart', 'renderExpensesChart', '.expensica-expenses-chart-container'],
     ['incomeExpenseChart', 'renderIncomeExpenseChart', '.expensica-income-expense-chart-container'],
-    ['cumulativeExpensesChart', 'renderCumulativeExpensesChart', '.expensica-cumulative-expenses-chart-container']
+    ['cumulativeExpensesChart', 'renderCumulativeExpensesChart', '.expensica-cash-flow-panel']
 ]) {
     test(`${key} replacement disposes the existing instance before deferred and empty renders`, t => {
         const h = setup(t), view = h.view();
@@ -283,3 +316,20 @@ test('tab disposal cancels income hover/toggle frames that retain destroyed char
     assert.equal(view.incomeExpenseToggleAnimationFrame, null);
     assert.equal(view.incomeExpenseHoverAnimationFrame, null);
 });
+for (const action of ['render', 'tab', 'close', 'unload']) {
+    test(`calendar resources are disposed before dashboard ${action}`, async t => {
+        const h = setup(t), view = h.view();
+        view.renderDashboard();
+        const oldContent = view.containerEl.children[1].children.at(-1);
+        let disposals = 0;
+        view.premiumVisualizations = { destroy() { assert.equal(oldContent.isConnected, true); disposals++; } };
+        if (action === 'render') view.renderDashboard();
+        if (action === 'tab') view.switchDashboardTab(h.DashboardTab.BUDGET);
+        if (action === 'close') await view.onClose();
+        if (action === 'unload') view.unload();
+        assert.equal(disposals, 1);
+        assert.equal(view.premiumVisualizations, null);
+        await view.onClose();
+        assert.equal(disposals, 1, 'cleanup is idempotent');
+    });
+}

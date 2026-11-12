@@ -692,27 +692,3 @@ test('overlapping imports, additions and budget edits retain all successful muta
     assert.deepEqual(JSON.parse(h.files.get(h.p.transactionsFilePath)).transactions.map(row => row.description), ['ENTRY', 'IMPORTED', 'NEW']);
     assert.deepEqual(JSON.parse(h.files.get(h.p.budgetFilePath)).budgets.map(row => [row.id, row.amount]), [['b1', 200]]);
 });
-
-test('dashboard bulk rename persists once and refreshes its source once', async () => {
-    const h = setup();
-    h.p.transactionsData.transactions.push({ ...transaction, id: 't2' }, { ...transaction, id: 't3' });
-    const { ExpensicaDashboardView } = load('src/dashboard-view.ts', {
-        obsidian: { ItemView: class {}, Modal: class {} }, './models': models,
-        'chart.js': { Tooltip: { positioners: {} } },
-        './notice': { showExpensicaNotice: message => h.notices.push(message) }
-    });
-    let renders = 0;
-    let loads = 0;
-    const view = Object.assign(Object.create(ExpensicaDashboardView.prototype), {
-        plugin: h.p, transactions: h.p.getAllTransactions(), selectedTransactionIds: new Set(['t1', 't2', 't3']),
-        loadTransactionsData: async () => { loads++; view.transactions = h.p.getAllTransactions(); },
-        requestAllChartAnimations() {}, renderDashboard() { renders++; }
-    });
-    const storage = slowFirstWrite(h);
-    await view.bulkRenameSelectedTransactions('Renamed');
-    assert.equal(storage.writes.length, 1);
-    assert.equal(h.refreshes(), 1);
-    assert.equal(loads, 1);
-    assert.equal(renders, 1);
-    assert.deepEqual(JSON.parse(h.files.get(h.p.transactionsFilePath)).transactions.map(row => row.description), ['RENAMED', 'RENAMED', 'RENAMED']);
-});

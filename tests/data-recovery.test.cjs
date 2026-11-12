@@ -109,9 +109,9 @@ test('P1 missing-account warning groups references, counts distinct transactions
     assert.ok(dialog.contentEl.find('Resolve accounts by editing transactions.json, linking to an existing account, or creating a new one.'));
     assert.ok(dialog.contentEl.find('Transaction saving is paused to protect your data.'));
     assert.doesNotMatch(rendered, /could not be loaded|Restore valid copies|transactions\[/);
-    const buttons = dialog.contentEl.children.find(child => child.cls === 'modal-button-container').children;
+    const buttons = dialog.contentEl.children.find(child => child.cls?.split(' ').includes('expensica-form-footer')).children;
     assert.deepEqual(buttons.map(button => button.text), ['Resolve accounts', 'Retry', 'Not now']);
-    assert.deepEqual(buttons.filter(button => button.cls === 'mod-cta').map(button => button.text), ['Resolve accounts']);
+    assert.deepEqual(buttons.filter(button => button.cls.includes('expensica-btn-primary')).map(button => button.text), ['Resolve accounts']);
     let resolutions = 0;
     h.plugin.openAccountReconciliation = async () => { resolutions++; };
     await dialog.contentEl.find('Resolve accounts').listeners.click();
@@ -139,7 +139,7 @@ test('P1 missing-account warning groups references, counts distinct transactions
     await card.find('More').listeners.click();
     assert.equal(h.dialogs.length, 2);
     assert.ok(h.dialogs[1].contentEl.find('Missing accounts'));
-    assert.deepEqual(h.dialogs[1].contentEl.children.find(child => child.cls === 'modal-button-container').children.map(button => button.text),
+    assert.deepEqual(h.dialogs[1].contentEl.children.find(child => child.cls?.split(' ').includes('expensica-form-footer')).children.map(button => button.text),
         ['Resolve accounts', 'Retry', 'Not now']);
     await card.find('More').listeners.click();
     assert.equal(h.dialogs.length, 2, 'More reuses an already open recovery dialog');
@@ -208,7 +208,7 @@ test('critical failures retain red recovery instructions alongside a separate P1
     assert.equal(dialog.contentEl.find('Resolve accounts'), undefined);
     assert.equal(dialog.contentEl.find('Missing accounts'), undefined);
     assert.ok(dialog.contentEl.find('Close'));
-    assert.equal(dialog.contentEl.find('Retry').cls, 'mod-cta');
+    assert.equal(dialog.contentEl.find('Retry').cls, 'expensica-standard-button expensica-btn expensica-btn-primary');
 });
 
 test('P1 warning uses the Obsidian warning token and critical recovery retains the error token', () => {

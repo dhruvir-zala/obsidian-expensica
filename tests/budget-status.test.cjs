@@ -141,6 +141,7 @@ class Element {
     createEl(tag, options) { const child = new Element(options); this.children.push(child); return child; }
     createDiv(options) { return this.createEl('div', options); }
     createSpan(options) { return this.createEl('span', options); }
+    createSvg(tag, options) { return this.createEl(tag, options); }
     appendChild(child) { this.children.push(child); }
     addClass(name) { this.classes.add(name); }
     setText(value) { this.textContent = value; }

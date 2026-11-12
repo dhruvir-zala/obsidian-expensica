@@ -44,6 +44,10 @@ class Element {
     createEl(tag, options = {}) { const child = this.createDiv(options.cls || ''); child.textContent = options.text || ''; return child; }
     createSpan(options) { return this.createEl('span', options); }
     querySelector(selector) { return this.children.find(child => `.${child.cls}` === selector) || null; }
+    insertBefore(child, reference) {
+        if (child.parent) child.remove();
+        this.children.splice(this.children.indexOf(reference), 0, child); child.parent = this; return child;
+    }
     remove() { this.parent.children = this.parent.children.filter(child => child !== this); }
     createDiv(cls) { const child = new Element(cls); child.parent = this; this.children.push(child); return child; }
 }
@@ -83,6 +87,7 @@ function setup(tabs = ['budget', 'budget']) {
             currentDate: models.parseLocalDate('2026-10-15'), selectedCalendarDate: null,
             dateRange: { type: dashboard.DateRangeType.CUSTOM,
                 startDate: models.parseLocalDate('2026-10-01'), endDate: models.parseLocalDate('2026-10-31') },
+            renderCashFlow() {},
             effects, root, header, buttons, transactions: p.getAllTransactions(),
             async loadTransactionsData() {
                 effects.loads++;
@@ -132,8 +137,8 @@ for (const [name, mutate, pathKey] of operations) {
             assert.equal(view.effects.full + view.effects.partial, 1);
             assert.equal(view.effects.snapshots.length, 1);
             assert.equal(view.effects.loads, name === 'import' ? 1 : 0);
-            assert.equal(view.root.children[0], view.header);
-            assert.equal(view.root.children[1], view.buttons);
+            assert.ok(view.root.children.includes(view.header));
+            assert.ok(view.root.children.includes(view.buttons));
         }
     });
 

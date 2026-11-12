@@ -1,5 +1,3 @@
-import { setIcon } from 'obsidian';
-
 export interface CategoryCardData {
     id?: string;
     name: string;
@@ -13,7 +11,6 @@ interface CategoryCardRenderOptions {
     onHoverStart?: (index: number, event: PointerEvent) => void;
     onHoverEnd?: (index: number) => void;
     onClick?: (category: CategoryCardData) => void;
-    onEditClick?: (category: CategoryCardData) => void;
 }
 
 export function renderCategoryCards(
@@ -30,7 +27,7 @@ export function renderCategoryCards(
             card.addClass('expensica-category-card-interactive');
             card.setAttribute('role', 'button');
             card.setAttribute('tabindex', '0');
-            card.setAttribute('aria-label', `Show transactions for ${category.name}`);
+            card.setAttribute('aria-label', `Edit ${category.name} category`);
             card.addEventListener('click', () => options.onClick?.(category));
             card.addEventListener('keydown', (event) => {
                 if (event.key !== 'Enter' && event.key !== ' ') {
@@ -39,21 +36,6 @@ export function renderCategoryCards(
 
                 event.preventDefault();
                 options.onClick?.(category);
-            });
-        }
-
-        if (options.onEditClick && category.id) {
-            const editButton = cardRow.createEl('button', {
-                cls: 'expensica-category-card-edit-button',
-                attr: {
-                    type: 'button',
-                    'aria-label': `Edit ${category.name} category`
-                }
-            });
-            setIcon(editButton, 'pencil');
-            editButton.addEventListener('click', (event) => {
-                event.stopPropagation();
-                options.onEditClick?.(category);
             });
         }
 

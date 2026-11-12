@@ -53,12 +53,12 @@ export class EmojiPickerModal extends Modal {
 
         const cancelButton = buttonContainer.createEl('button', {
             text: 'Cancel',
-            cls: 'expensica-btn expensica-btn-secondary'
+            cls: 'expensica-standard-button expensica-btn expensica-btn-secondary', attr: { type: 'button' }
         });
 
         const saveButton = buttonContainer.createEl('button', {
             text: 'Save',
-            cls: 'expensica-btn expensica-btn-primary'
+            cls: 'expensica-standard-button expensica-btn expensica-btn-primary', attr: { type: 'button' }
         });
 
         cancelButton.addEventListener('click', () => {

@@ -11,14 +11,15 @@ function load(filename, dependencies = {}, extraSource = '') {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
     }).outputText;
     vm.runInNewContext(compiled, { exports, Date, Intl, console,
-        require: name => dependencies[name] || (name.endsWith('/account-calculations') ? load('src/account-calculations.ts', { './models': dependencies['./models'] || dependencies['../models'] }) : undefined) || {} });
+        require: name => dependencies[name] || (name.endsWith('/modal-utils') ? load('src/modal-utils.ts') : undefined) || (name.endsWith('/account-calculations') ? load('src/account-calculations.ts', { './models': dependencies['./models'] || dependencies['../models'] }) : undefined) || {} });
     return exports;
 }
 class Element {
     constructor(options = {}) {
         if (typeof options === 'string') options = { cls: options };
         this.children = []; this.classes = new Set((options.cls || '').split(' '));
-        this.textContent = options.text || ''; this.style = {}; this.listeners = {};
+        this.textContent = options.text || ''; this.style = {}; this.listeners = {}; this.value = ''; this.isConnected = true;
+        this.ownerDocument = { addEventListener() {}, removeEventListener() {} };
     }
     createEl(tag, options) { const child = new Element(options); this.children.push(child); return child; }
     createDiv(options) { return this.createEl('div', options); }
@@ -32,6 +33,8 @@ class Element {
     setText(value) { this.textContent = value; }
     setAttribute() {}
     addEventListener(name, callback) { this.listeners[name] = callback; }
+    focus() {}
+    contains(child) { return this === child || this.children.some(element => element.contains(child)); }
     empty() { this.children = []; }
     querySelector(selector) { return this.children.find(child => child.classes.has(selector.slice(1)))
         || this.children.map(child => child.querySelector(selector)).find(Boolean); }
@@ -53,9 +56,8 @@ class Setting {
 const obsidian = { Modal: class {}, ItemView: class {}, Plugin: class {}, PluginSettingTab: class {}, Setting };
 const extra = '\nexport { formatRunningBalanceLabel };';
 const dashboard = load('src/dashboard-view.ts', { './models': models, obsidian,
-    'chart.js': { Tooltip: { positioners: {} } } }, extra + '\nexport { renderOverviewCurrencyValue };');
+    'chart.js': { Tooltip: { positioners: {} } } }, '\nexport { renderOverviewCurrencyValue };');
 const transactions = load('src/transactions-view.ts', { './models': models, obsidian }, extra);
-const calendar = load('src/visualizations/calendar-view.ts', { '../models': models }, extra);
 const accounts = load('src/account-card.ts', { './models': models });
 const budgets = load('src/budget-cards.ts', { './models': models });
 const cards = load('src/transaction-card.ts', { './models': models,
@@ -72,10 +74,9 @@ for (const [code, digits, expected] of [
         assert.equal(models.formatCurrency(amount, code), expected);
         const p = { settings: { defaultCurrency: code }, getCategoryById: () => null,
             getCategoryEmoji: () => '', getTransactionAccountDisplay: () => ({ name: 'Cash' }) };
-        for (const view of [dashboard, transactions, calendar]) {
-            assert.equal(view.formatRunningBalanceLabel(p, amount), expected);
-            assert.equal(view.formatRunningBalanceLabel(p, -amount, 'cash'), `Cash: ${models.formatCurrency(-amount, code)}`);
-        }
+        // Daily Review delegates balance labels to Transactions.
+        assert.equal(transactions.formatRunningBalanceLabel(p, amount), expected);
+        assert.equal(transactions.formatRunningBalanceLabel(p, -amount, 'cash'), `Cash: ${models.formatCurrency(-amount, code)}`);
         const root = new Element();
         dashboard.renderOverviewCurrencyValue(root, code, amount, 'amount');
         assert.equal(root.querySelector('.expensica-card-currency-amount').textContent, expected);
@@ -140,15 +141,17 @@ test('input symbols use Intl currency parts, while exports retain their identifi
     assert.equal(models.formatCurrency(0, 'invalid', false, { currencyOnly: true }), '¤');
 });
 
-test('settings retain full currency codes and names when amount symbols are narrow', () => {
-    const tab = Object.assign(Object.create(ExpensicaSettingTab.prototype), { registerOutsideClick() {} });
+test('settings retain full currency codes and names when amount symbols are narrow', async () => {
+    const tab = Object.assign(Object.create(ExpensicaSettingTab.prototype), { cleanupCallbacks: [] });
     const root = new Element();
     let selected;
     tab.renderCurrencyDropdown(root, 'CAD', value => { selected = value; });
     assert.equal(root.querySelector('.expensica-select-text').textContent, 'CAD C$ - Canadian Dollar');
-    const options = root.querySelector('.currency-options-container');
-    const usd = options.children.find(option => option.textContent === 'USD $ - US Dollar');
+    root.querySelector('.expensica-currency-current').listeners.click();
+    const options = root.querySelector('.expensica-category-quick-menu-list');
+    const usd = options.children.find(option => option.querySelector('.expensica-category-quick-menu-item-label').textContent === 'USD - US Dollar');
     usd.listeners.click();
+    await new Promise(setImmediate);
     assert.equal(selected, 'USD', 'selection persists the code alone');
     assert.equal(root.querySelector('.expensica-select-text').textContent, 'USD $ - US Dollar');
 });
@@ -178,7 +181,7 @@ for (const invalid of ['CAD $', '$', 'cad', 'ZZZ', '', null, 42]) {
         assert.equal(models.formatCurrency(1.234, invalid), '1.234 (invalid currency)');
         await assert.rejects(p.saveSettings(false), /Choose a valid currency/);
         assert.equal(writes, 0);
-        const tab = Object.assign(Object.create(ExpensicaSettingTab.prototype), { registerOutsideClick() {} });
+        const tab = Object.assign(Object.create(ExpensicaSettingTab.prototype), { cleanupCallbacks: [] });
         const root = new Element();
         tab.renderCurrencyDropdown(root, invalid, value => { p.settings.defaultCurrency = value; });
         assert.equal(root.querySelector('.expensica-select-text').textContent, 'Choose a valid currency');
